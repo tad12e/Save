@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Save | Dashboard Skeleton</title>
+    <meta name="description" content="Save clip dashboard skeleton for the Save project." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <aside class="sidebar">
+        <div class="brand-row">
+          <div class="brand-mark">◔</div>
+          <div>
+            <div class="brand-name">Clipper</div>
+            <div class="brand-subtitle">Save anything, anywhere</div>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <a class="nav-item active" href="#dashboard">Dashboard</a>
+          <a class="nav-item" href="#clips">All clips</a>
+          <a class="nav-item" href="#jobs">Jobs tracker</a>
+          <a class="nav-item" href="#boards">Shared boards</a>
+          <a class="nav-item" href="#digest">Digest</a>
+          <div class="nav-divider"></div>
+          <a class="nav-item" href="#connections">Connections</a>
+          <a class="nav-item" href="#settings">Settings</a>
+        </nav>
+
+        <div class="usage-card">
+          <div class="usage-label">Free plan</div>
+          <div class="usage-value">47 / 100 clips</div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Website skeleton</p>
+            <h1>Dashboard layout for the Save web app</h1>
+            <p class="topbar-copy">
+              This is the first-pass shell: left navigation, stats, saved content areas, integrations,
+              settings, and the page map. The details can be filled in later.
+            </p>
+          </div>
+          <button class="menu-button" type="button" aria-label="Open menu">···</button>
+        </header>
+
+        <section class="content-grid" id="dashboard">
+          <article class="panel stats-panel">
+            <div class="panel-label">Page: dashboard</div>
+            <div class="stats-row">
+              <div class="stat-card">
+                <strong>47</strong>
+                <span>Total clips</span>
+              </div>
+              <div class="stat-card">
+                <strong>12</strong>
+                <span>This week</span>
+              </div>
+              <div class="stat-card">
+                <strong>5</strong>
+                <span>Jobs saved</span>
+              </div>
+              <div class="stat-card">
+                <strong>3</strong>
+                <span>Boards</span>
+              </div>
+            </div>
+            <div class="digest-card">
+              <h2>Weekly AI digest</h2>
+              <p>
+                You saved 12 items this week. Top trend: remote engineering jobs. 3 items need action.
+              </p>
+            </div>
+          </article>
+
+          <article class="panel clips-panel" id="clips">
+            <div class="panel-header">
+              <div>
+                <div class="panel-label">Page: all clips · filters + search + grid</div>
+                <div class="filter-pills">
+                  <span>Jobs</span>
+                  <span>Articles</span>
+                  <span>Products</span>
+                  <span>Events</span>
+                  <span class="selected">All</span>
+                </div>
+              </div>
+              <div class="muted">Sort: newest</div>
+            </div>
+            <div class="clips-helper">Clip cards grid · pagination · bulk select · tag filter · full-text search</div>
+          </article>
+
+          <article class="panel board-panel" id="jobs">
+            <div class="panel-label">Page: jobs tracker · kanban board</div>
+            <div class="kanban">
+              <div class="kanban-col">
+                <h3>Saved</h3>
+                <div class="kanban-card card-tint-1"></div>
+                <div class="kanban-card card-tint-1"></div>
+              </div>
+              <div class="kanban-col">
+                <h3>Applied</h3>
+                <div class="kanban-card card-tint-2"></div>
+              </div>
+              <div class="kanban-col">
+                <h3>Interview</h3>
+                <div class="kanban-card card-tint-3"></div>
+              </div>
+              <div class="kanban-col empty">
+                <h3>Offer</h3>
+                <div class="empty-state">Empty</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel connections-panel" id="connections">
+            <div class="panel-title-row">
+              <div>
+                <p class="section-title">Connections</p>
+                <p class="section-copy">Where users link Google Sheets, Notion, Airtable, and more.</p>
+              </div>
+            </div>
+
+            <div class="integration-grid">
+              <div class="integration-card connected">
+                <div class="integration-top">
+                  <strong>Google Sheets</strong>
+                  <span>Connected</span>
+                </div>
+                <p>Syncing to "My Clips" spreadsheet</p>
+                <a href="#">Disconnect</a>
+              </div>
+              <div class="integration-card">
+                <div class="integration-top">
+                  <strong>Notion</strong>
+                  <span>Not connected</span>
+                </div>
+                <p>Save clips as Notion database pages</p>
+                <a href="#">Connect Notion</a>
+              </div>
+              <div class="integration-card">
+                <div class="integration-top">
+                  <strong>Airtable</strong>
+                  <span>Not connected</span>
+                </div>
+                <p>Save clips as Airtable records</p>
+                <a href="#">Connect Airtable</a>
+              </div>
+              <div class="integration-card">
+                <div class="integration-top">
+                  <strong>Google Calendar</strong>
+                  <span>Not connected</span>
+                </div>
+                <p>Auto-add saved events to calendar</p>
+                <a href="#">Connect Calendar</a>
+              </div>
+              <div class="integration-card">
+                <div class="integration-top">
+                  <strong>Zapier</strong>
+                  <span>Not connected</span>
+                </div>
+                <p>Trigger automations when you clip</p>
+                <a href="#">Connect Zapier</a>
+              </div>
+              <div class="integration-card active">
+                <div class="integration-top">
+                  <strong>Email digest</strong>
+                  <span>Active</span>
+                </div>
+                <p>Weekly AI summary to your inbox</p>
+                <a href="#">Disable</a>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel popup-panel" id="settings">
+            <div class="panel-label">Extension popup · quick-save states</div>
+            <div class="popup-row">
+              <div class="popup-card">
+                <div class="popup-top">
+                  <strong>Clipper</strong>
+                  <span>Idle</span>
+                </div>
+                <div class="mini-preview">
+                  <div class="mini-title">linkedin.com/jobs/view/394</div>
+                  <div class="mini-main">Senior Engineer at Stripe</div>
+                </div>
+                <button class="primary-btn" type="button">Save this page</button>
+                <div class="mini-actions">
+                  <button type="button">Sheets</button>
+                  <button type="button">Notion</button>
+                </div>
+              </div>
+              <div class="popup-card done">
+                <div class="popup-top">
+                  <strong>Clipper</strong>
+                  <span>Done</span>
+                </div>
+                <div class="saved-row">
+                  <span class="saved-pill">Saved</span>
+                  <span class="saved-type">Job</span>
+                </div>
+                <div class="saved-title">Senior Engineer at Stripe</div>
+                <div class="saved-copy">Full-stack role, fully remote. $180k–$220k equity included.</div>
+                <div class="tag-row">
+                  <span>python</span>
+                  <span>remote</span>
+                  <span>fintech</span>
+                </div>
+                <button class="secondary-btn" type="button">Saved to Google Sheets</button>
+              </div>
+              <div class="popup-card menu-card">
+                <div class="popup-top">
+                  <strong>Context menu</strong>
+                  <span>Right-click</span>
+                </div>
+                <div class="menu-item active-item">Save to Clipper</div>
+                <div class="menu-item">Save to Sheets</div>
+                <div class="menu-item">Save to Notion</div>
+                <div class="menu-item">Save to Airtable</div>
+                <div class="menu-divider"></div>
+                <div class="menu-item muted-item">Share to board</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel settings-panel" id="settings-full">
+            <div class="tabs">
+              <span class="active">Profile</span>
+              <span>Connections</span>
+              <span>Notifications</span>
+              <span>Billing</span>
+              <span>API keys</span>
+              <span>Team</span>
+            </div>
+            <div class="form-grid">
+              <label>
+                <span>Name</span>
+                <input type="text" value="Tadiwos" readonly />
+              </label>
+              <label>
+                <span>Email</span>
+                <input type="email" value="tad@example.com" readonly />
+              </label>
+            </div>
+          </article>
+
+          <article class="panel map-panel">
+            <div class="panel-label">Full page map</div>
+            <div class="map-grid">
+              <div class="map-card">
+                <h3>Public pages</h3>
+                <div class="map-item">/ — Landing page</div>
+                <div class="map-item">/login</div>
+                <div class="map-item">/register</div>
+                <div class="map-item">/u/:username</div>
+              </div>
+              <div class="map-card">
+                <h3>App pages</h3>
+                <div class="map-item">/dashboard</div>
+                <div class="map-item">/clips</div>
+                <div class="map-item">/jobs</div>
+                <div class="map-item">/boards</div>
+                <div class="map-item">/digest</div>
+                <div class="map-item">/connections</div>
+                <div class="map-item">/settings</div>
+              </div>
+              <div class="map-card">
+                <h3>Extension pages</h3>
+                <div class="map-item">popup — save</div>
+                <div class="map-item">new tab — dashboard</div>
+                <div class="map-item">context menu</div>
+                <div class="map-item">options page</div>
+              </div>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>
