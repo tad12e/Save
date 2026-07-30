@@ -157,6 +157,13 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
+
+# ---------------------------------------------------------------------------
+# Gemini AI (for clip summarization)
+# ---------------------------------------------------------------------------
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
 
 OTP_EXPIRY_MINUTES = int(os.getenv('OTP_EXPIRY_MINUTES', '10'))
 
@@ -172,6 +179,7 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@save.app')
 # Redis
 # ---------------------------------------------------------------------------
 REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
+DJANGO_CACHE_URL = os.getenv('DJANGO_CACHE_URL', 'redis://127.0.0.1:6379/2')
 
 # ---------------------------------------------------------------------------
 # Django Cache (used for OTP rate-limiting, etc.)
@@ -179,15 +187,15 @@ REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': REDIS_URL,
+        'LOCATION': DJANGO_CACHE_URL,
     }
 }
 
 # ---------------------------------------------------------------------------
 # Celery
 # ---------------------------------------------------------------------------
-CELERY_BROKER_URL = REDIS_URL
-CELERY_RESULT_BACKEND = REDIS_URL
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/1')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -196,3 +204,7 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 5 * 60  # hard kill after 5 minutes
 CELERY_TASK_SOFT_TIME_LIMIT = 4 * 60  # raise SoftTimeLimitExceeded at 4 min
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'visibility_timeout': int(os.getenv('CELERY_VISIBILITY_TIMEOUT', '3600')),
+}
+CELERY_RESULT_EXPIRES = int(os.getenv('CELERY_RESULT_EXPIRES', '86400'))

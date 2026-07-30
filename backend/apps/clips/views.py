@@ -2,20 +2,11 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .models import Clip
 from .serializers import ClipCreateSerializer, ClipSerializer
 
 
 class ClipCreateView(APIView):
-    """
-    POST /api/clips/
-
-    Accepts a URL (and optional selected_text) from the Chrome extension,
-    persists the clip immediately, and kicks off a Celery background job
-    to scrape + process the content.
-
-    Auth: JWT required (default DRF permission).
-    """
-
     def post(self, request):
         serializer = ClipCreateSerializer(
             data=request.data,
@@ -30,3 +21,9 @@ class ClipCreateView(APIView):
             else status.HTTP_201_CREATED
         )
         return Response(response_serializer.data, status=http_status)
+
+
+class ClipDetailView(APIView):
+    def get(self, request, clip_id):
+        clip = Clip.objects.select_related('destination').get(pk=clip_id, user=request.user)
+        return Response(ClipSerializer(clip).data)

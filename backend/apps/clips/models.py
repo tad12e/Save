@@ -38,6 +38,27 @@ class Clip(models.Model):
     content_type = models.CharField(max_length=100, blank=True, null=True)
     tags = models.JSONField(default=list, blank=True)
 
+    destination = models.ForeignKey(
+        'destinations.Destination',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='clips',
+    )
+    export_status = models.CharField(
+        max_length=20,
+        choices=(
+            ('pending', 'Pending'),
+            ('processing', 'Processing'),
+            ('done', 'Done'),
+            ('failed', 'Failed'),
+            ('skipped', 'Skipped'),
+        ),
+        default='pending',
+    )
+    export_url = models.URLField(max_length=2048, blank=True)
+    export_error = models.TextField(blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
