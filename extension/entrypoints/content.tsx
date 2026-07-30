@@ -18,7 +18,15 @@ type SaveClipMessage = {
   payload: {
     url: string;
     selected_text: string;
+    destination_id?: string | null;
   };
+};
+
+type DestinationOption = {
+  id: string;
+  name: string;
+  provider: string;
+  is_default: boolean;
 };
 
 type OpportunitySource = 'none' | 'known-site' | 'content-signals';
@@ -258,6 +266,8 @@ function SaveWidget() {
   const [selectionAnchor, setSelectionAnchor] = useState<SelectionAnchor | null>(null);
   const [selectionVisible, setSelectionVisible] = useState(false);
   const [opportunitySource, setOpportunitySource] = useState<OpportunitySource>('none');
+  const [destinations, setDestinations] = useState<DestinationOption[]>([]);
+  const [selectedDestinationId, setSelectedDestinationId] = useState<string>('');
 
   const currentUrl = useMemo(() => window.location.href, []);
   const pageTitle = useMemo(() => document.title || 'This page', []);
@@ -326,6 +336,20 @@ function SaveWidget() {
   }, []);
 
   useEffect(() => {
+    if (state === 'collapsed') return;
+
+    chrome.runtime.sendMessage({ type: 'GET_DESTINATIONS' }, (response: any) => {
+      if (!response?.ok || !Array.isArray(response.data)) return;
+
+      setDestinations(response.data);
+      const storedId = window.localStorage.getItem('clipper_last_destination_id');
+      const storedMatch = response.data.find((item: DestinationOption) => item.id === storedId);
+      const defaultDestination = response.data.find((item: DestinationOption) => item.is_default);
+      setSelectedDestinationId(storedMatch?.id || defaultDestination?.id || response.data[0]?.id || '');
+    });
+  }, [state]);
+
+  useEffect(() => {
     if (state !== 'done') return;
 
     const timer = window.setTimeout(() => {
@@ -378,8 +402,13 @@ function SaveWidget() {
       payload: {
         url: window.location.href,
         selected_text: selectedText,
+        destination_id: selectedDestinationId || null,
       },
     };
+
+    if (selectedDestinationId) {
+      window.localStorage.setItem('clipper_last_destination_id', selectedDestinationId);
+    }
 
     try {
       const response = await chrome.runtime.sendMessage(payload);
@@ -528,6 +557,37 @@ function SaveWidget() {
             <div style={{ fontSize: '13px', color: '#e2e8f0', lineHeight: 1.45 }}>{summary}</div>
           </div>
 
+          {destinations.length > 0 ? (
+            <div style={statusLineStyle()}>
+              <div style={{ fontSize: '12px', color: '#94a3b8', minWidth: '56px' }}>Send to</div>
+              <select
+                value={selectedDestinationId}
+                onChange={(event) => setSelectedDestinationId(event.target.value)}
+                style={{
+                  width: '100%',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.18)',
+                  background: 'rgba(15, 23, 42, 0.55)',
+                  color: '#f8fafc',
+                  padding: '10px 12px',
+                  fontSize: '13px',
+                }}
+              >
+                {destinations.map((destination) => (
+                  <option key={destination.id} value={destination.id}>
+                    {destination.name} ({destination.provider === 'notion' ? 'Notion' : 'Google Sheets'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div style={statusLineStyle()}>
+              <div style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: 1.45 }}>
+                No destination configured yet. Add Notion or Google Sheets in the extension popup settings.
+              </div>
+            </div>
+          )}
+
           {error ? (
             <div style={statusLineStyle('rgba(248,113,113,0.24)')}>
               <div style={{ color: '#fca5a5', fontSize: '13px' }}>{error}</div>
@@ -537,7 +597,7 @@ function SaveWidget() {
           {state === 'done' && result ? (
             <div style={statusLineStyle('rgba(45,212,191,0.3)')}>
               <div style={{ color: '#99f6e4', fontSize: '13px', fontWeight: 700 }}>
-                Saved {result.duplicate ? 'as a duplicate' : 'successfully'}.
+                Saved {result.duplicate ? 'as a duplicate' : 'successfully'}. Summarizing and exporting in the background.
               </div>
             </div>
           ) : null}

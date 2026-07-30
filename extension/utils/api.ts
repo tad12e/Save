@@ -27,7 +27,25 @@ export interface Clip {
   content_type?: string;
   tags?: string[];
   summary?: string;
+  destination_id?: string | null;
+  destination_name?: string | null;
+  destination_provider?: 'notion' | 'google_sheets' | null;
+  export_status?: 'pending' | 'processing' | 'done' | 'failed' | 'skipped';
+  export_url?: string;
+  export_error?: string;
   created_at: string;
+  updated_at?: string;
+}
+
+export interface Destination {
+  id: string;
+  provider: 'notion' | 'google_sheets';
+  name: string;
+  config: Record<string, string>;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 class ApiService {
@@ -193,14 +211,56 @@ class ApiService {
         id: `clip-uuid-${Math.random().toString(36).substr(2, 9)}`,
         url: body.url,
         selected_text: body.selected_text || '',
-        status: 'done',
+        status: 'pending',
         duplicate: isDuplicate,
         title: 'Clipper Web App Demo - Save Anything',
         content_type: 'Article',
         tags: ['technology', 'extension', 'wxt'],
         summary: 'This is a mocked summary of the saved page content created via the extension popup.',
+        destination_id: body.destination_id || null,
+        destination_name: body.destination_id ? 'Mock Notion Inbox' : null,
+        destination_provider: body.destination_id ? 'notion' : null,
+        export_status: body.destination_id ? 'processing' : 'skipped',
         created_at: new Date().toISOString(),
       } as unknown as T;
+    }
+
+    if (endpoint.startsWith('/api/destinations')) {
+      if (options.method === 'POST') {
+        return {
+          id: `dest-${Math.random().toString(36).substr(2, 9)}`,
+          provider: body.provider,
+          name: body.name,
+          config: body.config || {},
+          is_default: Boolean(body.is_default),
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as unknown as T;
+      }
+
+      return [
+        {
+          id: 'mock-notion',
+          provider: 'notion',
+          name: 'Mock Notion Inbox',
+          config: {},
+          is_default: true,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        {
+          id: 'mock-sheets',
+          provider: 'google_sheets',
+          name: 'Mock Google Sheet',
+          config: {},
+          is_default: false,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ] as unknown as T;
     }
 
     throw new Error('Endpoint mock not implemented');
@@ -258,10 +318,40 @@ class ApiService {
     return res;
   }
 
-  async saveClip(url: string, selectedText: string = '') {
+  async saveClip(url: string, selectedText: string = '', destinationId?: string | null) {
     return this.request<Clip>('/api/clips/', {
       method: 'POST',
-      body: JSON.stringify({ url, selected_text: selectedText }),
+      body: JSON.stringify({
+        url,
+        selected_text: selectedText,
+        ...(destinationId ? { destination_id: destinationId } : {}),
+      }),
+    });
+  }
+
+  async getClip(clipId: string) {
+    return this.request<Clip>(`/api/clips/${clipId}/`);
+  }
+
+  async getDestinations() {
+    return this.request<Destination[]>('/api/destinations/');
+  }
+
+  async createDestination(data: {
+    provider: Destination['provider'];
+    name: string;
+    config: Record<string, string>;
+    is_default?: boolean;
+  }) {
+    return this.request<Destination>('/api/destinations/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async setDefaultDestination(destinationId: string) {
+    return this.request<Destination>(`/api/destinations/${destinationId}/set-default/`, {
+      method: 'POST',
     });
   }
 

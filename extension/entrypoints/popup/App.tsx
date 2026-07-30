@@ -12,12 +12,42 @@ import {
   RefreshCw,
   AlertCircle
 } from 'lucide-react';
-import { api, User, Clip } from '../../utils/api';
+import { api, User, Clip, Destination } from '../../utils/api';
 import './App.css';
 
 declare const chrome: any;
 
 type Screen = 'SIGNIN' | 'SIGNUP' | 'OTP_VERIFY' | 'DASHBOARD' | 'SETTINGS';
+
+const getGoogleAccessToken = () => {
+  const manifest = chrome?.runtime?.getManifest?.();
+  const clientId = manifest?.oauth2?.client_id;
+
+  if (!chrome?.identity?.getAuthToken) {
+    throw new Error('Chrome identity API is not available. Load this as a Chrome extension.');
+  }
+
+  if (!clientId) {
+    throw new Error('Missing GOOGLE_CLIENT_ID. Add it to .env, rebuild, and reload the extension.');
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    chrome.identity.getAuthToken({ interactive: true }, (token: string) => {
+      const message = chrome.runtime?.lastError?.message;
+      if (message) {
+        reject(new Error(message));
+        return;
+      }
+
+      if (!token) {
+        reject(new Error('Google did not return an access token.'));
+        return;
+      }
+
+      resolve(token);
+    });
+  });
+};
 
 function App() {
   // Screens & Navigation
@@ -50,6 +80,29 @@ function App() {
   const [selectedText, setSelectedText] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'duplicate' | 'error'>('idle');
   const [savedClip, setSavedClip] = useState<Clip | null>(null);
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [selectedDestinationId, setSelectedDestinationId] = useState<string>('');
+  const [newDestinationProvider, setNewDestinationProvider] = useState<'notion' | 'google_sheets'>('notion');
+  const [newDestinationName, setNewDestinationName] = useState('');
+  const [notionToken, setNotionToken] = useState('');
+  const [notionDatabaseId, setNotionDatabaseId] = useState('');
+  const [sheetsToken, setSheetsToken] = useState('');
+  const [spreadsheetId, setSpreadsheetId] = useState('');
+  const [sheetName, setSheetName] = useState('Clips');
+
+  const loadDestinations = async () => {
+    try {
+      const items = await api.getDestinations();
+      setDestinations(items);
+      const storedId = localStorage.getItem('clipper_last_destination_id');
+      const storedMatch = items.find((item) => item.id === storedId);
+      const defaultDestination = items.find((item) => item.is_default);
+      setSelectedDestinationId(storedMatch?.id || defaultDestination?.id || items[0]?.id || '');
+    } catch {
+      setDestinations([]);
+      setSelectedDestinationId('');
+    }
+  };
 
   // Initialize
   useEffect(() => {
@@ -63,6 +116,7 @@ function App() {
     if (currentUser && token) {
       setUser(currentUser);
       setScreen('DASHBOARD');
+      loadDestinations();
     } else {
       setScreen('SIGNIN');
     }
@@ -257,17 +311,16 @@ function App() {
     }
   };
 
-  // Google OAuth Auth simulated/actual
+  // Google OAuth Auth
   const handleGoogleAuth = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // In a real extension popup, we'd launch chrome.identity.launchWebAuthFlow
-      // Here, we fetch using a mock google token or prompt.
-      // If we are in mock mode, it proceeds instantly.
-      const mockToken = 'google_mock_access_token_123456';
-      const res = await api.googleAuth(mockToken);
+      const googleAccessToken = api.isMockMode()
+        ? 'google_mock_access_token_123456'
+        : await getGoogleAccessToken();
+      const res = await api.googleAuth(googleAccessToken);
       setUser(res.user);
       setScreen('DASHBOARD');
       setSaveStatus('idle');
@@ -285,7 +338,10 @@ function App() {
     setError(null);
 
     try {
-      const res = await api.saveClip(currentUrl, selectedText);
+      const res = await api.saveClip(currentUrl, selectedText, selectedDestinationId || null);
+      if (selectedDestinationId) {
+        localStorage.setItem('clipper_last_destination_id', selectedDestinationId);
+      }
       setSavedClip(res);
       if (res.duplicate) {
         setSaveStatus('duplicate');
@@ -295,6 +351,45 @@ function App() {
     } catch (err: any) {
       setError(err.message || 'Failed to save clip.');
       setSaveStatus('error');
+    }
+  };
+
+  const handleCreateDestination = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const config =
+        newDestinationProvider === 'notion'
+          ? {
+              integration_token: notionToken,
+              database_id: notionDatabaseId,
+            }
+          : {
+              access_token: sheetsToken,
+              spreadsheet_id: spreadsheetId,
+              sheet_name: sheetName || 'Clips',
+            };
+
+      await api.createDestination({
+        provider: newDestinationProvider,
+        name: newDestinationName,
+        config,
+        is_default: destinations.length === 0,
+      });
+
+      setSuccess('Destination connected successfully.');
+      setNewDestinationName('');
+      setNotionToken('');
+      setNotionDatabaseId('');
+      setSheetsToken('');
+      setSpreadsheetId('');
+      await loadDestinations();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create destination.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -642,7 +737,10 @@ function App() {
               
               <div className="flex gap-1 shrink-0">
                 <button 
-                  onClick={() => setScreen('SETTINGS')}
+                  onClick={() => {
+                    setScreen('SETTINGS');
+                    loadDestinations();
+                  }}
                   className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700 transition-colors"
                   title="Settings"
                 >
@@ -677,6 +775,27 @@ function App() {
                 </div>
               )}
 
+              {destinations.length > 0 ? (
+                <div className="mb-4">
+                  <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Destination</label>
+                  <select
+                    value={selectedDestinationId}
+                    onChange={(e) => setSelectedDestinationId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[13px] text-gray-800 outline-none focus:border-violet-500"
+                  >
+                    {destinations.map((destination) => (
+                      <option key={destination.id} value={destination.id}>
+                        {destination.name} ({destination.provider === 'notion' ? 'Notion' : 'Google Sheets'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="mb-4 bg-amber-50 border border-amber-100 rounded-xl p-3 text-[11px] text-amber-800">
+                  Connect Notion or Google Sheets in Settings before saving.
+                </div>
+              )}
+
               {saveStatus === 'idle' && (
                 <button
                   onClick={handleSaveClip}
@@ -701,31 +820,19 @@ function App() {
                 <div className="space-y-3.5">
                   <div className="w-full py-2.5 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl font-semibold text-[14px] flex items-center justify-center gap-2">
                     <Check className="w-4 h-4" />
-                    Saved successfully!
+                    Saved — processing in background
                   </div>
 
                   {savedClip && (
                     <div className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 text-xs text-gray-600 animate-in zoom-in-95 duration-200">
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                        <span className="font-semibold text-gray-800 text-[11px] uppercase tracking-wide">AI Extract Preview</span>
+                        <span className="font-semibold text-gray-800 text-[11px] uppercase tracking-wide">Background job queued</span>
                       </div>
-                      
-                      {savedClip.content_type && (
-                        <p className="mb-1"><span className="font-semibold text-gray-700">Type:</span> {savedClip.content_type}</p>
-                      )}
-                      
-                      {savedClip.summary && (
-                        <p className="mb-2 leading-relaxed"><span className="font-semibold text-gray-700">Summary:</span> {savedClip.summary}</p>
-                      )}
-
-                      {savedClip.tags && savedClip.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {savedClip.tags.map((tag) => (
-                            <span key={tag} className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full font-medium text-[9px]">#{tag}</span>
-                          ))}
-                        </div>
-                      )}
+                      <p className="leading-relaxed">
+                        Clipper will summarize this page and export it to{' '}
+                        <span className="font-semibold">{savedClip.destination_name || 'your default destination'}</span>.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -824,6 +931,122 @@ function App() {
                   />
                   <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-600"></div>
                 </label>
+              </div>
+
+              <div className="space-y-4 border-b border-gray-100 pb-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Destinations</h3>
+                  <button
+                    type="button"
+                    onClick={loadDestinations}
+                    className="text-xs font-semibold text-violet-600 hover:text-violet-500"
+                  >
+                    Refresh
+                  </button>
+                </div>
+
+                {destinations.length > 0 ? (
+                  <div className="space-y-2">
+                    {destinations.map((destination) => (
+                      <div key={destination.id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-800">{destination.name}</p>
+                          <p className="text-[10px] text-gray-400">
+                            {destination.provider === 'notion' ? 'Notion' : 'Google Sheets'}
+                            {destination.is_default ? ' • default' : ''}
+                          </p>
+                        </div>
+                        {!destination.is_default ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await api.setDefaultDestination(destination.id);
+                              await loadDestinations();
+                            }}
+                            className="text-[10px] font-semibold text-violet-600"
+                          >
+                            Set default
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-500">No destinations connected yet.</p>
+                )}
+
+                <form onSubmit={handleCreateDestination} className="space-y-3 bg-gray-50 border border-gray-100 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-gray-700">Connect a destination</p>
+                  <select
+                    value={newDestinationProvider}
+                    onChange={(e) => setNewDestinationProvider(e.target.value as 'notion' | 'google_sheets')}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                  >
+                    <option value="notion">Notion</option>
+                    <option value="google_sheets">Google Sheets</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={newDestinationName}
+                    onChange={(e) => setNewDestinationName(e.target.value)}
+                    placeholder="Destination name"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                    required
+                  />
+                  {newDestinationProvider === 'notion' ? (
+                    <>
+                      <input
+                        type="password"
+                        value={notionToken}
+                        onChange={(e) => setNotionToken(e.target.value)}
+                        placeholder="Notion integration token"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                        required
+                      />
+                      <input
+                        type="text"
+                        value={notionDatabaseId}
+                        onChange={(e) => setNotionDatabaseId(e.target.value)}
+                        placeholder="Notion database ID"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                        required
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="password"
+                        value={sheetsToken}
+                        onChange={(e) => setSheetsToken(e.target.value)}
+                        placeholder="Google OAuth access token"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                        required
+                      />
+                      <input
+                        type="text"
+                        value={spreadsheetId}
+                        onChange={(e) => setSpreadsheetId(e.target.value)}
+                        placeholder="Spreadsheet ID"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                        required
+                      />
+                      <input
+                        type="text"
+                        value={sheetName}
+                        onChange={(e) => setSheetName(e.target.value)}
+                        placeholder="Sheet name"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                      />
+                    </>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-2 bg-violet-600 text-white rounded-lg text-xs font-semibold"
+                  >
+                    Save destination
+                  </button>
+                </form>
               </div>
 
               {/* Version details */}

@@ -3,7 +3,12 @@ type SaveClipMessage = {
   payload: {
     url: string;
     selected_text: string;
+    destination_id?: string | null;
   };
+};
+
+type GetDestinationsMessage = {
+  type: 'GET_DESTINATIONS';
 };
 
 type SaveClipResponse = {
@@ -12,6 +17,8 @@ type SaveClipResponse = {
   selected_text: string;
   status: string;
   duplicate: boolean;
+  export_status?: string;
+  destination_name?: string | null;
 };
 
 type StoredConfig = {
@@ -31,7 +38,7 @@ async function getStoredConfig(): Promise<StoredConfig> {
   });
 }
 
-async function postClip(payload: SaveClipMessage['payload']): Promise<SaveClipResponse> {
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const { clipper_api_url, clipper_access_token } = await getStoredConfig();
   const apiUrl = clipper_api_url || DEFAULT_API_URL;
 
@@ -39,15 +46,13 @@ async function postClip(payload: SaveClipMessage['payload']): Promise<SaveClipRe
     throw new Error('Missing access token. Sign in from the extension popup first.');
   }
 
-  const response = await fetch(`${apiUrl}/api/clips/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${clipper_access_token}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  const headers = new Headers(options.headers || {});
+  if (!headers.has('Content-Type') && options.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+  headers.set('Authorization', `Bearer ${clipper_access_token}`);
 
+  const response = await fetch(`${apiUrl}${endpoint}`, { ...options, headers });
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -60,20 +65,42 @@ async function postClip(payload: SaveClipMessage['payload']): Promise<SaveClipRe
     throw new Error(message);
   }
 
-  return data as SaveClipResponse;
+  return data as T;
+}
+
+async function postClip(payload: SaveClipMessage['payload']): Promise<SaveClipResponse> {
+  return apiRequest<SaveClipResponse>('/api/clips/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+async function fetchDestinations() {
+  return apiRequest<Array<{ id: string; name: string; provider: string; is_default: boolean }>>(
+    '/api/destinations/',
+  );
 }
 
 export default defineBackground(() => {
-  chrome.runtime.onMessage.addListener((message: SaveClipMessage, _sender: any, sendResponse: any) => {
-    if (!message || message.type !== 'SAVE_CLIP') {
+  chrome.runtime.onMessage.addListener((message: SaveClipMessage | GetDestinationsMessage, _sender: any, sendResponse: any) => {
+    if (!message?.type) {
       return false;
     }
 
-    postClip(message.payload)
-      .then((data) => sendResponse({ ok: true, data }))
-      .catch((error: Error) => sendResponse({ ok: false, error: error.message }))
-      .catch(() => undefined);
+    if (message.type === 'GET_DESTINATIONS') {
+      fetchDestinations()
+        .then((data) => sendResponse({ ok: true, data }))
+        .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
 
-    return true;
+    if (message.type === 'SAVE_CLIP') {
+      postClip(message.payload)
+        .then((data) => sendResponse({ ok: true, data }))
+        .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+
+    return false;
   });
 });
