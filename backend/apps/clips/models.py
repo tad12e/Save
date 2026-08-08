@@ -37,6 +37,12 @@ class Clip(models.Model):
     summary = models.TextField(blank=True, null=True)
     content_type = models.CharField(max_length=100, blank=True, null=True)
     tags = models.JSONField(default=list, blank=True)
+    embedding = models.JSONField(default=list, blank=True, null=True)
+
+    # --- AI-extracted metadata ---
+    deadline_date = models.DateField(null=True, blank=True)
+    music_embed_url = models.URLField(max_length=2048, blank=True)
+    reminder_sent = models.BooleanField(default=False)
 
     destination = models.ForeignKey(
         'destinations.Destination',
