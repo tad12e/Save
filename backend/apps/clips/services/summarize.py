@@ -20,21 +20,26 @@ logger = logging.getLogger(__name__)
 
 # The prompt template instructs Gemini to return structured JSON.
 _SYSTEM_PROMPT = """\
-You are a concise content analyst for a web clipper app called "Save".
+You are a concise content analyst for a web clipper app called "Clipper".
 The user has saved a webpage. Analyse the provided page content and any
 highlighted text they selected, then return a JSON object with these fields:
 
 {
   "title": "A clean, descriptive title (max 120 chars). Prefer the actual page title if it is good; otherwise rewrite it.",
   "summary": "A 2-3 sentence summary capturing the key value of this page. Be specific, not generic. Max 400 chars.",
-  "content_type": "One of: job, scholarship, article, event, course, tool, video, social_post, webpage",
-  "tags": ["up to 6 lowercase tags relevant to the content"]
+  "content_type": "One of: job, scholarship, article, event, course, tool, video, music, social_post, webpage",
+  "tags": ["up to 6 lowercase tags relevant to the content"],
+  "deadline_date": "YYYY-MM-DD or null. Extract any application deadline, submission date, event date, or expiry date.",
+  "music_embed_url": "If this is a music/audio page (Spotify, YouTube Music, SoundCloud, Apple Music), extract the canonical URL. Otherwise null."
 }
 
 Rules:
 - Return ONLY the raw JSON object. No markdown fences, no extra text.
 - If selected_text is provided, weight your summary towards that content.
 - Tags should be specific and useful for filtering (e.g. "remote", "python", "startup", "ai", "design").
+- For content_type "music": use this for Spotify tracks/albums, YouTube music videos, SoundCloud tracks, Apple Music, etc.
+- For deadline_date: look for phrases like "deadline", "closes on", "apply by", "due date", "event date". Return null if none found.
+- For music_embed_url: return the direct page URL (e.g. https://open.spotify.com/track/...). Return null if not music.
 """
 
 
@@ -119,5 +124,24 @@ def ai_summarize(url: str, page_text: str, selected_text: str = '') -> dict | No
     else:
         result['tags'] = []
 
-    logger.info('Gemini summarization succeeded: title=%r, type=%s', result['title'], result['content_type'])
+    # Normalize deadline_date (AI-extracted)
+    raw_deadline = result.get('deadline_date')
+    if raw_deadline and raw_deadline != 'null' and isinstance(raw_deadline, str):
+        import re
+        match = re.search(r'\d{4}-\d{2}-\d{2}', raw_deadline)
+        result['deadline_date'] = match.group(0) if match else None
+    else:
+        result['deadline_date'] = None
+
+    # Normalize music_embed_url (AI-extracted)
+    raw_music = result.get('music_embed_url')
+    if raw_music and raw_music != 'null' and isinstance(raw_music, str) and raw_music.startswith('http'):
+        result['music_embed_url'] = raw_music[:2048]
+    else:
+        result['music_embed_url'] = None
+
+    logger.info(
+        'Gemini summarization succeeded: title=%r, type=%s, deadline=%s',
+        result['title'], result['content_type'], result.get('deadline_date'),
+    )
     return result
