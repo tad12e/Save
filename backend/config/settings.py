@@ -18,7 +18,8 @@ from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR.parent / '.env', override=True)
+for env_path in (BASE_DIR.parent.parent / '.env', BASE_DIR.parent / '.env'):
+    load_dotenv(env_path, override=True)
 
 
 # Quick-start development settings - unsuitable for production
@@ -164,29 +165,49 @@ GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+GEMINI_EMBEDDING_MODEL = os.getenv('GEMINI_EMBEDDING_MODEL', 'text-embedding-004')
 
 OTP_EXPIRY_MINUTES = int(os.getenv('OTP_EXPIRY_MINUTES', '10'))
 
-EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+def _default_email_backend():
+    explicit_backend = os.getenv('EMAIL_BACKEND')
+    if explicit_backend:
+        return explicit_backend
+
+    if any(
+        os.getenv(value)
+        for value in ('EMAIL_HOST', 'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD', 'EMAIL_PORT')
+    ):
+        return 'django.core.mail.backends.smtp.EmailBackend'
+
+    return 'django.core.mail.backends.console.EmailBackend'
+
+
+EMAIL_BACKEND = _default_email_backend()
 EMAIL_HOST = os.getenv('EMAIL_HOST', '')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@save.app')
+BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
 
 # ---------------------------------------------------------------------------
 # Redis
 # ---------------------------------------------------------------------------
 REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
 DJANGO_CACHE_URL = os.getenv('DJANGO_CACHE_URL', 'redis://127.0.0.1:6379/2')
+DJANGO_CACHE_BACKEND = os.getenv(
+    'DJANGO_CACHE_BACKEND',
+    'django.core.cache.backends.redis.RedisCache',
+)
 
 # ---------------------------------------------------------------------------
 # Django Cache (used for OTP rate-limiting, etc.)
 # ---------------------------------------------------------------------------
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'BACKEND': DJANGO_CACHE_BACKEND,
         'LOCATION': DJANGO_CACHE_URL,
     }
 }
@@ -208,3 +229,13 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
     'visibility_timeout': int(os.getenv('CELERY_VISIBILITY_TIMEOUT', '3600')),
 }
 CELERY_RESULT_EXPIRES = int(os.getenv('CELERY_RESULT_EXPIRES', '86400'))
+
+# ---------------------------------------------------------------------------
+# Celery Beat (Periodic Tasks)
+# ---------------------------------------------------------------------------
+CELERY_BEAT_SCHEDULE = {
+    'check-deadline-reminders-daily': {
+        'task': 'apps.clips.tasks.check_deadline_reminders',
+        'schedule': 60 * 60 * 24,  # every 24 hours
+    },
+}
