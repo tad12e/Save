@@ -49,6 +49,9 @@ const getGoogleAccessToken = () => {
   });
 };
 
+
+
+
 function App() {
   // Screens & Navigation
   const [screen, setScreen] = useState<Screen>('SIGNIN');
@@ -86,8 +89,11 @@ function App() {
   const [newDestinationName, setNewDestinationName] = useState('');
   const [notionToken, setNotionToken] = useState('');
   const [notionDatabaseId, setNotionDatabaseId] = useState('');
+  const [createNewNotion, setCreateNewNotion] = useState(true);
+  const [notionParentPageId, setNotionParentPageId] = useState('');
   const [sheetsToken, setSheetsToken] = useState('');
   const [spreadsheetId, setSpreadsheetId] = useState('');
+  const [createNewSheet, setCreateNewSheet] = useState(true);
   const [sheetName, setSheetName] = useState('Clips');
 
   const loadDestinations = async () => {
@@ -194,11 +200,16 @@ function App() {
     } catch (err: any) {
       // Check if user is unverified and needs OTP verification
       if (err.message && err.message.toLowerCase().includes('verify your email')) {
-        setError('Verification pending. We sent a new code.');
-        // Trigger resend to be sure or just proceed to OTP page
         try {
           await api.resendOtp(email);
-        } catch {}
+          setSuccess('Verification pending. We sent a new code.');
+          setOtpResendCooldown(60);
+        } catch (resendError: any) {
+          setError(
+            resendError.message ||
+              'Verification pending, but we could not send a new code. Please try again later.'
+          );
+        }
         setScreen('OTP_VERIFY');
       } else {
         setError(err.message || 'Invalid email or password.');
@@ -332,6 +343,7 @@ function App() {
     }
   };
 
+
   // Save clip handler
   const handleSaveClip = async () => {
     setSaveStatus('saving');
@@ -362,19 +374,31 @@ function App() {
     try {
       const config =
         newDestinationProvider === 'notion'
-          ? {
-              integration_token: notionToken,
-              database_id: notionDatabaseId,
-            }
-          : {
-              access_token: sheetsToken,
-              spreadsheet_id: spreadsheetId,
-              sheet_name: sheetName || 'Clips',
-            };
+          ? createNewNotion
+            ? {
+                integration_token: notionToken,
+                parent_page_id: notionParentPageId,
+                create_new: true,
+              }
+            : {
+                integration_token: notionToken,
+                database_id: notionDatabaseId,
+              }
+          : createNewSheet
+            ? {
+                access_token: sheetsToken,
+                create_new: true,
+                sheet_name: sheetName || 'Clips',
+              }
+            : {
+                access_token: sheetsToken,
+                spreadsheet_id: spreadsheetId,
+                sheet_name: sheetName || 'Clips',
+              };
 
       await api.createDestination({
         provider: newDestinationProvider,
-        name: newDestinationName,
+        name: newDestinationName || (newDestinationProvider === 'notion' ? 'Notion Workspace' : 'Google Sheets'),
         config,
         is_default: destinations.length === 0,
       });
@@ -383,6 +407,7 @@ function App() {
       setNewDestinationName('');
       setNotionToken('');
       setNotionDatabaseId('');
+      setNotionParentPageId('');
       setSheetsToken('');
       setSpreadsheetId('');
       await loadDestinations();
@@ -783,6 +808,7 @@ function App() {
                     onChange={(e) => setSelectedDestinationId(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[13px] text-gray-800 outline-none focus:border-violet-500"
                   >
+                    <option value="">✨ AI Auto-Route (Recommended)</option>
                     {destinations.map((destination) => (
                       <option key={destination.id} value={destination.id}>
                         {destination.name} ({destination.provider === 'notion' ? 'Notion' : 'Google Sheets'})
@@ -1003,14 +1029,34 @@ function App() {
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
                         required
                       />
-                      <input
-                        type="text"
-                        value={notionDatabaseId}
-                        onChange={(e) => setNotionDatabaseId(e.target.value)}
-                        placeholder="Notion database ID"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
-                        required
-                      />
+                      <label className="flex items-center gap-2 text-xs text-gray-700 font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createNewNotion}
+                          onChange={(e) => setCreateNewNotion(e.target.checked)}
+                          className="rounded text-violet-600 focus:ring-violet-500"
+                        />
+                        ✨ Auto-create new Notion Database
+                      </label>
+                      {createNewNotion ? (
+                        <input
+                          type="text"
+                          value={notionParentPageId}
+                          onChange={(e) => setNotionParentPageId(e.target.value)}
+                          placeholder="Notion Parent Page ID"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                          required
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={notionDatabaseId}
+                          onChange={(e) => setNotionDatabaseId(e.target.value)}
+                          placeholder="Existing Notion Database ID"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                          required
+                        />
+                      )}
                     </>
                   ) : (
                     <>
@@ -1022,19 +1068,30 @@ function App() {
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
                         required
                       />
-                      <input
-                        type="text"
-                        value={spreadsheetId}
-                        onChange={(e) => setSpreadsheetId(e.target.value)}
-                        placeholder="Spreadsheet ID"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
-                        required
-                      />
+                      <label className="flex items-center gap-2 text-xs text-gray-700 font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createNewSheet}
+                          onChange={(e) => setCreateNewSheet(e.target.checked)}
+                          className="rounded text-violet-600 focus:ring-violet-500"
+                        />
+                        ✨ Auto-create brand new Google Sheet
+                      </label>
+                      {!createNewSheet ? (
+                        <input
+                          type="text"
+                          value={spreadsheetId}
+                          onChange={(e) => setSpreadsheetId(e.target.value)}
+                          placeholder="Existing Google Spreadsheet ID"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
+                          required
+                        />
+                      ) : null}
                       <input
                         type="text"
                         value={sheetName}
                         onChange={(e) => setSheetName(e.target.value)}
-                        placeholder="Sheet name"
+                        placeholder="Sheet tab name (default: Clips)"
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none"
                       />
                     </>
