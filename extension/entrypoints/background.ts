@@ -81,8 +81,27 @@ async function fetchDestinations() {
   );
 }
 
+type CheckRelevanceMessage = {
+  type: 'CHECK_PAGE_RELEVANCE';
+  payload: {
+    text: string;
+  };
+};
+
+async function checkSimilarity(text: string) {
+  return apiRequest<{
+    relevant: boolean;
+    similarity_score?: number;
+    matched_clip?: { id: string; title: string; summary: string; content_type: string };
+    reason?: string;
+  }>('/api/clips/similar/', {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  });
+}
+
 export default defineBackground(() => {
-  chrome.runtime.onMessage.addListener((message: SaveClipMessage | GetDestinationsMessage, _sender: any, sendResponse: any) => {
+  chrome.runtime.onMessage.addListener((message: SaveClipMessage | GetDestinationsMessage | CheckRelevanceMessage, _sender: any, sendResponse: any) => {
     if (!message?.type) {
       return false;
     }
@@ -96,6 +115,13 @@ export default defineBackground(() => {
 
     if (message.type === 'SAVE_CLIP') {
       postClip(message.payload)
+        .then((data) => sendResponse({ ok: true, data }))
+        .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+      return true;
+    }
+
+    if (message.type === 'CHECK_PAGE_RELEVANCE') {
+      checkSimilarity(message.payload.text)
         .then((data) => sendResponse({ ok: true, data }))
         .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
       return true;
