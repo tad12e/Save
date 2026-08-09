@@ -1,132 +1,224 @@
-type SaveClipMessage = {
-  type: 'SAVE_CLIP';
-  payload: {
-    url: string;
-    selected_text: string;
-    destination_id?: string | null;
-  };
-};
+// ─── Background Script — handles SAVE_CLIP and OPEN_POPUP ───
 
-type GetDestinationsMessage = {
-  type: 'GET_DESTINATIONS';
-};
-
-type SaveClipResponse = {
-  id: string;
-  url: string;
-  selected_text: string;
-  status: string;
-  duplicate: boolean;
-  export_status?: string;
-  destination_name?: string | null;
-};
-
-type StoredConfig = {
-  clipper_api_url?: string;
-  clipper_access_token?: string;
-};
+import { defineBackground } from 'wxt/utils/define-background';
 
 declare const chrome: any;
 
 const DEFAULT_API_URL = 'http://127.0.0.1:8000';
 
-async function getStoredConfig(): Promise<StoredConfig> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(['clipper_api_url', 'clipper_access_token'], (items: StoredConfig) => {
-      resolve(items as StoredConfig);
-    });
-  });
+function getApiUrl(): string {
+  return (import.meta as any).env?.VITE_API_URL || DEFAULT_API_URL;
 }
 
-async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const { clipper_api_url, clipper_access_token } = await getStoredConfig();
-  const apiUrl = clipper_api_url || DEFAULT_API_URL;
+function showNotification(title: string, message: string): void {
+  try {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icon/48.png',
+      title,
+      message,
+    });
+  } catch {
+    // Ignore notification errors if context unavailable
+  }
+}
 
-  if (!clipper_access_token) {
-    throw new Error('Missing access token. Sign in from the extension popup first.');
+async function handleSaveClip(data: any): Promise<any> {
+  // 1. Get JWT
+  const storage = await new Promise<any>((resolve) => {
+    chrome.storage.local.get(
+      ['jwt', 'clipper_access_token', 'clipper_api_url'],
+      (res: any) => resolve(res || {})
+    );
+  });
+
+  const token = storage.jwt || storage.clipper_access_token;
+  const apiUrl = storage.clipper_api_url || getApiUrl();
+
+  // 2. If no JWT — open popup for login
+  if (!token) {
+    try {
+      if (chrome.action?.openPopup) {
+        chrome.action.openPopup();
+      }
+    } catch {
+      // Fallback if openPopup is unsupported
+    }
+    throw new Error('Not logged in. Please sign in via the extension popup.');
   }
 
-  const headers = new Headers(options.headers || {});
-  if (!headers.has('Content-Type') && options.body) {
-    headers.set('Content-Type', 'application/json');
-  }
-  headers.set('Authorization', `Bearer ${clipper_access_token}`);
+  // 3. POST to /api/clips/
+  const bodyData = {
+    url: data.url,
+    selected_text: data.selectedText || data.selected_text || '',
+    content_type: data.contentType || data.content_type || null,
+    destination: data.destination || null,
+    table_id: data.tableId || data.table_id || null,
+    source: data.source || 'extension',
+  };
 
-  const response = await fetch(`${apiUrl}${endpoint}`, { ...options, headers });
-  const data = await response.json().catch(() => null);
+  const response = await fetch(`${apiUrl}/api/clips/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(bodyData),
+  });
+
+  // 4. Handle 401
+  if (response.status === 401) {
+    await chrome.storage.local.remove(['jwt', 'clipper_access_token']);
+    try {
+      if (chrome.action?.openPopup) {
+        chrome.action.openPopup();
+      }
+    } catch {
+      // Ignore
+    }
+    throw new Error('Session expired. Please sign in again.');
+  }
 
   if (!response.ok) {
-    const message =
-      data && typeof data === 'object'
-        ? Object.entries(data)
-            .map(([key, value]) => `${key}: ${value}`)
+    const errorData = await response.json().catch(() => null);
+    const msg =
+      errorData && typeof errorData === 'object'
+        ? Object.entries(errorData)
+            .map(([k, v]) => `${k}: ${v}`)
             .join(', ')
-        : `Request failed with status ${response.status}`;
-    throw new Error(message);
+        : `Server returned HTTP ${response.status}`;
+    throw new Error(msg);
   }
 
-  return data as T;
-}
-
-async function postClip(payload: SaveClipMessage['payload']): Promise<SaveClipResponse> {
-  return apiRequest<SaveClipResponse>('/api/clips/', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-async function fetchDestinations() {
-  return apiRequest<Array<{ id: string; name: string; provider: string; is_default: boolean }>>(
-    '/api/destinations/',
-  );
-}
-
-type CheckRelevanceMessage = {
-  type: 'CHECK_PAGE_RELEVANCE';
-  payload: {
-    text: string;
-  };
-};
-
-async function checkSimilarity(text: string) {
-  return apiRequest<{
-    relevant: boolean;
-    similarity_score?: number;
-    matched_clip?: { id: string; title: string; summary: string; content_type: string };
-    reason?: string;
-  }>('/api/clips/similar/', {
-    method: 'POST',
-    body: JSON.stringify({ text }),
-  });
+  return await response.json();
 }
 
 export default defineBackground(() => {
-  chrome.runtime.onMessage.addListener((message: SaveClipMessage | GetDestinationsMessage | CheckRelevanceMessage, _sender: any, sendResponse: any) => {
-    if (!message?.type) {
+  chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: any) => {
+    if (!message?.type) return false;
+
+    if (message.type === 'OPEN_POPUP') {
+      try {
+        if (chrome.action?.openPopup) {
+          chrome.action.openPopup();
+        }
+      } catch {
+        // Ignore
+      }
       return false;
     }
 
-    if (message.type === 'GET_DESTINATIONS') {
-      fetchDestinations()
-        .then((data) => sendResponse({ ok: true, data }))
-        .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
-      return true;
-    }
-
     if (message.type === 'SAVE_CLIP') {
-      postClip(message.payload)
-        .then((data) => sendResponse({ ok: true, data }))
-        .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
-      return true;
-    }
-
-    if (message.type === 'CHECK_PAGE_RELEVANCE') {
-      checkSimilarity(message.payload.text)
-        .then((data) => sendResponse({ ok: true, data }))
-        .catch((error: Error) => sendResponse({ ok: false, error: error.message }));
+      const payload = message.data || message.payload;
+      handleSaveClip(payload)
+        .then((resData) => {
+          showNotification('Clipper', 'Saved ✓');
+          sendResponse({ ok: true, data: resData });
+        })
+        .catch((err: Error) => {
+          showNotification('Clipper — Error', 'Could not save. Check connection.');
+          sendResponse({ ok: false, error: err.message });
+        });
       return true;
     }
 
     return false;
   });
+
+  // ─── Setup Context Menus ───
+  if (chrome.runtime?.onInstalled) {
+    chrome.runtime.onInstalled.addListener(() => {
+      if (chrome.contextMenus) {
+        chrome.contextMenus.create({
+          id: 'save_page',
+          title: '📌 Save Page to Clipper',
+          contexts: ['page'],
+        });
+        chrome.contextMenus.create({
+          id: 'save_link',
+          title: '📌 Save Link to Clipper',
+          contexts: ['link'],
+        });
+        chrome.contextMenus.create({
+          id: 'save_selection',
+          title: '📌 Save Selected Text to Clipper',
+          contexts: ['selection'],
+        });
+      }
+    });
+  }
+
+  // Handle Context Menu clicks
+  if (chrome.contextMenus?.onClicked) {
+    chrome.contextMenus.onClicked.addListener((info: any, tab: any) => {
+      let targetUrl = tab?.url || info.pageUrl || '';
+      let selectedText = '';
+
+      if (info.menuItemId === 'save_link' && info.linkUrl) {
+        targetUrl = info.linkUrl;
+      } else if (info.menuItemId === 'save_selection') {
+        selectedText = info.selectionText || '';
+      }
+
+      if (!targetUrl) return;
+
+      handleSaveClip({
+        url: targetUrl,
+        selectedText,
+        source: 'context_menu',
+      })
+        .then(() => showNotification('Clipper', 'Saved ✓'))
+        .catch((err: Error) => showNotification('Clipper — Error', err.message));
+    });
+  }
+
+  // Handle Keyboard Shortcuts (Alt+S)
+  if (chrome.commands?.onCommand) {
+    chrome.commands.onCommand.addListener((command: string) => {
+      if (command === 'save-clip-shortcut') {
+        chrome.tabs?.query({ active: true, currentWindow: true }, (tabs: any[]) => {
+          const activeTab = tabs?.[0];
+          if (activeTab?.url) {
+            handleSaveClip({
+              url: activeTab.url,
+              title: activeTab.title || '',
+              source: 'keyboard_shortcut',
+            })
+              .then(() => showNotification('Clipper', 'Saved ✓'))
+              .catch((err: Error) => showNotification('Clipper — Error', err.message));
+          }
+        });
+      }
+    });
+  }
+
+  // Handle Address Bar (Omnibox) Keyword "save <url/text>"
+  if (chrome.omnibox?.onInputEntered) {
+    chrome.omnibox.onInputEntered.addListener((text: string) => {
+      const cleanInput = text.trim();
+      if (!cleanInput) return;
+
+      const isUrl = cleanInput.startsWith('http://') || cleanInput.startsWith('https://');
+
+      if (isUrl) {
+        handleSaveClip({ url: cleanInput, source: 'omnibox' })
+          .then(() => showNotification('Clipper', 'Saved ✓'))
+          .catch((err: Error) => showNotification('Clipper — Error', err.message));
+      } else {
+        chrome.tabs?.query({ active: true, currentWindow: true }, (tabs: any[]) => {
+          const activeTab = tabs?.[0];
+          if (activeTab?.url) {
+            handleSaveClip({
+              url: activeTab.url,
+              selectedText: cleanInput,
+              source: 'omnibox',
+            })
+              .then(() => showNotification('Clipper', 'Saved ✓'))
+              .catch((err: Error) => showNotification('Clipper — Error', err.message));
+          }
+        });
+      }
+    });
+  }
 });
+

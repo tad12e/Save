@@ -22,7 +22,19 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
     host_permissions: ['<all_urls>'],
-    permissions: ['storage', 'tabs', 'scripting', 'identity'],
+    permissions: ['storage', 'activeTab', 'scripting', 'identity', 'notifications', 'contextMenus'],
+    commands: {
+      'save-clip-shortcut': {
+        suggested_key: {
+          default: 'Alt+S',
+          mac: 'Alt+S',
+        },
+        description: 'Quickly save current page to Clipper',
+      },
+    },
+    omnibox: {
+      keyword: 'save',
+    },
     ...(googleClientId
       ? {
           oauth2: {
