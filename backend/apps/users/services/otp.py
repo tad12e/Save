@@ -1,6 +1,11 @@
 import hashlib
+import json
 import secrets
+import urllib.error
+import urllib.request
 from datetime import timedelta
+from email.utils import parseaddr
+from smtplib import SMTPAuthenticationError, SMTPException
 
 from django.conf import settings
 from django.core.cache import cache
@@ -9,6 +14,11 @@ from django.utils import timezone
 
 OTP_LENGTH = 6
 OTP_COOLDOWN_SECONDS = 60  # minimum seconds between OTP sends per user
+BREVO_SEND_EMAIL_URL = 'https://api.brevo.com/v3/smtp/email'
+
+
+class OTPEmailDeliveryError(Exception):
+    """Raised when the verification email cannot be delivered."""
 
 
 def _otp_expiry_minutes():
@@ -69,17 +79,61 @@ def _record_otp_sent(user):
 def send_otp_email(user, raw_otp: str):
     """Send the raw OTP via email. The raw value never touches the DB."""
     expiry_minutes = _otp_expiry_minutes()
-    send_mail(
-        subject='Verify your Save account',
-        message=(
-            f'Hi {user.name},\n\n'
-            f'Your verification code is: {raw_otp}\n\n'
-            f'This code expires in {expiry_minutes} minutes.\n'
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
+    subject = 'Verify your Save account'
+    message = (
+        f'Hi {user.name},\n\n'
+        f'Your verification code is: {raw_otp}\n\n'
+        f'This code expires in {expiry_minutes} minutes.\n'
     )
+    brevo_api_key = getattr(settings, 'BREVO_API_KEY', '')
+
+    if brevo_api_key:
+        _, sender_email = parseaddr(settings.DEFAULT_FROM_EMAIL)
+        payload = json.dumps(
+            {
+                'sender': {'name': 'Save', 'email': sender_email},
+                'to': [{'email': user.email, 'name': user.name}],
+                'subject': subject,
+                'textContent': message,
+            }
+        ).encode('utf-8')
+        request = urllib.request.Request(
+            BREVO_SEND_EMAIL_URL,
+            data=payload,
+            headers={
+                'accept': 'application/json',
+                'api-key': brevo_api_key,
+                'content-type': 'application/json',
+            },
+            method='POST',
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=15):
+                return
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode('utf-8', errors='ignore').strip()
+            if error_body:
+                raise OTPEmailDeliveryError(f'Brevo rejected the request: {error_body}') from exc
+            raise OTPEmailDeliveryError(f'Brevo rejected the request with HTTP {exc.code}.') from exc
+        except urllib.error.URLError as exc:
+            raise OTPEmailDeliveryError('Unable to connect to the email service.') from exc
+
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except SMTPAuthenticationError as exc:
+        raise OTPEmailDeliveryError(
+            'The SMTP provider rejected this server. For Brevo, authorize this IP address '
+            'or configure BREVO_API_KEY and use the Brevo API instead.'
+        ) from exc
+    except (OSError, SMTPException) as exc:
+        raise OTPEmailDeliveryError('Unable to connect to the email service.') from exc
 
 
 def clear_otp(user):

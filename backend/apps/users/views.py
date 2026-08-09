@@ -1,5 +1,5 @@
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -11,6 +11,7 @@ from .serializers import (
     UserSerializer,
     VerifyOTPSerializer,
 )
+from .services.otp import OTPEmailDeliveryError
 from .tokens import get_tokens_for_user
 
 
@@ -31,7 +32,15 @@ class SignupView(APIView):
     def post(self, request):
         serializer = SignupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        try:
+            user = serializer.save()
+        except OTPEmailDeliveryError as exc:
+            return Response(
+                {
+                    'message': str(exc),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         if getattr(serializer, 'is_resuming_signup', False):
             message = (
@@ -72,7 +81,15 @@ class ResendOTPView(APIView):
     def post(self, request):
         serializer = ResendOTPSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        try:
+            user = serializer.save()
+        except OTPEmailDeliveryError as exc:
+            return Response(
+                {
+                    'message': str(exc),
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
             {
                 'message': 'A new OTP has been sent to your email.',
@@ -101,3 +118,10 @@ class GoogleAuthView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return auth_response(user)
+
+
+class UserMeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(UserSerializer(request.user).data)

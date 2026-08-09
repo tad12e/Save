@@ -185,10 +185,6 @@ class GoogleAuthSerializer(serializers.Serializer):
             raise serializers.ValidationError({'google_access_token': str(exc)}) from exc
 
         existing_user = CustomUser.objects.filter(email=google_profile['email']).first()
-        if existing_user and existing_user.auth_provider != CustomUser.AUTH_PROVIDER_GOOGLE:
-            raise serializers.ValidationError(
-                'An account with this email already exists. Please sign in with email and password.'
-            )
 
         attrs['google_profile'] = google_profile
         return attrs
@@ -222,6 +218,8 @@ class GoogleAuthSerializer(serializers.Serializer):
 
             if google_profile.get('google_id'):
                 user.google_id = google_profile['google_id']
+
+        user.is_email_verified = True
 
         user.save()
         return user
