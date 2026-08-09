@@ -22,3 +22,7 @@ extension/.wxt/
 
 # Log files
 *.log
+
+# Temporary local scripts
+*.bat
+*.ps1
