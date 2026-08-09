@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clipper — Intelligent Opportunity Engine</title>
+    <meta name="description" content="Opportunities flow from everywhere into Clipper and are intelligently organized into Google Sheets, Notion, Airtable, and Google Calendar." />
+    <meta name="keywords" content="web clipper, AI opportunity engine, job tracker, Google Sheets sync, Notion database, Airtable integration" />
+    <meta property="og:title" content="Clipper — Intelligent Opportunity Engine" />
+    <meta property="og:description" content="Save jobs, events, articles, scholarships, and products. Sync automatically to Sheets, Notion & Airtable." />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./landing.css" />
+  </head>
+  <body class="landing-page">
+
+    <!-- Vignette overlay -->
+    <div class="lp-vignette" aria-hidden="true"></div>
+
+    <!-- ═══════════════════════════════════════
+         1. NAVIGATION HEADER (FIXED GLASS)
+         ═══════════════════════════════════════ -->
+    <header class="lp-header" id="header">
+      <div class="lp-container lp-header-inner">
+        <a href="#" class="lp-logo" id="logo">
+          <div class="lp-logo-icon">◔</div>
+          <span class="lp-logo-text">Clipper</span>
+        </a>
+
+        <nav class="lp-nav" id="desktop-nav">
+          <a href="#ecosystem">Ecosystem</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+
+        <div class="lp-header-actions">
+          <button class="lp-btn-ghost" id="sign-in-btn">Sign in</button>
+          <button class="lp-btn-primary" id="get-started-btn">Get started</button>
+        </div>
+
+        <button class="lp-hamburger" id="hamburger" aria-label="Toggle navigation menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Mobile nav overlay -->
+    <div class="lp-mobile-overlay" id="mobile-overlay"></div>
+    <nav class="lp-mobile-nav" id="mobile-nav">
+      <a href="#ecosystem">Ecosystem</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+      <a href="#" class="lp-btn-ghost" id="mobile-signin">Sign in</a>
+      <a href="#" class="lp-btn-primary" id="mobile-getstarted">Get started</a>
+    </nav>
+
+    <!-- ═══════════════════════════════════════
+         2. HERO SECTION — ANIMATED ECOSYSTEM CANVAS
+         ═══════════════════════════════════════ -->
+    <section class="lp-hero lp-section" id="ecosystem">
+      <!-- Subtle radial glow behind hero -->
+      <div class="lp-hero-glow" aria-hidden="true"></div>
+      <canvas class="lp-hero-canvas" id="particle-canvas"></canvas>
+
+      <div class="lp-container">
+        <!-- Hero Header Text -->
+        <div class="lp-hero-header">
+          <div class="lp-hero-pill" id="hero-pill">
+            <span class="lp-hero-pill-dot"></span>
+            ✦ Next-Gen AI Opportunity Engine
+            <span class="lp-hero-pill-arrow">→</span>
+          </div>
+
+          <h1 class="lp-hero-title">
+            Opportunities flow from everywhere.<br />
+            <span class="lp-gradient-text">Clipper organizes them anywhere.</span>
+          </h1>
+
+          <p class="lp-hero-subtitle">
+            Hover over any opportunity to see how Clipper captures jobs, events, articles, scholarships, and products — classifying them in real time and syncing to your workspace.
+          </p>
+
+          <div class="lp-hero-buttons">
+            <button class="lp-btn-hero primary" id="hero-cta-primary">Get started free</button>
+            <button class="lp-btn-hero outline" id="hero-cta-demo">
+              <span class="play-icon">▶</span> Explore live ecosystem
+            </button>
+          </div>
+        </div>
+
+        <!-- ✦ ANIMATED ECOSYSTEM ENGINE (Self-Explanatory Visual) ✦ -->
+        <div class="lp-ecosystem-wrapper" id="ecosystem-container">
+
+          <!-- SVG Flow Connections -->
+          <svg class="lp-ecosystem-svg" id="ecosystem-svg" viewBox="0 0 1000 500" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="flow-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#4F8CFF" stop-opacity="0.6"/>
+                <stop offset="50%" stop-color="#8B5CF6" stop-opacity="0.9"/>
+                <stop offset="100%" stop-color="#22C55E" stop-opacity="0.8"/>
+              </linearGradient>
+              <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+              </filter>
+            </defs>
+
+            <!-- Inflow Beziers (Sources -> Clipper AI Core) -->
+            <path class="flow-line in-line" id="path-job" d="M 220 70 C 360 70, 420 250, 500 250" />
+            <path class="flow-line in-line" id="path-event" d="M 220 160 C 360 160, 430 250, 500 250" />
+            <path class="flow-line in-line" id="path-article" d="M 220 250 C 360 250, 440 250, 500 250" />
+            <path class="flow-line in-line" id="path-scholarship" d="M 220 340 C 360 340, 430 250, 500 250" />
+            <path class="flow-line in-line" id="path-product" d="M 220 430 C 360 430, 420 250, 500 250" />
+
+            <!-- Outflow Beziers (Clipper AI Core -> Destinations) -->
+            <path class="flow-line out-line" id="path-sheets" d="M 500 250 C 580 250, 640 100, 780 100" />
+            <path class="flow-line out-line" id="path-notion" d="M 500 250 C 570 250, 640 200, 780 200" />
+            <path class="flow-line out-line" id="path-airtable" d="M 500 250 C 570 250, 640 300, 780 300" />
+            <path class="flow-line out-line" id="path-calendar" d="M 500 250 C 580 250, 640 400, 780 400" />
+
+            <!-- Energy Pulse Particles -->
+            <circle class="pulse-particle" id="pulse-job" r="4" fill="#4F8CFF" filter="url(#glow)"/>
+            <circle class="pulse-particle" id="pulse-event" r="4" fill="#8B5CF6" filter="url(#glow)"/>
+            <circle class="pulse-particle" id="pulse-article" r="4" fill="#8B5CF6" filter="url(#glow)"/>
+            <circle class="pulse-particle" id="pulse-scholarship" r="4" fill="#FACC15" filter="url(#glow)"/>
+            <circle class="pulse-particle" id="pulse-product" r="4" fill="#22C55E" filter="url(#glow)"/>
+
+            <circle class="pulse-particle" id="pulse-sheets" r="4" fill="#22C55E" filter="url(#glow)"/>
+            <circle class="pulse-particle" id="pulse-notion" r="4" fill="#8B5CF6" filter="url(#glow)"/>
+            <circle class="pulse-particle" id="pulse-airtable" r="4" fill="#4F8CFF" filter="url(#glow)"/>
+            <circle class="pulse-particle" id="pulse-calendar" r="4" fill="#FACC15" filter="url(#glow)"/>
+          </svg>
+
+          <!-- 1. LEFT: ORBITING INFLOW SOURCES -->
+          <div class="lp-eco-column inflow-col">
+            <div class="lp-eco-label">Inflow Sources</div>
+
+            <!-- Source Card 1: LinkedIn Job -->
+            <div class="lp-eco-card source-card" id="card-job" data-source="job">
+              <div class="card-icon-wrap job-icon">💼</div>
+              <div class="card-info">
+                <div class="card-title">Senior Engineer at Stripe</div>
+                <div class="card-sub">LinkedIn Job · $180k–$220k</div>
+              </div>
+              <div class="card-badge">Job</div>
+            </div>
+
+            <!-- Source Card 2: Tech Event -->
+            <div class="lp-eco-card source-card" id="card-event" data-source="event">
+              <div class="card-icon-wrap event-icon">🎟️</div>
+              <div class="card-info">
+                <div class="card-title">React Conf 2026</div>
+                <div class="card-sub">techconf.org · Sept 14–16</div>
+              </div>
+              <div class="card-badge event-bg">Event</div>
+            </div>
+
+            <!-- Source Card 3: Research Article -->
+            <div class="lp-eco-card source-card" id="card-article" data-source="article">
+              <div class="card-icon-wrap article-icon">📰</div>
+              <div class="card-info">
+                <div class="card-title">Rust Systems Architecture</div>
+                <div class="card-sub">arxiv.org · 8 min read</div>
+              </div>
+              <div class="card-badge article-bg">Article</div>
+            </div>
+
+            <!-- Source Card 4: Scholarship -->
+            <div class="lp-eco-card source-card" id="card-scholarship" data-source="scholarship">
+              <div class="card-icon-wrap scholarship-icon">🎓</div>
+              <div class="card-info">
+                <div class="card-title">STEM Leadership Grant</div>
+                <div class="card-sub">foundation.org · $10,000</div>
+              </div>
+              <div class="card-badge scholarship-bg">Grant</div>
+            </div>
+
+            <!-- Source Card 5: Product Deal -->
+            <div class="lp-eco-card source-card" id="card-product" data-source="product">
+              <div class="card-icon-wrap product-icon">🛒</div>
+              <div class="card-info">
+                <div class="card-title">Sony WH-1000XM5</div>
+                <div class="card-sub">amazon.com · $279 Deal</div>
+              </div>
+              <div class="card-badge product-bg">Product</div>
+            </div>
+          </div>
+
+          <!-- 2. CENTER: CLIPPER AI CORE NODE -->
+          <div class="lp-eco-center">
+            <div class="lp-ai-core-node" id="ai-core-node">
+              <div class="core-ring outer-ring"></div>
+              <div class="core-ring middle-ring"></div>
+              <div class="core-glass-body">
+                <div class="core-logo">◔</div>
+                <div class="core-title">CLIPPER AI</div>
+                <div class="core-status" id="core-status-tag">✦ Classifying...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. RIGHT: OUTFLOW DESTINATIONS -->
+          <div class="lp-eco-column outflow-col">
+            <div class="lp-eco-label">Structured Destinations</div>
+
+            <!-- Dest 1: Google Sheets -->
+            <div class="lp-eco-card dest-card" id="dest-sheets">
+              <div class="card-icon-wrap sheets-icon">📊</div>
+              <div class="card-info">
+                <div class="card-title">Google Sheets</div>
+                <div class="card-sub" id="status-sheets">Auto-populated row</div>
+              </div>
+              <span class="dest-dot green"></span>
+            </div>
+
+            <!-- Dest 2: Notion -->
+            <div class="lp-eco-card dest-card" id="dest-notion">
+              <div class="card-icon-wrap notion-icon">📝</div>
+              <div class="card-info">
+                <div class="card-title">Notion Database</div>
+                <div class="card-sub" id="status-notion">Database page created</div>
+              </div>
+              <span class="dest-dot violet"></span>
+            </div>
+
+            <!-- Dest 3: Airtable -->
+            <div class="lp-eco-card dest-card" id="dest-airtable">
+              <div class="card-icon-wrap airtable-icon">📋</div>
+              <div class="card-info">
+                <div class="card-title">Airtable Base</div>
+                <div class="card-sub" id="status-airtable">Synced record</div>
+              </div>
+              <span class="dest-dot cyan"></span>
+            </div>
+
+            <!-- Dest 4: Google Calendar -->
+            <div class="lp-eco-card dest-card" id="dest-calendar">
+              <div class="card-icon-wrap calendar-icon">📅</div>
+              <div class="card-info">
+                <div class="card-title">Google Calendar</div>
+                <div class="card-sub" id="status-calendar">Event deadline added</div>
+              </div>
+              <span class="dest-dot amber"></span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         3. LOGOS MARQUEE (TRUST SIGNAL)
+         ═══════════════════════════════════════ -->
+    <section class="lp-logos" id="logos">
+      <div class="lp-logos-label">Saves directly to your favourite tools</div>
+      <div class="lp-marquee-track" id="marquee-track">
+        <div class="lp-logo-item"><span class="logo-icon">📊</span> Google Sheets</div>
+        <div class="lp-logo-item"><span class="logo-icon">📝</span> Notion</div>
+        <div class="lp-logo-item"><span class="logo-icon">📋</span> Airtable</div>
+        <div class="lp-logo-item"><span class="logo-icon">📅</span> Google Calendar</div>
+        <div class="lp-logo-item"><span class="logo-icon">⚡</span> Zapier</div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         4. METRICS GRID (METRICS MATRIX)
+         ═══════════════════════════════════════ -->
+    <section class="lp-metrics-section" id="metrics">
+      <div class="lp-container">
+        <div class="lp-metrics-grid">
+          <div class="lp-metric-card">
+            <div class="lp-metric-number" data-target="35560308">35,560,308</div>
+            <div class="lp-metric-label">Clips indexed</div>
+          </div>
+          <div class="lp-metric-card">
+            <div class="lp-metric-number" data-target="168589970">168,589,970</div>
+            <div class="lp-metric-label">Relationships & tags</div>
+          </div>
+          <div class="lp-metric-card">
+            <div class="lp-metric-number" data-target="12242021">12,242,021</div>
+            <div class="lp-metric-label">Weekly syncs</div>
+          </div>
+          <div class="lp-metric-card">
+            <div class="lp-metric-number" data-target="2400">2,400+</div>
+            <div class="lp-metric-label">Active users</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         5. HOW IT WORKS (3 STEPS)
+         ═══════════════════════════════════════ -->
+    <section class="lp-section lp-steps" id="how-it-works">
+      <div class="lp-container">
+        <div class="lp-section-label">How it works</div>
+        <h2 class="lp-section-title">Three steps. Zero friction.</h2>
+        <p class="lp-section-subtitle">From spotting an opportunity to a structured record in your spreadsheet — all in one click.</p>
+
+        <div class="lp-steps-grid">
+          <!-- Step 1 -->
+          <div class="lp-step-card lp-reveal" id="step-1">
+            <div class="lp-step-number">1</div>
+            <div class="lp-step-visual step-1">
+              <div class="lp-mini-site">
+                <div class="lp-mini-site-bar"></div>
+                <div class="lp-mini-site-bar"></div>
+                <span class="lp-mini-site-label">LinkedIn</span>
+              </div>
+              <div class="lp-mini-site">
+                <div class="lp-mini-site-bar"></div>
+                <div class="lp-mini-site-bar"></div>
+                <span class="lp-mini-site-label">Twitter / X</span>
+              </div>
+              <div class="lp-mini-site">
+                <div class="lp-mini-site-bar"></div>
+                <div class="lp-mini-site-bar"></div>
+                <span class="lp-mini-site-label">Website</span>
+              </div>
+              <div class="lp-widget-float">◔</div>
+            </div>
+            <h3 class="lp-step-title">See it anywhere</h3>
+            <p class="lp-step-desc">Browse LinkedIn, Twitter, any website. Clipper floats quietly on the side.</p>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="lp-step-card lp-reveal" id="step-2">
+            <div class="lp-step-number">2</div>
+            <div class="lp-step-visual step-2">
+              <div class="lp-scan-line"></div>
+              <div class="lp-json-row">
+                <span class="lp-json-key">"type":</span>
+                <span class="lp-json-val">"job"</span>
+              </div>
+              <div class="lp-json-row">
+                <span class="lp-json-key">"title":</span>
+                <span class="lp-json-val">"Senior Engineer"</span>
+              </div>
+              <div class="lp-json-row">
+                <span class="lp-json-key">"deadline":</span>
+                <span class="lp-json-val">"7 days"</span>
+              </div>
+              <div class="lp-json-row">
+                <span class="lp-json-key">"tags":</span>
+                <span class="lp-json-val">["remote", "python"]</span>
+              </div>
+            </div>
+            <h3 class="lp-step-title">One tap saves it</h3>
+            <p class="lp-step-desc">Click save. AI classifies it instantly — job, article, event, product, tool.</p>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="lp-step-card lp-reveal" id="step-3">
+            <div class="lp-step-number">3</div>
+            <div class="lp-step-visual step-3">
+              <div class="lp-sync-icon">
+                ◔
+                <div class="lp-sync-pulse"></div>
+                <div class="lp-sync-pulse"></div>
+              </div>
+              <span class="lp-sync-arrow">→</span>
+              <div class="lp-sync-icon">📊</div>
+              <span class="lp-sync-arrow">→</span>
+              <div class="lp-sync-icon">📝</div>
+            </div>
+            <h3 class="lp-step-title">It syncs everywhere</h3>
+            <p class="lp-step-desc">Goes to your Google Sheet, Notion, Airtable — automatically, structured.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         6. FEATURES SECTION
+         ═══════════════════════════════════════ -->
+    <section class="lp-section lp-features" id="features">
+      <div class="lp-container">
+        <div class="lp-section-label">Everything your bookmarks never did</div>
+        <h2 class="lp-section-title">Built for action, not forgotten tabs</h2>
+        <p class="lp-section-subtitle">AI-powered tools that capture, parse, and remind you before opportunities disappear.</p>
+
+        <div class="lp-features-grid">
+          <!-- Feature 1: AI classification -->
+          <div class="lp-feature-card lp-reveal" id="feature-ai">
+            <div class="lp-feature-icon violet">🧠</div>
+            <h3 class="lp-feature-title">AI classification</h3>
+            <p class="lp-feature-desc">Clipper reads the page and extracts title, type, tags, summary, deadline, salary — all without you doing anything.</p>
+            <div class="lp-feature-visual">
+              <div class="lp-terminal-lines">
+                <div class="lp-terminal-line">
+                  <span class="prompt">input →</span>
+                  <span>"Full-stack role, remote, $180k..."</span>
+                </div>
+                <div class="lp-terminal-line">
+                  <span class="prompt">output →</span>
+                  <span class="tag">Job</span>
+                  <span class="tag">Remote</span>
+                  <span class="tag">$180k+</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 2: Passive detection -->
+          <div class="lp-feature-card lp-reveal" id="feature-detect">
+            <div class="lp-feature-icon cyan">👁️</div>
+            <h3 class="lp-feature-title">Passive detection</h3>
+            <p class="lp-feature-desc">The floating button only appears when Clipper detects an opportunity — job, event, deadline, funding. Silent everywhere else.</p>
+            <div class="lp-feature-visual">
+              <div style="display:flex;gap:12px;align-items:center">
+                <div style="flex:1;padding:10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);font-size:11px;color:var(--lp-text-muted)">
+                  <div style="margin-bottom:4px;font-weight:600;color:var(--lp-text-secondary)">Silent mode</div>
+                  <div style="height:4px;border-radius:2px;background:rgba(255,255,255,0.06);width:80%"></div>
+                </div>
+                <span style="color:var(--lp-text-muted)">→</span>
+                <div style="flex:1;padding:10px;border-radius:10px;background:rgba(79,140,255,0.06);border:1px solid rgba(79,140,255,0.2);font-size:11px">
+                  <div style="margin-bottom:4px;font-weight:600;color:var(--lp-accent)">🔔 Opportunity!</div>
+                  <div style="height:4px;border-radius:2px;background:var(--lp-accent);width:60%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 3: Decay & urgency -->
+          <div class="lp-feature-card lp-reveal" id="feature-decay">
+            <div class="lp-feature-icon amber">⏳</div>
+            <h3 class="lp-feature-title">Decay & urgency</h3>
+            <p class="lp-feature-desc">Every clip has a lifespan. Jobs die in 30 days. Events die in 7. Clipper tells you what needs action before it disappears.</p>
+            <div class="lp-feature-visual">
+              <div class="lp-decay-ring">
+                <svg class="lp-ring-svg" viewBox="0 0 80 80">
+                  <circle class="ring-bg" cx="40" cy="40" r="35"></circle>
+                  <circle class="ring-fg cyan" cx="40" cy="40" r="35"></circle>
+                </svg>
+                <div class="lp-decay-labels">
+                  <div class="lp-decay-label"><span class="lp-decay-dot cyan"></span> <span>7 days left</span></div>
+                  <div class="lp-decay-label"><span class="lp-decay-dot amber"></span> <span>2 days left</span></div>
+                  <div class="lp-decay-label"><span class="lp-decay-dot red"></span> <span>24 hours!</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 4: Destination sync -->
+          <div class="lp-feature-card lp-reveal" id="feature-sync">
+            <div class="lp-feature-icon green">🔗</div>
+            <h3 class="lp-feature-title">Destination sync</h3>
+            <p class="lp-feature-desc">One clip goes to all your connected tools. Google Sheets row, Notion page, Airtable record — all at once, automatically.</p>
+            <div class="lp-feature-visual">
+              <div class="lp-sync-destinations">
+                <div class="lp-dest-icon">◔</div>
+                <div class="lp-dest-connector"></div>
+                <div class="lp-dest-icon">📊</div>
+                <div class="lp-dest-connector"></div>
+                <div class="lp-dest-icon">📝</div>
+                <div class="lp-dest-connector"></div>
+                <div class="lp-dest-icon">📋</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 5: Jobs kanban -->
+          <div class="lp-feature-card lp-reveal" id="feature-kanban">
+            <div class="lp-feature-icon violet">📌</div>
+            <h3 class="lp-feature-title">Jobs kanban</h3>
+            <p class="lp-feature-desc">Saved → Applied → Interview → Offer. Your entire job search in one board.</p>
+            <div class="lp-feature-visual">
+              <div class="lp-mini-kanban">
+                <div class="lp-mini-col">
+                  <span class="lp-mini-col-title">Saved</span>
+                  <div class="lp-mini-card violet"></div>
+                  <div class="lp-mini-card violet"></div>
+                </div>
+                <div class="lp-mini-col">
+                  <span class="lp-mini-col-title">Applied</span>
+                  <div class="lp-mini-card blue"></div>
+                </div>
+                <div class="lp-mini-col">
+                  <span class="lp-mini-col-title">Interview</span>
+                  <div class="lp-mini-card green"></div>
+                </div>
+                <div class="lp-mini-col">
+                  <span class="lp-mini-col-title">Offer</span>
+                  <div class="lp-mini-card empty"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 6: Weekly AI digest -->
+          <div class="lp-feature-card lp-reveal" id="feature-digest">
+            <div class="lp-feature-icon cyan">📧</div>
+            <h3 class="lp-feature-title">Weekly AI digest</h3>
+            <p class="lp-feature-desc">Every Monday, Clipper emails you a smart summary of what you saved, what's expiring, and what to act on.</p>
+            <div class="lp-feature-visual">
+              <div class="lp-digest-preview">
+                <div class="lp-digest-line">
+                  <span class="lp-digest-bullet"></span>
+                  <span class="lp-digest-highlight">12 items saved this week</span>
+                </div>
+                <div class="lp-digest-line">
+                  <span class="lp-digest-bullet"></span>
+                  <span class="lp-digest-highlight">Top trend: remote engineering</span>
+                </div>
+                <div class="lp-digest-line">
+                  <span class="lp-digest-bullet"></span>
+                  <span class="lp-digest-highlight">3 items expiring soon</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         7. KNOWLEDGE GRAPH (ORGANIC NETWORK)
+         ═══════════════════════════════════════ -->
+    <section class="lp-section" id="knowledge-graph-section">
+      <div class="lp-container" style="text-align:center">
+        <div class="lp-section-label">Intelligence layer</div>
+        <h2 class="lp-section-title">Your knowledge, connected</h2>
+        <p class="lp-section-subtitle" style="margin:0 auto 16px">Every clip becomes a node in your personal knowledge graph — relationships, patterns, and insights emerge organically.</p>
+      </div>
+      <div class="lp-knowledge-graph" id="knowledge-graph">
+        <canvas id="knowledge-canvas"></canvas>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         8. LIVE DEMO / PRODUCT SCREENSHOT SECTION
+         ═══════════════════════════════════════ -->
+    <section class="lp-section lp-demo" id="demo">
+      <div class="lp-container">
+        <div class="lp-section-label">See it in action</div>
+        <h2 class="lp-section-title">Tour the Clipper experience</h2>
+        <p class="lp-section-subtitle">Switch between views to explore the extension popup, dashboard, and real-time Google Sheets sync.</p>
+
+        <div class="lp-demo-tabs" id="demo-tabs">
+          <button class="lp-demo-tab active" data-tab="extension">Extension</button>
+          <button class="lp-demo-tab" data-tab="dashboard">Dashboard</button>
+          <button class="lp-demo-tab" data-tab="sheets">Google Sheets</button>
+        </div>
+
+        <div class="lp-demo-panels" id="demo-panels">
+          <!-- Extension Panel -->
+          <div class="lp-demo-panel active" data-panel="extension">
+            <div class="lp-demo-screen">
+              <div class="lp-demo-screen-header">
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-title">Extension Popup on LinkedIn Job Page</span>
+              </div>
+              <div class="lp-demo-screen-body">
+                <div class="lp-demo-row">
+                  <div class="lp-demo-row-icon">💼</div>
+                  <div class="lp-demo-row-text">
+                    <div class="lp-demo-row-title">Senior Engineer at Stripe</div>
+                    <div class="lp-demo-row-meta">linkedin.com · Saved 2 min ago</div>
+                  </div>
+                  <div class="lp-demo-row-badge">Job</div>
+                </div>
+                <div class="lp-demo-row">
+                  <div class="lp-demo-row-icon">📰</div>
+                  <div class="lp-demo-row-text">
+                    <div class="lp-demo-row-title">Why Rust is the Future of Systems Programming</div>
+                    <div class="lp-demo-row-meta">reddit.com · Saved 1 hr ago</div>
+                  </div>
+                  <div class="lp-demo-row-badge">Article</div>
+                </div>
+                <div class="lp-demo-row">
+                  <div class="lp-demo-row-icon">🛒</div>
+                  <div class="lp-demo-row-text">
+                    <div class="lp-demo-row-title">Sony WH-1000XM5 — $279</div>
+                    <div class="lp-demo-row-meta">amazon.com · Saved yesterday</div>
+                  </div>
+                  <div class="lp-demo-row-badge" style="background:var(--lp-warning-subtle);color:var(--lp-warning)">Product</div>
+                </div>
+                <div class="lp-demo-row">
+                  <div class="lp-demo-row-icon">🎫</div>
+                  <div class="lp-demo-row-text">
+                    <div class="lp-demo-row-title">React Conf 2026 — Sept 14–16</div>
+                    <div class="lp-demo-row-meta">reactconf.com · Saved 3 days ago</div>
+                  </div>
+                  <div class="lp-demo-row-badge" style="background:var(--lp-success-subtle);color:var(--lp-success)">Event</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dashboard Panel -->
+          <div class="lp-demo-panel" data-panel="dashboard">
+            <div class="lp-demo-screen">
+              <div class="lp-demo-screen-header">
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-title">Dashboard Clips Organized by Type</span>
+              </div>
+              <div class="lp-demo-screen-body">
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+                  <div style="padding:16px;border-radius:14px;background:rgba(0,0,0,0.15);border:1px solid var(--lp-border);text-align:center">
+                    <div style="font-size:24px;font-weight:800">47</div>
+                    <div style="font-size:11px;color:var(--lp-text-muted);margin-top:4px">Total clips</div>
+                  </div>
+                  <div style="padding:16px;border-radius:14px;background:rgba(0,0,0,0.15);border:1px solid var(--lp-border);text-align:center">
+                    <div style="font-size:24px;font-weight:800">12</div>
+                    <div style="font-size:11px;color:var(--lp-text-muted);margin-top:4px">This week</div>
+                  </div>
+                  <div style="padding:16px;border-radius:14px;background:rgba(0,0,0,0.15);border:1px solid var(--lp-border);text-align:center">
+                    <div style="font-size:24px;font-weight:800">5</div>
+                    <div style="font-size:11px;color:var(--lp-text-muted);margin-top:4px">Jobs saved</div>
+                  </div>
+                </div>
+                <div class="lp-demo-row">
+                  <div class="lp-demo-row-icon">📊</div>
+                  <div class="lp-demo-row-text">
+                    <div class="lp-demo-row-title">Weekly AI Digest</div>
+                    <div class="lp-demo-row-meta">Top trend: remote engineering jobs · 3 items need action</div>
+                  </div>
+                </div>
+                <div class="lp-demo-row">
+                  <div class="lp-demo-row-icon">📌</div>
+                  <div class="lp-demo-row-text">
+                    <div class="lp-demo-row-title">Jobs Board — Kanban View</div>
+                    <div class="lp-demo-row-meta">Saved: 3 · Applied: 1 · Interview: 1 · Offer: 0</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sheets Panel -->
+          <div class="lp-demo-panel" data-panel="sheets">
+            <div class="lp-demo-screen">
+              <div class="lp-demo-screen-header">
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-dot"></span>
+                <span class="lp-demo-screen-title">Google Sheet Updated in Real Time</span>
+              </div>
+              <div class="lp-demo-screen-body" style="padding:0;overflow:hidden">
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                  <thead>
+                    <tr style="background:rgba(0,0,0,0.2);text-align:left">
+                      <th style="padding:14px 16px;font-weight:600;color:var(--lp-text-secondary);border-bottom:1px solid var(--lp-border)">Title</th>
+                      <th style="padding:14px 16px;font-weight:600;color:var(--lp-text-secondary);border-bottom:1px solid var(--lp-border)">Type</th>
+                      <th style="padding:14px 16px;font-weight:600;color:var(--lp-text-secondary);border-bottom:1px solid var(--lp-border)">Source</th>
+                      <th style="padding:14px 16px;font-weight:600;color:var(--lp-text-secondary);border-bottom:1px solid var(--lp-border)">Saved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                      <td style="padding:14px 16px;color:var(--lp-text)">Senior Engineer at Stripe</td>
+                      <td style="padding:14px 16px"><span style="padding:3px 10px;border-radius:999px;background:var(--lp-secondary-subtle);color:var(--lp-secondary-accent);font-size:11px;font-weight:600">Job</span></td>
+                      <td style="padding:14px 16px;color:var(--lp-text-muted)">linkedin.com</td>
+                      <td style="padding:14px 16px;color:var(--lp-text-muted)">2 min ago</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                      <td style="padding:14px 16px;color:var(--lp-text)">Rust Systems Programming</td>
+                      <td style="padding:14px 16px"><span style="padding:3px 10px;border-radius:999px;background:var(--lp-accent-subtle);color:var(--lp-accent);font-size:11px;font-weight:600">Article</span></td>
+                      <td style="padding:14px 16px;color:var(--lp-text-muted)">reddit.com</td>
+                      <td style="padding:14px 16px;color:var(--lp-text-muted)">1 hr ago</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
+                      <td style="padding:14px 16px;color:var(--lp-text)">Sony WH-1000XM5</td>
+                      <td style="padding:14px 16px"><span style="padding:3px 10px;border-radius:999px;background:var(--lp-warning-subtle);color:var(--lp-warning);font-size:11px;font-weight:600">Product</span></td>
+                      <td style="padding:14px 16px;color:var(--lp-text-muted)">amazon.com</td>
+                      <td style="padding:14px 16px;color:var(--lp-text-muted)">Yesterday</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:14px 16px;color:var(--lp-text)">React Conf 2026</td>
+                      <td style="padding:14px 16px"><span style="padding:3px 10px;border-radius:999px;background:var(--lp-success-subtle);color:var(--lp-success);font-size:11px;font-weight:600">Event</span></td>
+                      <td style="padding:14px 16px;color:var(--lp-text-muted)">reactconf.com</td>
+                      <td style="padding:14px 16px;color:var(--lp-text-muted)">3 days ago</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         9. SOCIAL PROOF / TESTIMONIALS
+         ═══════════════════════════════════════ -->
+    <section class="lp-section lp-testimonials" id="testimonials">
+      <div class="lp-container">
+        <div class="lp-section-label">What people are saying</div>
+        <h2 class="lp-section-title">Loved by job seekers, founders, and students</h2>
+        <p class="lp-section-subtitle">Real feedback from users who rely on Clipper every day.</p>
+
+        <div class="lp-testimonials-grid">
+          <!-- Card 1: Job seeker -->
+          <div class="lp-testimonial-card lp-reveal" id="testimonial-1">
+            <p class="lp-testimonial-text">"I saved 40 jobs in a week and actually tracked all of them. First time I've ever gotten to the offer stage for 3 at once."</p>
+            <div class="lp-testimonial-author">
+              <div class="lp-testimonial-avatar">MK</div>
+              <div class="lp-testimonial-info">
+                <span class="lp-testimonial-name">Marta K.</span>
+                <span class="lp-testimonial-role">Software Engineer</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Founder -->
+          <div class="lp-testimonial-card lp-reveal" id="testimonial-2">
+            <p class="lp-testimonial-text">"We use the shared boards feature to track investors and deals as a team. Replaced 3 tools."</p>
+            <div class="lp-testimonial-author">
+              <div class="lp-testimonial-avatar">JO</div>
+              <div class="lp-testimonial-info">
+                <span class="lp-testimonial-name">James O.</span>
+                <span class="lp-testimonial-role">Startup Founder</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Student -->
+          <div class="lp-testimonial-card lp-reveal" id="testimonial-3">
+            <p class="lp-testimonial-text">"Found and applied for 6 scholarships I would have missed. The deadline alerts are the killer feature."</p>
+            <div class="lp-testimonial-author">
+              <div class="lp-testimonial-avatar">AD</div>
+              <div class="lp-testimonial-info">
+                <span class="lp-testimonial-name">Amara D.</span>
+                <span class="lp-testimonial-role">Graduate Student</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         10. PRICING SECTION
+         ═══════════════════════════════════════ -->
+    <section class="lp-section lp-pricing" id="pricing">
+      <div class="lp-container">
+        <div class="lp-section-label">Simple pricing. No surprises.</div>
+        <h2 class="lp-section-title">Start free. Upgrade when you need more.</h2>
+        <p class="lp-section-subtitle">Fair pricing designed for individuals and growing teams.</p>
+
+        <div class="lp-pricing-toggle" id="pricing-toggle">
+          <span class="toggle-label active" data-period="monthly">Monthly</span>
+          <div class="lp-toggle-switch" id="toggle-switch">
+            <div class="lp-toggle-knob"></div>
+          </div>
+          <span class="toggle-label" data-period="yearly">Yearly — save 20%</span>
+        </div>
+
+        <div class="lp-pricing-grid">
+          <!-- Free Plan -->
+          <div class="lp-pricing-card lp-reveal" id="pricing-free">
+            <div class="lp-pricing-name">Free plan</div>
+            <div class="lp-pricing-price">
+              <span class="lp-pricing-amount">$0</span>
+              <span class="lp-pricing-period">/month</span>
+            </div>
+            <div class="lp-pricing-features">
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> 100 clips per month</div>
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> 1 destination</div>
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> Basic classification</div>
+              <div class="lp-pricing-feature muted-feature"><span class="lp-pricing-cross">✕</span> No shared boards</div>
+              <div class="lp-pricing-feature muted-feature"><span class="lp-pricing-cross">✕</span> No digest email</div>
+            </div>
+            <button class="lp-pricing-btn outline" id="pricing-free-btn">Get started free</button>
+          </div>
+
+          <!-- Pro Plan -->
+          <div class="lp-pricing-card featured lp-reveal" id="pricing-pro">
+            <span class="lp-pricing-badge">Most popular</span>
+            <div class="lp-pricing-name">Pro plan</div>
+            <div class="lp-pricing-price">
+              <span class="lp-pricing-amount" id="pro-price">$9</span>
+              <span class="lp-pricing-period" id="pro-period">/mo</span>
+            </div>
+            <div class="lp-pricing-features">
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> Unlimited clips</div>
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> All destinations</div>
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> Advanced AI + urgency</div>
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> Shared boards</div>
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> Weekly AI digest</div>
+              <div class="lp-pricing-feature"><span class="lp-pricing-check">✓</span> Priority support</div>
+            </div>
+            <button class="lp-pricing-btn filled" id="pricing-pro-btn">Upgrade to Pro</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         11. FAQ SECTION
+         ═══════════════════════════════════════ -->
+    <section class="lp-section lp-faq" id="faq">
+      <div class="lp-container">
+        <div class="lp-section-label">FAQ</div>
+        <h2 class="lp-section-title">Frequently asked questions</h2>
+        <p class="lp-section-subtitle">Everything you need to know about Clipper.</p>
+
+        <div class="lp-faq-list" id="faq-list">
+          <div class="lp-faq-item">
+            <button class="lp-faq-question" id="faq-q-1">
+              <span>Does Clipper store my browsing history?</span>
+              <span class="lp-faq-toggle">+</span>
+            </button>
+            <div class="lp-faq-answer">
+              <p>No. Clipper only inspects pages when you click the save button or when an opportunity is detected. We never track or store your general browsing history.</p>
+            </div>
+          </div>
+
+          <div class="lp-faq-item">
+            <button class="lp-faq-question" id="faq-q-2">
+              <span>Which browsers does the extension work on?</span>
+              <span class="lp-faq-toggle">+</span>
+            </button>
+            <div class="lp-faq-answer">
+              <p>Clipper supports Chrome, Edge, Brave, Arc, Opera, and all Chromium-based browsers. Firefox support is currently in beta.</p>
+            </div>
+          </div>
+
+          <div class="lp-faq-item">
+            <button class="lp-faq-question" id="faq-q-3">
+              <span>Can I use it without connecting Google Sheets?</span>
+              <span class="lp-faq-toggle">+</span>
+            </button>
+            <div class="lp-faq-answer">
+              <p>Yes! Clipper has a built-in dashboard where all your clips are stored, organized, and viewable. Connecting Google Sheets, Notion, or Airtable is optional.</p>
+            </div>
+          </div>
+
+          <div class="lp-faq-item">
+            <button class="lp-faq-question" id="faq-q-4">
+              <span>How does the AI classification work?</span>
+              <span class="lp-faq-toggle">+</span>
+            </button>
+            <div class="lp-faq-answer">
+              <p>When a page is clipped, our AI models analyze the DOM and text content to automatically parse out metadata like title, content type (job, article, event, product), tags, expiration date, and salary ranges.</p>
+            </div>
+          </div>
+
+          <div class="lp-faq-item">
+            <button class="lp-faq-question" id="faq-q-5">
+              <span>Is my data private?</span>
+              <span class="lp-faq-toggle">+</span>
+            </button>
+            <div class="lp-faq-answer">
+              <p>Yes. All data is encrypted in transit and at rest. We never sell your data or share your saved clips with third parties.</p>
+            </div>
+          </div>
+
+          <div class="lp-faq-item">
+            <button class="lp-faq-question" id="faq-q-6">
+              <span>Can I export my clips?</span>
+              <span class="lp-faq-toggle">+</span>
+            </button>
+            <div class="lp-faq-answer">
+              <p>You can export all your saved clips anytime as CSV, JSON, or directly to your connected database destinations in one click.</p>
+            </div>
+          </div>
+
+          <div class="lp-faq-item">
+            <button class="lp-faq-question" id="faq-q-7">
+              <span>What happens to clips after they expire?</span>
+              <span class="lp-faq-toggle">+</span>
+            </button>
+            <div class="lp-faq-answer">
+              <p>Expired clips move to your Archived tab so your main dashboard remains clean. You'll receive urgency alerts before they expire so you can act in time.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         12. FINAL CTA SECTION
+         ═══════════════════════════════════════ -->
+    <section class="lp-section lp-final-cta" id="final-cta">
+      <div class="lp-container lp-final-cta-inner">
+        <h2 class="lp-final-cta-title">
+          Stop losing opportunities.<br />
+          <span class="lp-gradient-text">Never miss a job, event, or deal again.</span>
+        </h2>
+        <p class="lp-final-cta-sub">Join 2,400+ people who save time with Clipper.</p>
+        <a href="#" class="lp-btn-cta-large" id="final-cta-btn">Get started free — no credit card</a>
+        <div style="margin-top:16px;font-size:13px;color:var(--lp-text-muted)">Free plan includes 100 clips/month. Upgrade anytime.</div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════
+         13. FOOTER (MAX 4 COLUMNS)
+         ═══════════════════════════════════════ -->
+    <footer class="lp-footer" id="footer">
+      <div class="lp-container">
+        <div class="lp-footer-grid">
+          <!-- Col 1: Brand -->
+          <div class="lp-footer-brand">
+            <a href="#" class="lp-logo">
+              <div class="lp-logo-icon">◔</div>
+              <span class="lp-logo-text">Clipper</span>
+            </a>
+            <p class="lp-footer-tagline">Save anything. Act on everything.</p>
+            <div class="lp-footer-socials">
+              <a href="#" class="lp-social-icon" aria-label="Twitter / X">𝕏</a>
+              <a href="#" class="lp-social-icon" aria-label="GitHub">⌥</a>
+              <a href="#" class="lp-social-icon" aria-label="LinkedIn">in</a>
+            </div>
+          </div>
+
+          <!-- Col 2: Product -->
+          <div>
+            <div class="lp-footer-col-title">Product</div>
+            <div class="lp-footer-links">
+              <a href="#features">Features</a>
+              <a href="#pricing">Pricing</a>
+              <a href="#">Changelog</a>
+              <a href="#">Roadmap</a>
+            </div>
+          </div>
+
+          <!-- Col 3: Company -->
+          <div>
+            <div class="lp-footer-col-title">Company</div>
+            <div class="lp-footer-links">
+              <a href="#">About</a>
+              <a href="#">Careers</a>
+              <a href="#">Contact</a>
+              <a href="#">Privacy policy</a>
+              <a href="#">Terms of service</a>
+            </div>
+          </div>
+
+          <!-- Col 4: Resources & Subscribe -->
+          <div>
+            <div class="lp-footer-col-title">Resources</div>
+            <div class="lp-footer-links" style="margin-bottom:24px">
+              <a href="#blog">Blog</a>
+              <a href="#">Changelog</a>
+              <a href="#">Documentation</a>
+              <a href="#">API reference</a>
+            </div>
+            <div class="lp-footer-subscribe">
+              <p class="lp-footer-subscribe-label">Stay updated: Weekly digest of what's new in Clipper</p>
+              <form class="lp-subscribe-form" id="subscribe-form" onsubmit="return false">
+                <input type="email" class="lp-subscribe-input" placeholder="you@example.com" aria-label="Email address" id="subscribe-email" />
+                <button type="submit" class="lp-subscribe-btn" id="subscribe-btn">Subscribe</button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="lp-footer-bottom">
+          <span>© 2026 Clipper. All rights reserved.</span>
+          <div class="lp-footer-legal">
+            <a href="#">Privacy Policy</a>
+            <a href="#">Terms</a>
+            <a href="#">Cookie settings</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- ═══════════════════════════════════════
+         AUTH MODAL DIALOG
+         ═══════════════════════════════════════ -->
+    <div class="lp-auth-modal-overlay" id="auth-modal-overlay">
+      <div class="lp-auth-modal" id="auth-modal">
+        <button class="lp-auth-close" id="auth-close-btn" aria-label="Close modal">×</button>
+
+        <!-- View 1: Sign In -->
+        <div class="lp-auth-view active" id="auth-view-signin">
+          <div class="lp-auth-header">
+            <div class="lp-logo-icon" style="margin:0 auto 12px">◔</div>
+            <h3 class="lp-auth-title">Welcome back to Clipper</h3>
+            <p class="lp-auth-sub">Sign in to sync clips across your devices</p>
+          </div>
+
+          <button type="button" class="lp-btn-social" id="signin-google-btn">
+            <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            Continue with Google
+          </button>
+
+          <div class="lp-divider-or">or sign in with email</div>
+
+          <form class="lp-auth-form" id="signin-form" onsubmit="return false">
+            <div class="lp-auth-error" id="signin-error"></div>
+            <div class="lp-auth-field">
+              <label for="signin-email">Email address</label>
+              <input type="email" id="signin-email" placeholder="you@example.com" required />
+            </div>
+            <div class="lp-auth-field">
+              <label for="signin-password">Password</label>
+              <div class="lp-auth-input-wrapper">
+                <input type="password" id="signin-password" placeholder="••••••••" required />
+                <button type="button" class="lp-toggle-password-btn" data-target="signin-password" title="Toggle password visibility">👁️</button>
+              </div>
+            </div>
+            <button type="submit" class="lp-btn-primary lp-auth-submit" id="signin-submit-btn">
+              Sign In
+            </button>
+          </form>
+
+          <div class="lp-auth-footer">
+            Don't have an account? <a href="#" id="goto-signup">Sign up</a>
+          </div>
+        </div>
+
+        <!-- View 2: Sign Up -->
+        <div class="lp-auth-view" id="auth-view-signup">
+          <div class="lp-auth-header">
+            <div class="lp-logo-icon" style="margin:0 auto 12px">◔</div>
+            <h3 class="lp-auth-title">Create your account</h3>
+            <p class="lp-auth-sub">Start saving and structuring web data</p>
+          </div>
+
+          <button type="button" class="lp-btn-social" id="signup-google-btn">
+            <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            Sign up with Google
+          </button>
+
+          <div class="lp-divider-or">or create account with email</div>
+
+          <form class="lp-auth-form" id="signup-form" onsubmit="return false">
+            <div class="lp-auth-error" id="signup-error"></div>
+            <div class="lp-auth-field">
+              <label for="signup-name">Full Name</label>
+              <input type="text" id="signup-name" placeholder="Alex Morgan" required />
+            </div>
+            <div class="lp-auth-field">
+              <label for="signup-email">Email address</label>
+              <input type="email" id="signup-email" placeholder="you@example.com" required />
+            </div>
+            <div class="lp-auth-field">
+              <label for="signup-password">Password (min 8 chars)</label>
+              <div class="lp-auth-input-wrapper">
+                <input type="password" id="signup-password" placeholder="••••••••" required minlength="8" />
+                <button type="button" class="lp-toggle-password-btn" data-target="signup-password" title="Toggle password visibility">👁️</button>
+              </div>
+            </div>
+            <div class="lp-auth-field">
+              <label for="signup-confirm-password">Confirm Password</label>
+              <div class="lp-auth-input-wrapper">
+                <input type="password" id="signup-confirm-password" placeholder="••••••••" required minlength="8" />
+                <button type="button" class="lp-toggle-password-btn" data-target="signup-confirm-password" title="Toggle password visibility">👁️</button>
+              </div>
+            </div>
+            <button type="submit" class="lp-btn-primary lp-auth-submit" id="signup-submit-btn">
+              Create Account
+            </button>
+          </form>
+
+          <div class="lp-auth-footer">
+            Already have an account? <a href="#" id="goto-signin">Sign in</a>
+          </div>
+        </div>
+
+        <!-- View 3: OTP Verification -->
+        <div class="lp-auth-view" id="auth-view-otp">
+          <div class="lp-auth-header">
+            <div class="lp-logo-icon" style="margin:0 auto 12px">✉️</div>
+            <h3 class="lp-auth-title">Verify your email</h3>
+            <p class="lp-auth-sub">We sent a 6-digit verification code to <strong id="otp-target-email" style="color:var(--lp-text)">your email</strong></p>
+          </div>
+
+          <form class="lp-auth-form" id="otp-form" onsubmit="return false">
+            <div class="lp-auth-error" id="otp-error"></div>
+            <div class="lp-otp-container">
+              <div class="lp-otp-pin-group" id="otp-pin-group">
+                <input type="text" class="lp-otp-pin-input" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="0" autofocus />
+                <input type="text" class="lp-otp-pin-input" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="1" />
+                <input type="text" class="lp-otp-pin-input" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="2" />
+                <input type="text" class="lp-otp-pin-input" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="3" />
+                <input type="text" class="lp-otp-pin-input" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="4" />
+                <input type="text" class="lp-otp-pin-input" maxlength="1" pattern="[0-9]" inputmode="numeric" data-index="5" />
+              </div>
+              <input type="hidden" id="otp-code" required />
+            </div>
+            <button type="submit" class="lp-btn-primary lp-auth-submit" id="otp-submit-btn">
+              Verify & Continue
+            </button>
+          </form>
+
+          <div class="lp-auth-footer">
+            Didn't receive code? <a href="#" id="resend-otp-btn">Resend Code</a> <span id="resend-timer-text" style="display:none;margin-left:4px;color:var(--lp-text-muted)"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <script type="module" src="./landing.js"></script>
+  </body>
+</html>
