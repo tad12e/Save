@@ -51,7 +51,7 @@ def ai_summarize(url: str, page_text: str, selected_text: str = '') -> dict | No
     Returns None if the API key is missing or the call fails.
     """
     api_key = getattr(settings, 'GEMINI_API_KEY', '')
-    model = getattr(settings, 'GEMINI_MODEL', 'gemini-2.0-flash')
+    model = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
 
     if not api_key:
         logger.info('GEMINI_API_KEY not configured — skipping AI summarization.')
@@ -81,13 +81,16 @@ def ai_summarize(url: str, page_text: str, selected_text: str = '') -> dict | No
 
     api_url = (
         f'https://generativelanguage.googleapis.com/v1beta/models/{model}'
-        f':generateContent?key={api_key}'
+        ':generateContent'
     )
 
     request = urllib.request.Request(
         api_url,
         data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'},
+        headers={
+            'Content-Type': 'application/json',
+            'x-goog-api-key': api_key,
+        },
         method='POST',
     )
 

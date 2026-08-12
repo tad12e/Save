@@ -69,7 +69,6 @@ class Clip(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('user', 'url_hash')
         ordering = ['-created_at']
 
     def __str__(self):

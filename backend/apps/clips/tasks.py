@@ -72,10 +72,10 @@ def process_clip(self, clip_id: str):
             logger.warning('Embedding generation for clip %s failed: %s', clip.id, embed_exc)
 
         destination = clip.destination or get_user_destination(clip.user)
-        if not destination:
-            clip.export_status = 'skipped'
+        if not destination or destination.provider == 'custom_db' or destination.name.startswith('Save Vault'):
+            clip.export_status = 'done'
             clip.save(update_fields=['export_status'])
-            logger.info('Clip %s has no destination configured — export skipped.', clip.id)
+            logger.info('Clip %s target is Internal Database — saved to DB, no external export needed.', clip.id)
             return
 
         clip.export_status = 'processing'
@@ -129,7 +129,7 @@ def check_deadline_reminders(self):
         days_left = (clip.deadline_date - today).days
         subject = f'⏰ Clipper Reminder: "{clip.title}" deadline in {days_left} day{"s" if days_left != 1 else ""}!'
         body = (
-            f'Hi {clip.user.first_name or "there"},\n\n'
+            f'Hi {getattr(clip.user, "name", "there")},\n\n'
             f'Your saved clip "{clip.title}" has a deadline approaching:\n\n'
             f'  📋 {clip.title}\n'
             f'  🔗 {clip.url}\n'

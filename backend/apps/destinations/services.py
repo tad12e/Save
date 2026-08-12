@@ -20,10 +20,14 @@ def export_clip_to_destination(clip, destination):
 
 def get_user_destination(user, destination_id=None):
     if destination_id:
-        return Destination.objects.filter(
+        dest = Destination.objects.filter(
             pk=destination_id,
             user=user,
-            is_active=True,
         ).first()
+        if dest:
+            return dest
 
-    return Destination.objects.filter(user=user, is_default=True, is_active=True).first()
+    return Destination.objects.filter(
+        user=user,
+        is_active=True,
+    ).order_by('-is_default', 'name').first()

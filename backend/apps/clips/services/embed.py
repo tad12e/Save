@@ -1,7 +1,7 @@
 """
 Embedding generation using Google Gemini REST API.
 
-Generates 768-dimensional text embeddings using Gemini's text-embedding-004.
+Generates text embeddings using Gemini's gemini-embedding-001 model.
 Falls back gracefully if:
   - GEMINI_API_KEY is missing or invalid
   - API request fails or times out
@@ -24,7 +24,7 @@ def generate_embedding(text: str) -> list[float] | None:
     Returns list[float] on success, None on failure or missing API key.
     """
     api_key = getattr(settings, 'GEMINI_API_KEY', '')
-    model = getattr(settings, 'GEMINI_EMBEDDING_MODEL', 'text-embedding-004')
+    model = getattr(settings, 'GEMINI_EMBEDDING_MODEL', 'gemini-embedding-001')
 
     if not api_key or api_key == 'your-gemini-api-key-here':
         logger.info('GEMINI_API_KEY not configured — skipping embedding generation.')
@@ -44,12 +44,15 @@ def generate_embedding(text: str) -> list[float] | None:
         }
     }
 
-    api_url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent?key={api_key}'
+    api_url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent'
 
     request = urllib.request.Request(
         api_url,
         data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'},
+        headers={
+            'Content-Type': 'application/json',
+            'x-goog-api-key': api_key,
+        },
         method='POST',
     )
 

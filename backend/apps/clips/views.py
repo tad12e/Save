@@ -19,7 +19,7 @@ User = get_user_model()
 def get_or_create_demo_user():
     user, _ = User.objects.get_or_create(
         email='tadiwos@save.app',
-        defaults={'first_name': 'Tadiwos', 'last_name': 'User', 'is_active': True},
+        defaults={'name': 'Tadiwos User', 'is_active': True},
     )
     return user
 
@@ -34,9 +34,51 @@ class ClipCreateView(APIView):
         if not url_val:
             return Response({'error': 'URL is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        norm_url = normalise_url(url_val)
-        u_hash = hash_url(norm_url)
+        # Check for Local Privacy Mode Header or Request Parameter (Zero Server Data Retention)
+        is_privacy_mode = (
+            request.headers.get('X-Privacy-Mode') == 'true' or 
+            str(request.data.get('privacy_mode', '')).lower() == 'true'
+        )
 
+        sel_text = request.data.get('selected_text', '').strip()
+        norm_url = normalise_url(url_val)
+        u_hash = hash_url(f"{norm_url}||{sel_text}")
+
+        if is_privacy_mode:
+            # Ephemeral Zero-Storage Privacy Processing: extract in-memory, return to client, do NOT persist to DB
+            from apps.clips.services.extract import extract_clip_metadata
+            dummy_clip = type('DummyClip', (), {
+                'url': url_val,
+                'selected_text': sel_text,
+                'title': '',
+                'summary': '',
+                'content_type': 'article',
+                'tags': []
+            })()
+            try:
+                extracted = extract_clip_metadata(dummy_clip)
+            except Exception:
+                extracted = {
+                    'title': request.data.get('title') or url_val,
+                    'summary': sel_text,
+                    'content_type': 'article',
+                    'tags': ['private_local']
+                }
+
+            return Response({
+                'id': f"local_{u_hash[:12]}",
+                'url': url_val,
+                'title': extracted.get('title', url_val),
+                'summary': extracted.get('summary', ''),
+                'selected_text': sel_text,
+                'content_type': extracted.get('content_type', 'article'),
+                'tags': extracted.get('tags', []),
+                'privacy_mode': True,
+                'status': 'DONE',
+                'message': 'Processed in Ephemeral Privacy Mode (Zero Server Data Retention)'
+            }, status=status.HTTP_200_OK)
+
+        # Allow multiple clips from same URL if selected_text or hash differs
         existing = Clip.objects.filter(user=user, url_hash=u_hash).first()
         if existing:
             existing.duplicate = True
@@ -46,6 +88,9 @@ class ClipCreateView(APIView):
         destination_id = request.data.get('destination_id')
         if destination_id:
             destination = Destination.objects.filter(pk=destination_id, user=user).first()
+        if not destination:
+            from apps.destinations.services import get_user_destination
+            destination = get_user_destination(user)
 
         clip = Clip.objects.create(
             user=user,
@@ -61,8 +106,12 @@ class ClipCreateView(APIView):
             from .tasks import process_clip
             process_clip.delay(str(clip.id))
         except Exception:
-            # Fallback if Celery/Redis is not running in background
-            pass
+            # Fallback if Celery/Redis is down: run synchronously in-process
+            try:
+                from .tasks import process_clip
+                process_clip(str(clip.id))
+            except Exception:
+                pass
 
         return Response(ClipSerializer(clip).data, status=status.HTTP_201_CREATED)
 
@@ -145,7 +194,7 @@ class DashboardView(APIView):
 
         return Response({
             'user': {
-                'name': (user.get_full_name() or user.first_name or user.username) if user else 'Tadiwos',
+                'name': (getattr(user, 'name', '') or user.email) if user else 'Tadiwos',
                 'email': user.email if user else 'tadiwos@save.app',
             },
             'stats': {
