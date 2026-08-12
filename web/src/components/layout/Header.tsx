@@ -10,7 +10,11 @@ import {
   RefreshCw,
   Sun,
   Moon,
-  ChevronDown
+  ChevronDown,
+  ShieldCheck,
+  User as UserIcon,
+  LogOut,
+  KeyRound
 } from 'lucide-react';
 import { DestinationConfig } from '../../types';
 
@@ -23,6 +27,9 @@ interface HeaderProps {
   isRefreshing: boolean;
   theme: 'terminal' | 'dark' | 'light';
   setTheme: (theme: 'terminal' | 'dark' | 'light') => void;
+  currentUser?: { name: string; email: string } | null;
+  onOpenAuthModal?: () => void;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,7 +40,10 @@ export const Header: React.FC<HeaderProps> = ({
   onRefreshSync,
   isRefreshing,
   theme,
-  setTheme
+  setTheme,
+  currentUser,
+  onOpenAuthModal,
+  onLogout
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
@@ -74,6 +84,12 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Controls */}
       <div className="flex items-center gap-3">
+        {/* Local Privacy Mode Status Badge */}
+        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm border bg-amber-500/10 border-amber-500/30 text-amber-400 text-[10px] font-mono tracking-wider">
+          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+          <span className="font-semibold">PRIVACY VAULT: ON-DEVICE</span>
+        </div>
+
         {/* Default Destination Quick Badge */}
         {defaultDest && (
           <div className={`hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-sm border text-[10px] font-mono tracking-wider ${
@@ -216,6 +232,33 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
         </div>
+
+        {/* Auth / Account Profile Button */}
+        {currentUser ? (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-[#050505] border border-white/10 text-xs text-stone-200">
+              <UserIcon className="w-3.5 h-3.5 text-amber-500" />
+              <span className="font-mono text-xs font-semibold">{currentUser.name}</span>
+            </div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="p-2 rounded-sm text-stone-400 hover:text-rose-400 hover:bg-white/[0.04] transition-colors border border-transparent hover:border-white/5"
+                title="Log Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        ) : (
+          <button
+            onClick={onOpenAuthModal}
+            className="px-3.5 py-2 rounded-sm text-xs font-mono uppercase tracking-wider font-semibold bg-[#050505] hover:bg-amber-500/10 text-amber-400 border border-amber-500/40 transition-colors flex items-center gap-1.5"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Sign In / Register</span>
+          </button>
+        )}
 
         {/* Quick Add Clip CTA Button */}
         <button

@@ -173,7 +173,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   };
 
   return (
-    <div className={`p-6 md:p-10 max-w-7xl mx-auto space-y-8 animate-fadeIn min-h-screen transition-colors ${
+    <div className={`p-4 sm:p-6 md:p-8 lg:p-10 w-full space-y-8 animate-fadeIn min-h-screen transition-colors ${
       isLight ? 'bg-slate-100/70 text-slate-900' : isDark ? 'bg-slate-950 text-slate-100' : 'bg-[#050505] text-white'
     }`}>
       {/* Hero Welcome Header */}

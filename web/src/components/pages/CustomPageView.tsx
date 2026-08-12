@@ -122,7 +122,7 @@ export const CustomPageView: React.FC<CustomPageViewProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-7xl mx-auto font-sans text-stone-200">
+    <div className="p-4 sm:p-6 md:p-8 lg:p-10 w-full space-y-8 animate-fadeIn font-sans text-stone-200">
       
       {/* Custom Page Header */}
       <div className={`rounded-sm p-6 sm:p-8 border relative overflow-hidden transition-all ${

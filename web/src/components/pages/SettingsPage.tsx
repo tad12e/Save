@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DestinationConfig } from '../../types';
+import { getStoredPrivacyMode, saveStoredPrivacyMode } from '../../lib/storage';
 import { 
   Settings, 
   Radio, 
@@ -10,7 +11,8 @@ import {
   Check, 
   Star, 
   ShieldCheck, 
-  Save 
+  Save,
+  HardDrive
 } from 'lucide-react';
 
 interface SettingsPageProps {
@@ -22,12 +24,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
   const [defaultDestId, setDefaultDestId] = useState<string>(
     destinations.find(d => d.isDefault)?.id || destinations[0]?.id || ''
   );
+  const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(() => getStoredPrivacyMode());
   const [aiExtractionPrompt, setAiExtractionPrompt] = useState(
     "Extract job title, company name, salary range, application deadline, and key responsibilities into JSON."
   );
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const handleSaveSettings = () => {
+    saveStoredPrivacyMode(isPrivacyMode);
     setDestinations(prev =>
       prev.map(d => ({
         ...d,
@@ -39,7 +43,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-8 animate-fadeIn font-sans text-stone-200">
+    <div className="p-4 sm:p-6 md:p-8 lg:p-10 w-full space-y-8 animate-fadeIn font-sans text-stone-200">
       {/* Header */}
       <div>
         <div className="flex items-center gap-2">
@@ -53,6 +57,38 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
         <p className="text-xs text-stone-400 mt-1 font-sans">
           Manage extension default save targets, custom AI extraction instructions, and security keys.
         </p>
+      </div>
+
+      {/* Local Privacy Vault Mode */}
+      <div className="bg-[#080808] border border-amber-500/30 rounded-sm p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-bold text-white font-serif">
+            <ShieldCheck className="w-5 h-5 text-amber-400" />
+            <span>Local Privacy Storage Mode (On-Device Vault)</span>
+          </div>
+          <span className="text-[10px] font-mono uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-sm">
+            100% PRIVATE & OFFLINE
+          </span>
+        </div>
+        <p className="text-xs text-stone-400 font-sans leading-relaxed">
+          When enabled, all web clips, notes, and bookmarks are stored exclusively on your device hard drive using browser-native IndexedDB & LocalStorage. Zero network payloads sent to external servers.
+        </p>
+
+        <label className="flex items-center justify-between p-3.5 bg-[#050505] border border-white/10 rounded-sm cursor-pointer hover:border-amber-500/30 transition-all">
+          <div className="space-y-0.5">
+            <span className="font-mono text-xs text-white font-semibold flex items-center gap-2">
+              <HardDrive className="w-3.5 h-3.5 text-amber-500" />
+              Enable On-Device Local Privacy Storage
+            </span>
+            <p className="text-[11px] text-stone-500 font-sans">Store clips in local browser database only. No cloud database transmission.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={isPrivacyMode}
+            onChange={(e) => setIsPrivacyMode(e.target.checked)}
+            className="w-5 h-5 rounded text-amber-500 focus:ring-amber-500 accent-amber-500 cursor-pointer"
+          />
+        </label>
       </div>
 
       {/* Default Destination Selection */}

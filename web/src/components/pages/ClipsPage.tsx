@@ -129,7 +129,7 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   const subtextClass = isLight ? 'text-slate-600' : 'text-stone-400';
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fadeIn font-sans text-stone-200">
+    <div className="p-4 sm:p-6 md:p-8 lg:p-10 w-full space-y-8 animate-fadeIn font-sans text-stone-200">
       
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-white/5">

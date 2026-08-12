@@ -22,8 +22,9 @@ interface ExtensionSimulatorProps {
     url: string;
     selectedText?: string;
     destinationType: string;
+    destinationId?: string;
     targetResourceName?: string;
-  }) => void;
+  }) => Promise<boolean>;
 }
 
 export const ExtensionSimulator: React.FC<ExtensionSimulatorProps> = ({
@@ -47,7 +48,7 @@ export const ExtensionSimulator: React.FC<ExtensionSimulatorProps> = ({
 
   const defaultDest = destinations.find(d => d.id === chosenDestId) || destinations[0];
 
-  const handleFloatingButtonClick = () => {
+  const handleFloatingButtonClick = async () => {
     if (simulatedSelectionText.trim().length > 0) {
       // Case B: Text selected -> open Selection Mini-Panel
       setPanelOpen(true);
@@ -55,25 +56,31 @@ export const ExtensionSimulator: React.FC<ExtensionSimulatorProps> = ({
     } else {
       // Case A: No text selected -> quick save current page immediately!
       setQuickSaveCheck(true);
-      onSaveClip({
+      const saved = await onSaveClip({
         title: 'Clipped Page: ' + document.title,
         url: window.location.href,
         destinationType: defaultDest?.type || 'google_sheets',
+        destinationId: defaultDest?.id,
         targetResourceName: defaultDest?.targetResourceName
       });
-      setTimeout(() => setQuickSaveCheck(false), 1500);
+      if (!saved) setQuickSaveCheck(false);
+      else setTimeout(() => setQuickSaveCheck(false), 1500);
     }
   };
 
-  const handleExecuteSave = () => {
-    setIsSavedSuccess(true);
-    onSaveClip({
+  const handleExecuteSave = async () => {
+    const saved = await onSaveClip({
       title: 'Senior React & AI Engineer Opportunity',
       url: 'https://x.com/tech_careers/status/18219482104921',
       selectedText: simulatedSelectionText,
       destinationType: defaultDest?.type || 'google_sheets',
+      destinationId: defaultDest?.id,
       targetResourceName: defaultDest?.targetResourceName
     });
+
+    if (!saved) return;
+
+    setIsSavedSuccess(true);
 
     setTimeout(() => {
       setIsSavedSuccess(false);

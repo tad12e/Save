@@ -100,7 +100,7 @@ export interface ConnectionSyncLog {
   destinationId: string;
   destinationName: string;
   clipTitle: string;
-  status: 'success' | 'failed' | 'retrying';
+  status: 'pending' | 'success' | 'failed' | 'retrying';
   timestamp: string;
   durationMs: number;
   payloadSize: string;

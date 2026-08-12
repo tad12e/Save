@@ -20,7 +20,7 @@ interface DigestPageProps {
 
 export const DigestPage: React.FC<DigestPageProps> = ({ digest, clips }) => {
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-fadeIn font-sans text-stone-200">
+    <div className="p-4 sm:p-6 md:p-8 lg:p-10 w-full space-y-8 animate-fadeIn font-sans text-stone-200">
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-amber-950 via-[#080808] to-[#050505] rounded-sm p-6 md:p-8 text-white relative overflow-hidden shadow-xl border border-amber-500/30">
         <div className="relative z-10 space-y-3 max-w-3xl">

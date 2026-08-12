@@ -55,7 +55,7 @@ export const BoardsPage: React.FC<BoardsPageProps> = ({ boards, setBoards }) => 
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fadeIn font-sans text-stone-200">
+    <div className="p-4 sm:p-6 md:p-8 lg:p-10 w-full space-y-6 animate-fadeIn font-sans text-stone-200">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

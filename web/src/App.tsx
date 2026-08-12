@@ -12,6 +12,7 @@ import { SettingsPage } from './components/pages/SettingsPage';
 import { ExtensionSimulator } from './components/extension/ExtensionSimulator';
 import { ManualAddClipModal } from './components/modals/ManualAddClipModal';
 import { CreatePageModal } from './components/modals/CreatePageModal';
+import { AuthModal } from './components/modals/AuthModal';
 
 import { 
   DestinationConfig, 
@@ -35,17 +36,25 @@ import {
   getStoredCustomPages,
   saveStoredCustomPages 
 } from './lib/storage';
+import { createClipBackend, fetchDestinationsBackend } from './lib/api';
 import { INITIAL_DIGEST } from './data/mockData';
 import { CheckCircle, Zap, X } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => (
+    window.location.hash.includes('connections') || window.location.search.includes('oauth_success') ? 'connections' : 'dashboard'
+  ));
   const [theme, setTheme] = useState<'terminal' | 'dark' | 'light'>('terminal');
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtensionOpen, setIsExtensionOpen] = useState(true);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(() => {
+    const storedUser = localStorage.getItem('clipper_user');
+    return storedUser ? JSON.parse(storedUser) : { name: 'Tadiwos User', email: 'tadiwos@save.app' };
+  });
   const [selectedPageForNewClip, setSelectedPageForNewClip] = useState<string | undefined>(undefined);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -56,6 +65,34 @@ export default function App() {
   const [logs, setLogs] = useState<ConnectionSyncLog[]>(() => getStoredLogs());
   const [boards, setBoards] = useState<SharedBoard[]>(() => getStoredBoards());
   const [customPages, setCustomPages] = useState<CustomPageConfig[]>(() => getStoredCustomPages());
+
+  // Fetch real destinations & default status from Django backend on mount
+  useEffect(() => {
+    async function loadBackendDestinations() {
+      const backendDestList = await fetchDestinationsBackend();
+      if (backendDestList && Array.isArray(backendDestList) && backendDestList.length > 0) {
+        setDestinations(prev => {
+          return prev.map(localDest => {
+            const match = backendDestList.find((b: any) => 
+              b.id === localDest.id || b.provider === localDest.type || b.name.toLowerCase() === localDest.name.toLowerCase()
+            );
+            if (match) {
+              return {
+                ...localDest,
+                id: match.id,
+                isDefault: match.is_default,
+                connected: match.is_active,
+                status: match.is_active ? 'active' : 'disconnected',
+                targetResourceName: match.config?.target_resource_name || localDest.targetResourceName
+              };
+            }
+            return localDest;
+          });
+        });
+      }
+    }
+    loadBackendDestinations();
+  }, []);
 
   // LocalStorage Persistence Effect
   useEffect(() => { saveStoredDestinations(destinations); }, [destinations]);
@@ -97,47 +134,59 @@ export default function App() {
     url: string;
     selectedText?: string;
     destinationType: string;
+    destinationId?: string;
     targetResourceName?: string;
-  }) => {
-    const newClip: ClipItem = {
-      id: `clip_${Date.now()}`,
-      title: clipData.title,
+  }): Promise<boolean> => {
+    return createClipBackend({
       url: clipData.url,
-      selectedText: clipData.selectedText,
-      summary: clipData.selectedText
-        ? `AI Summary: ${clipData.selectedText.slice(0, 110)}...`
-        : `Captured opportunity from ${clipData.url}`,
-      type: 'job',
-      tags: ['ExtensionClip', 'Opportunity', 'Saved'],
-      createdAt: new Date().toISOString(),
-      sourceApp: 'Chrome Extension',
-      syncedTo: [clipData.destinationType as any],
-      storageMode: 'cloud',
-      extractedData: {
-        company: 'Extracted Company Labs',
-        salary: '$140,000 - $170,000',
-        location: 'Remote'
+      selected_text: clipData.selectedText,
+      destination_id: clipData.destinationId,
+    }).then(backendClip => {
+      if (!backendClip) {
+        triggerToast('Save failed. The clip was not sent to the backend.');
+        return false;
       }
-    };
 
-    setClips(prev => [newClip, ...prev]);
+      const targetDest = destinations.find(destination => destination.id === backendClip.destination_id)
+        || destinations.find(destination => destination.type === backendClip.destination_provider)
+        || destinations.find(destination => destination.id === clipData.destinationId)
+        || destinations.find(destination => destination.type === clipData.destinationType)
+        || destinations[0];
 
-    // Append Sync Log
-    const targetDest = destinations.find(d => d.type === clipData.destinationType) || destinations[0];
-    const newLog: ConnectionSyncLog = {
-      id: `log_${Date.now()}`,
-      destinationId: targetDest.id,
-      destinationName: targetDest.name,
-      clipTitle: newClip.title,
-      status: 'success',
-      timestamp: new Date().toISOString(),
-      durationMs: 280,
-      payloadSize: '1.4 KB',
-      details: `Appended record to ${targetDest.targetResourceName || targetDest.name}`
-    };
-    setLogs(prev => [newLog, ...prev]);
+      const newClip: ClipItem = {
+        id: backendClip.id,
+        title: backendClip.title || clipData.title,
+        url: clipData.url,
+        selectedText: clipData.selectedText,
+        summary: backendClip.summary || (clipData.selectedText
+          ? `AI Summary: ${clipData.selectedText.slice(0, 110)}...`
+          : `Queued for processing: ${clipData.url}`),
+        type: (backendClip.content_type || 'article') as ClipItem['type'],
+        tags: backendClip.tags || ['queued'],
+        createdAt: backendClip.created_at || new Date().toISOString(),
+        sourceApp: 'Chrome Extension',
+        syncedTo: [targetDest.type],
+        storageMode: 'cloud',
+      };
 
-    triggerToast(`Saved ✓ Appended to ${targetDest.name}!`);
+      setClips(prev => [newClip, ...prev]);
+
+      const newLog: ConnectionSyncLog = {
+        id: `log_${Date.now()}`,
+        destinationId: targetDest.id,
+        destinationName: targetDest.name,
+        clipTitle: newClip.title,
+        status: 'pending',
+        timestamp: new Date().toISOString(),
+        durationMs: 0,
+        payloadSize: 'Queued',
+        details: `Saved to the backend and queued for processing and export to ${targetDest.targetResourceName || targetDest.name}`
+      };
+      setLogs(prev => [newLog, ...prev]);
+
+      triggerToast(`Saved. Processing and export to ${targetDest.name} are queued.`);
+      return true;
+    });
   };
 
   // Handle Manual Add Clip
@@ -184,6 +233,24 @@ export default function App() {
   };
 
   const activeConnectionsCount = destinations.filter(d => d.connected && d.status === 'active').length;
+  // Auth Handlers
+  const handleAuthSuccess = (userData: any, tokens: { access: string; refresh: string }) => {
+    setCurrentUser(userData);
+    localStorage.setItem('clipper_user', JSON.stringify(userData));
+    if (tokens.access) localStorage.setItem('clipper_access_token', tokens.access);
+    if (tokens.refresh) localStorage.setItem('clipper_refresh_token', tokens.refresh);
+    triggerToast(`Welcome, ${userData.name || userData.email}!`);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('clipper_user');
+    localStorage.removeItem('clipper_access_token');
+    localStorage.removeItem('clipper_refresh_token');
+    triggerToast('Logged out successfully.');
+  };
+
+  // Navigation Helper
 
   // Determine if activeTab is a custom page
   const currentCustomPage = customPages.find(p => p.id === activeTab);
@@ -217,9 +284,12 @@ export default function App() {
           isRefreshing={isRefreshing}
           theme={theme}
           setTheme={setTheme}
+          currentUser={currentUser}
+          onOpenAuthModal={() => setShowAuthModal(true)}
+          onLogout={handleLogout}
         />
 
-        <main className={`flex-1 overflow-y-auto ${
+        <main className={`flex-1 overflow-y-auto w-full ${
           theme === 'light' ? 'bg-slate-100' : theme === 'dark' ? 'bg-slate-950' : 'bg-[#050505]'
         }`}>
           {activeTab === 'dashboard' && (
@@ -326,6 +396,13 @@ export default function App() {
         isOpen={showCreatePageModal}
         onClose={() => setShowCreatePageModal(false)}
         onCreatePage={handleCreateCustomPage}
+      />
+
+      {/* User Auth Modal (Sign In / Register / OTP) */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onAuthSuccess={handleAuthSuccess}
       />
 
       {/* Toast Notification Banner */}
