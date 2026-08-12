@@ -12,24 +12,22 @@ export function getPanelPosition(
 ): Point {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
-  const scrollX = window.scrollX || window.pageXOffset || 0;
-  const scrollY = window.scrollY || window.pageYOffset || 0;
 
-  // Horizontal alignment: align with left of selection, bounded by viewport
-  let left = rect.left + scrollX;
-  if (left + panelWidth > scrollX + viewportWidth - 12) {
-    left = scrollX + viewportWidth - panelWidth - 12;
+  // Viewport-relative horizontal positioning (host is fixed inset:0)
+  let left = rect.left;
+  if (left + panelWidth > viewportWidth - 12) {
+    left = viewportWidth - panelWidth - 12;
   }
-  if (left < scrollX + 12) {
-    left = scrollX + 12;
+  if (left < 12) {
+    left = 12;
   }
 
-  // Vertical alignment: prefer above selection rect
-  let top = rect.top + scrollY - panelHeight - 8;
+  // Viewport-relative vertical positioning: prefer above selection rect
+  let top = rect.top - panelHeight - 8;
 
-  // If top goes off-screen, place below selection rect
-  if (rect.top - panelHeight - 8 < 12) {
-    top = rect.bottom + scrollY + 8;
+  // If top goes off top of viewport, place below selection rect
+  if (top < 12) {
+    top = Math.min(rect.bottom + 8, viewportHeight - panelHeight - 12);
   }
 
   return { left: Math.round(left), top: Math.round(top) };

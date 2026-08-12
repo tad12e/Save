@@ -89,6 +89,24 @@ class ApiService {
     try {
       const response = await fetch(url, { ...options, headers });
       
+      if (response.status === 401) {
+        // Expired/invalid JWT token — clear token
+        this.logout();
+        
+        // If this was a save clip request, retry without expired Authorization header
+        if (endpoint.includes('/api/clips/')) {
+          const retryHeaders = new Headers(options.headers || {});
+          if (options.body && !retryHeaders.has('Content-Type')) {
+            retryHeaders.set('Content-Type', 'application/json');
+          }
+          retryHeaders.delete('Authorization');
+          const retryRes = await fetch(url, { ...options, headers: retryHeaders });
+          if (retryRes.ok) {
+            return await retryRes.json() as T;
+          }
+        }
+      }
+
       if (!response.ok) {
         let errorData;
         try {
@@ -258,10 +276,39 @@ class ApiService {
     return res;
   }
 
-  async saveClip(url: string, selectedText: string = '') {
+  async getDestinations(): Promise<Destination[]> {
+    try {
+      const list = await this.request<any[]>('/api/destinations/');
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map(d => ({
+          id: String(d.id),
+          name: d.name || d.provider,
+          provider: d.provider,
+          type: d.provider,
+          is_default: Boolean(d.is_default),
+          is_active: Boolean(d.is_active),
+          connected: Boolean(d.is_active),
+          config: d.config || {}
+        })) as unknown as Destination[];
+      }
+    } catch (e) {
+      console.warn('Failed to fetch destinations from Django backend:', e);
+    }
+    return [
+      { id: 'custom_db', name: 'Save Vault (Internal Database)', provider: 'custom_db', type: 'custom_db', is_default: false, is_active: true, connected: true, config: {} },
+      { id: 'google_sheets', name: 'Google Sheets', provider: 'google_sheets', type: 'google_sheets', is_default: true, is_active: true, connected: true, config: {} },
+      { id: 'notion', name: 'Notion Workspace', provider: 'notion', type: 'notion', is_default: false, is_active: false, connected: false, config: {} }
+    ] as unknown as Destination[];
+  }
+
+  async saveClip(url: string, selectedText: string = '', destinationId?: string | null) {
+    const payload: any = { url, selected_text: selectedText };
+    if (destinationId) {
+      payload.destination_id = destinationId;
+    }
     return this.request<Clip>('/api/clips/', {
       method: 'POST',
-      body: JSON.stringify({ url, selected_text: selectedText }),
+      body: JSON.stringify(payload),
     });
   }
 

@@ -100,10 +100,11 @@ function App() {
     try {
       const items = await api.getDestinations();
       setDestinations(items);
+      const defaultDestination = items.find((item) => item.is_default);
       const storedId = localStorage.getItem('clipper_last_destination_id');
       const storedMatch = items.find((item) => item.id === storedId);
-      const defaultDestination = items.find((item) => item.is_default);
-      setSelectedDestinationId(storedMatch?.id || defaultDestination?.id || items[0]?.id || '');
+      // Prioritize default destination set in Web App
+      setSelectedDestinationId(defaultDestination?.id || storedMatch?.id || items[0]?.id || '');
     } catch {
       setDestinations([]);
       setSelectedDestinationId('');
@@ -112,40 +113,69 @@ function App() {
 
   // Initialize
   useEffect(() => {
-    // Check if logged in
-    const currentUser = api.getCurrentUser();
-    const token = api.getAccessToken();
-    
-    setMockMode(api.isMockMode());
-    setApiUrl(api.getBaseUrl());
+    const initApp = async () => {
+      // Sync chrome.storage.local to window.localStorage in extension popup context
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        await new Promise<void>((resolve) => {
+          chrome.storage.local.get(['clipper_access_token', 'clipper_refresh_token', 'clipper_user'], (result: any) => {
+            if (result?.clipper_access_token) {
+              localStorage.setItem('clipper_access_token', result.clipper_access_token);
+            }
+            if (result?.clipper_refresh_token) {
+              localStorage.setItem('clipper_refresh_token', result.clipper_refresh_token);
+            }
+            if (result?.clipper_user) {
+              localStorage.setItem('clipper_user', result.clipper_user);
+            }
+            resolve();
+          });
+        });
+      }
 
-    if (currentUser && token) {
-      setUser(currentUser);
-      setScreen('DASHBOARD');
-      loadDestinations();
-    } else {
-      setScreen('SIGNIN');
-    }
+      setMockMode(api.isMockMode());
+      setApiUrl(api.getBaseUrl());
+
+      const currentUser = api.getCurrentUser();
+      const token = api.getAccessToken();
+
+      if (currentUser && token) {
+        setUser(currentUser);
+        setScreen('DASHBOARD');
+        await loadDestinations();
+      } else {
+        setScreen('SIGNIN');
+      }
+    };
+
+    initApp();
 
     // Get current tab details if in extension context
     if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs: any[]) => {
-        if (tabs && tabs[0]) {
-          setCurrentUrl(tabs[0].url || '');
-          setCurrentTitle(tabs[0].title || '');
-        }
-      });
-      // Try to get selected text if any
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs: any[]) => {
-        if (tabs && tabs[0] && tabs[0].id) {
-          chrome.scripting.executeScript({
-            target: { tabId: tabs[0].id },
-            func: () => window.getSelection()?.toString() || '',
-          }, (results: any[]) => {
-            if (results && results[0] && results[0].result) {
-              setSelectedText(results[0].result);
+        const activeTab = tabs?.[0];
+        if (activeTab) {
+          setCurrentUrl(activeTab.url || '');
+          setCurrentTitle(activeTab.title || '');
+
+          // Try to get selected text if not on restricted browser pages (e.g. chrome://)
+          if (activeTab.id && activeTab.url && !activeTab.url.startsWith('chrome://') && !activeTab.url.startsWith('edge://') && !activeTab.url.startsWith('about:')) {
+            try {
+              chrome.scripting.executeScript({
+                target: { tabId: activeTab.id },
+                func: () => window.getSelection()?.toString() || '',
+              }, (results: any[]) => {
+                if (typeof chrome !== 'undefined' && chrome.runtime?.lastError) {
+                  // Silently ignore restricted page warnings
+                  return;
+                }
+                if (results && results[0] && results[0].result) {
+                  setSelectedText(results[0].result);
+                }
+              });
+            } catch {
+              // Ignore scripting restrictions
             }
-          });
+          }
         }
       });
     } else {
@@ -800,27 +830,27 @@ function App() {
                 </div>
               )}
 
-              {destinations.length > 0 ? (
-                <div className="mb-4">
-                  <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Destination</label>
-                  <select
-                    value={selectedDestinationId}
-                    onChange={(e) => setSelectedDestinationId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[13px] text-gray-800 outline-none focus:border-violet-500"
-                  >
-                    <option value="">✨ AI Auto-Route (Recommended)</option>
-                    {destinations.map((destination) => (
+              <div className="mb-3">
+                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Destination</label>
+                <select
+                  value={selectedDestinationId}
+                  onChange={(e) => {
+                    setSelectedDestinationId(e.target.value);
+                    localStorage.setItem('clipper_last_destination_id', e.target.value);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[13px] text-gray-800 outline-none focus:border-violet-500 font-medium"
+                >
+                  {destinations.length === 0 ? (
+                    <option value="">🟡 Save Vault (Internal Database)</option>
+                  ) : (
+                    destinations.map((destination) => (
                       <option key={destination.id} value={destination.id}>
-                        {destination.name} ({destination.provider === 'notion' ? 'Notion' : 'Google Sheets'})
+                        {destination.is_default ? '★ Default: ' : ''}{destination.name} ({destination.provider === 'notion' ? 'Notion' : destination.provider === 'google_sheets' ? 'Google Sheets' : 'Internal DB'})
                       </option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="mb-4 bg-amber-50 border border-amber-100 rounded-xl p-3 text-[11px] text-amber-800">
-                  Connect Notion or Google Sheets in Settings before saving.
-                </div>
-              )}
+                    ))
+                  )}
+                </select>
+              </div>
 
               {saveStatus === 'idle' && (
                 <button

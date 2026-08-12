@@ -35,16 +35,12 @@ async function handleSaveClip(data: any): Promise<any> {
   const token = storage.jwt || storage.clipper_access_token;
   const apiUrl = storage.clipper_api_url || getApiUrl();
 
-  // 2. If no JWT — open popup for login
-  if (!token) {
-    try {
-      if (chrome.action?.openPopup) {
-        chrome.action.openPopup();
-      }
-    } catch {
-      // Fallback if openPopup is unsupported
-    }
-    throw new Error('Not logged in. Please sign in via the extension popup.');
+  // 2. Build headers with token if available
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   // 3. POST to /api/clips/
@@ -59,10 +55,7 @@ async function handleSaveClip(data: any): Promise<any> {
 
   const response = await fetch(`${apiUrl}/api/clips/`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     body: JSON.stringify(bodyData),
   });
 

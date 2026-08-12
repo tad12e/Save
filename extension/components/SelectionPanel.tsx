@@ -268,13 +268,13 @@ export function SelectionPanel({
     };
 
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage(messageData, (_res: any) => {
+      chrome.runtime.sendMessage(messageData, (resData: any) => {
         setSaveStatus('saved');
-        setTimeout(onClose, 1200);
+        setTimeout(onClose, 800);
       });
     } else {
       setSaveStatus('saved');
-      setTimeout(onClose, 1200);
+      setTimeout(onClose, 800);
     }
   };
 
@@ -326,13 +326,13 @@ export function SelectionPanel({
     };
 
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage(messageData, () => {
+      chrome.runtime.sendMessage(messageData, (resData: any) => {
         setSaveStatus('saved');
-        setTimeout(onClose, 1200);
+        setTimeout(onClose, 800);
       });
     } else {
       setSaveStatus('saved');
-      setTimeout(onClose, 1200);
+      setTimeout(onClose, 800);
     }
   };
 

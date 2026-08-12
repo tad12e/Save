@@ -18,7 +18,7 @@ function FloatingButtonOverlay() {
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Text selection listener with 800ms debounce
+  // Text selection listener with fast 150ms response
   useEffect(() => {
     const handleMouseUp = () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -37,7 +37,7 @@ function FloatingButtonOverlay() {
             setPanelOpen(true);
           }
         }
-      }, 800);
+      }, 150);
     };
 
     document.addEventListener('mouseup', handleMouseUp);

@@ -19,6 +19,9 @@ const googleClientId = process.env.GOOGLE_CLIENT_ID || process.env.WXT_GOOGLE_CL
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
+  dev: {
+    port: 3001,
+  },
   modules: ['@wxt-dev/module-react'],
   manifest: {
     host_permissions: ['<all_urls>'],
