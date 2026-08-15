@@ -96,8 +96,23 @@ function App() {
   const [createNewSheet, setCreateNewSheet] = useState(true);
   const [sheetName, setSheetName] = useState('Clips');
 
+  // Category routing & Music settings state
+  const [categoryRules, setCategoryRules] = useState<Record<string, string>>({});
+  const [selectedMusicProvider, setSelectedMusicProvider] = useState<'spotify' | 'youtube_music'>('spotify');
+  const [selectedMusicPlaylist, setSelectedMusicPlaylist] = useState<string>('default');
+
   const loadDestinations = async () => {
     try {
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local.get(
+          ['category_rules', 'music_default_provider', 'music_default_playlist'],
+          (res: any) => {
+            if (res.category_rules) setCategoryRules(res.category_rules);
+            if (res.music_default_provider) setSelectedMusicProvider(res.music_default_provider);
+            if (res.music_default_playlist) setSelectedMusicPlaylist(res.music_default_playlist);
+          }
+        );
+      }
       const items = await api.getDestinations();
       setDestinations(items);
       const defaultDestination = items.find((item) => item.is_default);
@@ -392,6 +407,26 @@ function App() {
       }
     } catch (err: any) {
       setError(err.message || 'Failed to save clip.');
+      setSaveStatus('error');
+    }
+  };
+
+  const handleQuickSaveToProvider = async (provider: 'google_sheets' | 'notion' | 'spotify') => {
+    setSaveStatus('saving');
+    setError(null);
+
+    try {
+      const match = destinations.find((d) => d.provider === provider);
+      const destId = match ? match.id : null;
+      const res = await api.saveClip(currentUrl, selectedText, destId);
+      setSavedClip(res);
+      if (res.duplicate) {
+        setSaveStatus('duplicate');
+      } else {
+        setSaveStatus('saved');
+      }
+    } catch (err: any) {
+      setError(err.message || `Failed to save to ${provider}.`);
       setSaveStatus('error');
     }
   };
@@ -853,13 +888,35 @@ function App() {
               </div>
 
               {saveStatus === 'idle' && (
-                <button
-                  onClick={handleSaveClip}
-                  className="w-full py-2.5 bg-violet-600 text-white rounded-xl font-semibold text-[14px] hover:bg-violet-700 active:bg-violet-800 transition-colors shadow-sm outline-none flex items-center justify-center gap-2"
-                >
-                  <Bookmark className="w-4 h-4" />
-                  Save current page
-                </button>
+                <>
+                  <button
+                    onClick={handleSaveClip}
+                    className="w-full py-2.5 bg-violet-600 text-white rounded-xl font-semibold text-[14px] hover:bg-violet-700 active:bg-violet-800 transition-colors shadow-sm outline-none flex items-center justify-center gap-2"
+                  >
+                    <Bookmark className="w-4 h-4" />
+                    Save current page
+                  </button>
+
+                  {/* 1-Tap Quick Destination Buttons */}
+                  <div className="mt-2.5 pt-2.5 border-t border-gray-100 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickSaveToProvider('google_sheets')}
+                      className="flex-1 py-2 px-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                    >
+                      <span>📊</span>
+                      <span>Save to Sheets</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickSaveToProvider('notion')}
+                      className="flex-1 py-2 px-2.5 bg-gray-50 hover:bg-gray-100 text-gray-800 border border-gray-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                    >
+                      <span>📝</span>
+                      <span>Save to Notion</span>
+                    </button>
+                  </div>
+                </>
               )}
 
               {saveStatus === 'saving' && (
@@ -1134,6 +1191,132 @@ function App() {
                     Save destination
                   </button>
                 </form>
+              </div>
+
+              {/* Category Routing Rules */}
+              <div className="space-y-3.5 border-b border-gray-100 pb-4">
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-700">Category Routing Defaults</h3>
+                  <p className="text-[10px] text-gray-400 leading-snug mt-0.5">
+                    Set specific destinations per content type. If not configured, clips will automatically go to your <strong>Universal Default Destination</strong>.
+                  </p>
+                </div>
+
+                <div className="space-y-2.5 bg-gray-50 border border-gray-100 rounded-xl p-3">
+                  {/* Articles / Blogs */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">📰 Articles & Blogs</label>
+                    <select
+                      value={categoryRules['article'] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const updated = { ...categoryRules, article: val };
+                        setCategoryRules(updated);
+                        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                          chrome.storage.local.set({ category_rules: updated });
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none"
+                    >
+                      <option value="">🌐 Universal Default Destination</option>
+                      {destinations.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.provider === 'notion' ? 'Notion' : 'Google Sheets'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Jobs & Opportunities */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">💼 Jobs & Opportunities</label>
+                    <select
+                      value={categoryRules['job'] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const updated = { ...categoryRules, job: val };
+                        setCategoryRules(updated);
+                        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                          chrome.storage.local.set({ category_rules: updated });
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none"
+                    >
+                      <option value="">🌐 Universal Default Destination</option>
+                      {destinations.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.provider === 'notion' ? 'Notion' : 'Google Sheets'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Tools & GitHub Repos */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">🛠️ Tools & Repos</label>
+                    <select
+                      value={categoryRules['tool'] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const updated = { ...categoryRules, tool: val };
+                        setCategoryRules(updated);
+                        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                          chrome.storage.local.set({ category_rules: updated });
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none"
+                    >
+                      <option value="">🌐 Universal Default Destination</option>
+                      {destinations.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.provider === 'notion' ? 'Notion' : 'Google Sheets'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Music (Spotify / YouTube Music) */}
+                  <div className="pt-2 border-t border-gray-200/70">
+                    <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                      🎵 Music & Songs (Always Dedicated Music Destination)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <select
+                        value={selectedMusicProvider}
+                        onChange={(e) => {
+                          const val = e.target.value as 'spotify' | 'youtube_music';
+                          setSelectedMusicProvider(val);
+                          if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                            chrome.storage.local.set({ music_default_provider: val });
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none"
+                      >
+                        <option value="spotify">Spotify</option>
+                        <option value="youtube_music">YouTube Music</option>
+                      </select>
+                      <select
+                        value={selectedMusicPlaylist}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedMusicPlaylist(val);
+                          if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                            chrome.storage.local.set({ music_default_playlist: val });
+                          }
+                        }}
+                        className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none"
+                      >
+                        <option value="default">🎧 Clipper Tracks (Default)</option>
+                        <option value="liked">❤️ Liked Songs</option>
+                        <option value="focus">💻 Coding & Focus</option>
+                        <option value="favorites">⭐ Favorites</option>
+                      </select>
+                    </div>
+                    <p className="text-[10px] text-gray-400 leading-snug">
+                      When saving music, you can pick any playlist or save instantly into your default playlist.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Version details */}

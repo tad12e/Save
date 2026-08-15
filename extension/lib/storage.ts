@@ -30,6 +30,28 @@ export const DEFAULT_SHEETS_DESTINATION: Destination = {
   icon: '📊',
 };
 
+export const DEFAULT_SPOTIFY_DESTINATION: Destination = {
+  type: 'spotify',
+  name: 'Spotify',
+  tableId: 'default_playlist',
+  tableName: 'Clipper Tracks (Default)',
+  icon: '🎵',
+};
+
+export const DEFAULT_YOUTUBE_MUSIC_DESTINATION: Destination = {
+  type: 'youtube_music',
+  name: 'YouTube Music',
+  tableId: 'default_playlist',
+  tableName: 'Clipper Tracks (Default)',
+  icon: '▶️',
+};
+
+export interface MusicPlaylist {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+}
+
 export async function getDefaultDestination(): Promise<Destination> {
   return new Promise((resolve) => {
     if (typeof chrome === 'undefined' || !chrome.storage?.local) {
@@ -52,16 +74,102 @@ export async function setDefaultDestination(dest: Destination): Promise<void> {
   });
 }
 
+export async function getCategoryDestinations(): Promise<Record<string, Destination>> {
+  return new Promise((resolve) => {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      resolve({});
+      return;
+    }
+    chrome.storage.local.get(['category_destinations'], (res: any) => {
+      resolve(res.category_destinations || {});
+    });
+  });
+}
+
+export async function setCategoryDestination(contentType: string, dest: Destination | null): Promise<void> {
+  const current = await getCategoryDestinations();
+  if (dest) {
+    current[contentType] = dest;
+  } else {
+    delete current[contentType];
+  }
+  return new Promise((resolve) => {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      resolve();
+      return;
+    }
+    chrome.storage.local.set({ category_destinations: current }, resolve);
+  });
+}
+
+export async function getCategoryDestination(contentType: string): Promise<Destination | null> {
+  const all = await getCategoryDestinations();
+  return all[contentType] || null;
+}
+
+/**
+ * Resolves destination using the 3-tier hierarchy:
+ * 1. Special rule for music: ALWAYS Spotify or YouTube Music.
+ * 2. Category-specific default if configured by the user (e.g. 'article', 'job', 'tool').
+ * 3. Universal Global Default Destination for anything without a rule.
+ */
+export async function getDestinationForContentType(contentType?: string | null): Promise<Destination> {
+  const normType = (contentType || 'webpage').toLowerCase();
+
+  // 1. Music rule: ALWAYS Spotify or YouTube Music
+  if (normType === 'music' || normType === 'track' || normType === 'song') {
+    const musicDest = await getCategoryDestination('music');
+    if (musicDest) return musicDest;
+    return DEFAULT_SPOTIFY_DESTINATION;
+  }
+
+  // 2. Check if user configured a default for this specific category (e.g. 'job', 'article', 'tool')
+  if (normType && normType !== 'webpage') {
+    const categoryDest = await getCategoryDestination(normType);
+    if (categoryDest) return categoryDest;
+  }
+
+  // 3. Fallback: Universal Global Default Destination
+  return getDefaultDestination();
+}
+
+export async function getMusicPlaylists(provider: string = 'spotify'): Promise<MusicPlaylist[]> {
+  return new Promise((resolve) => {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+      resolve([
+        { id: 'default', name: 'Clipper Tracks (Default)', isDefault: true },
+        { id: 'liked', name: 'Liked Songs' },
+        { id: 'focus', name: 'Coding & Focus' },
+        { id: 'favorites', name: 'Favorites' },
+      ]);
+      return;
+    }
+    chrome.storage.local.get([`music_playlists_${provider}`], (res: any) => {
+      const list = res[`music_playlists_${provider}`];
+      if (list && list.length > 0) {
+        resolve(list);
+      } else {
+        resolve([
+          { id: 'default', name: 'Clipper Tracks (Default)', isDefault: true },
+          { id: 'liked', name: 'Liked Songs' },
+          { id: 'focus', name: 'Coding & Focus' },
+          { id: 'favorites', name: 'Favorites' },
+        ]);
+      }
+    });
+  });
+}
+
 export async function getConnectedDestinations(): Promise<Destination[]> {
   return new Promise((resolve) => {
     if (typeof chrome === 'undefined' || !chrome.storage?.local) {
-      resolve([DEFAULT_SHEETS_DESTINATION]);
+      resolve([DEFAULT_SHEETS_DESTINATION, DEFAULT_SPOTIFY_DESTINATION]);
       return;
     }
     chrome.storage.local.get(['connected_destinations'], (res: any) => {
       const list = res.connected_destinations || [];
       if (list.length === 0) {
-        resolve([DEFAULT_SHEETS_DESTINATION]);
+        resolve([DEFAULT_SHEETS_DESTINATION, DEFAULT_SPOTIFY_DESTINATION]);
       } else {
         resolve(list);
       }
@@ -92,3 +200,4 @@ export async function getAirtableTables(): Promise<AirtableTable[]> {
     });
   });
 }
+

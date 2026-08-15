@@ -11,9 +11,14 @@ import {
 import {
   Destination,
   getAirtableTables,
+  getCategoryDestinations,
   getConnectedDestinations,
   getDefaultDestination,
+  getDestinationForContentType,
+  getMusicPlaylists,
   getNotionDatabases,
+  MusicPlaylist,
+  setCategoryDestination,
   setDefaultDestination,
 } from '../lib/storage';
 
@@ -73,6 +78,10 @@ export function SelectionPanel({
   const [availableDestinations, setAvailableDestinations] = useState<Destination[]>(DEFAULT_PROVIDER_LIST);
   const [selectedDest, setSelectedDest] = useState<Destination>(DEFAULT_PROVIDER_LIST[0]);
 
+  // Music Playlists state
+  const [musicPlaylists, setMusicPlaylists] = useState<MusicPlaylist[]>([]);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<string>('default');
+
   // Mode 2 specific state
   const [sheetsTab, setSheetsTab] = useState('Sheet1');
   const [notionDbs, setNotionDbs] = useState<Array<{ id: string; name: string }>>([
@@ -113,9 +122,12 @@ export function SelectionPanel({
       });
     }
 
-    getDefaultDestination().then((dest) => {
+    // Resolve destination according to 3-tier hierarchy:
+    // 1. Music -> Spotify / YouTube Music
+    // 2. Category Default (e.g. Job -> Sheets Jobs tab, Blog -> Notion Reading list)
+    // 3. Universal Global Default Destination
+    getDestinationForContentType(contentType).then((dest) => {
       if (dest) {
-        setDefaultDest(dest);
         setSelectedDest(dest);
         if (dest.type === 'google_sheets' && dest.tableName) {
           setSheetsTab(dest.tableName);
@@ -123,9 +135,23 @@ export function SelectionPanel({
       }
     });
 
+    getDefaultDestination().then((dest) => {
+      if (dest) {
+        setDefaultDest(dest);
+      }
+    });
+
     getConnectedDestinations().then((storedList) => {
       if (storedList && storedList.length > 0) {
         setAvailableDestinations(storedList);
+      }
+    });
+
+    getMusicPlaylists('spotify').then((playlists) => {
+      if (playlists && playlists.length > 0) {
+        setMusicPlaylists(playlists);
+        const def = playlists.find((p) => p.isDefault) || playlists[0];
+        setSelectedPlaylist(def.id);
       }
     });
 
@@ -142,7 +168,7 @@ export function SelectionPanel({
         setSelectedAirtableTable(tables[0].tableId);
       }
     });
-  }, []);
+  }, [contentType]);
 
   // Handle escape key and shadow-DOM friendly click outside
   useEffect(() => {
@@ -301,7 +327,13 @@ export function SelectionPanel({
     let finalTableName = selectedDest.tableName || 'Sheet1';
     let finalTableId = selectedDest.tableId || 'default';
 
-    if (selectedDest.type === 'google_sheets') {
+    if (selectedDest.type === 'spotify' || selectedDest.type === 'youtube_music') {
+      const match = musicPlaylists.find((p) => p.id === selectedPlaylist);
+      if (match) {
+        finalTableName = match.name;
+        finalTableId = match.id;
+      }
+    } else if (selectedDest.type === 'google_sheets') {
       finalTableName = sheetsTab || 'Sheet1';
     } else if (selectedDest.type === 'notion') {
       const match = notionDbs.find((d) => d.id === selectedNotionDb);
@@ -621,10 +653,35 @@ export function SelectionPanel({
             })}
           </div>
 
-          {/* Dynamic Table / Database Input Selector */}
+          {/* Dynamic Table / Database / Playlist Input Selector */}
           <div style={{ marginBottom: '8px' }}>
-            <div style={{ fontSize: '11px', color: C.textFaint, marginBottom: '4px' }}>Save to table / database:</div>
-            {selectedDest.type === 'google_sheets' ? (
+            <div style={{ fontSize: '11px', color: C.textFaint, marginBottom: '4px' }}>
+              {selectedDest.type === 'spotify' || selectedDest.type === 'youtube_music'
+                ? 'Save to playlist:'
+                : 'Save to table / database:'}
+            </div>
+            {selectedDest.type === 'spotify' || selectedDest.type === 'youtube_music' ? (
+              <select
+                value={selectedPlaylist}
+                onChange={(e) => setSelectedPlaylist(e.target.value)}
+                onPointerDown={stopPointer}
+                style={{
+                  width: '100%',
+                  padding: '6px 8px',
+                  fontSize: '12px',
+                  borderRadius: '6px',
+                  border: `1px solid ${borderColor}`,
+                  backgroundColor: surfaceBg,
+                  color: textColor,
+                }}
+              >
+                {musicPlaylists.map((pl) => (
+                  <option key={pl.id} value={pl.id}>
+                    🎧 {pl.name}
+                  </option>
+                ))}
+              </select>
+            ) : selectedDest.type === 'google_sheets' ? (
               <input
                 type="text"
                 value={sheetsTab}
