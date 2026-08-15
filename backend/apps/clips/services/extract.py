@@ -9,9 +9,10 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 CONTENT_TYPE_KEYWORDS = {
-    'job': ['apply now', 'job description', 'we are hiring', 'open positions', 'salary'],
-    'scholarship': ['scholarship', 'grant', 'funding', 'call for applications'],
-    'event': ['register now', 'eventbrite', 'meetup', 'limited spots', 'early bird'],
+    'job': ['apply now', 'job description', 'we are hiring', 'open positions', 'salary', 'hiring', 'intern', 'internship', 'eligible batch', 'apply here', 'full time', 'part time', 'remote role', 'engineering intern', 'developer intern', 'sde intern', 'junior developer', 'careers', 'apply at'],
+    'scholarship': ['scholarship', 'grant', 'funding', 'call for applications', 'fellowship'],
+    'event': ['register now', 'eventbrite', 'meetup', 'limited spots', 'early bird', 'hackathon', 'webinar', 'conference'],
+    'course': ['enroll', 'bootcamp', 'certification', 'cohort', 'free course', 'tutorial'],
     'article': ['blog', 'article', 'news', 'published'],
 }
 
@@ -50,7 +51,7 @@ def _detect_content_type(text: str, url: str) -> str:
             best_score = score
             best_type = content_type
 
-    return best_type if best_score >= 2 else 'webpage'
+    return best_type if best_score >= 1 else 'webpage'
 
 
 def _build_tags(content_type: str, url: str, text: str) -> list[str]:
@@ -59,7 +60,7 @@ def _build_tags(content_type: str, url: str, text: str) -> list[str]:
     if host:
         tags.add(host.split('.')[0])
 
-    for keyword in ('remote', 'internship', 'startup', 'research', 'course'):
+    for keyword in ('remote', 'internship', 'startup', 'research', 'course', 'intern', 'hiring', 'engineering'):
         if keyword in text.lower():
             tags.add(keyword)
 
@@ -88,9 +89,14 @@ def extract_clip_metadata(clip) -> dict:
     page_title, page_text = _fetch_page_text(clip.url)
     selected_text = (clip.selected_text or '').strip()
 
-    from apps.clips.services.source_detector import detect_embedded_resources, detect_source_platform
+    from apps.clips.services.source_detector import (
+        detect_embedded_resources,
+        detect_source_platform,
+        extract_external_job_url,
+    )
     platform, author, post_url = detect_source_platform(clip.url)
     embedded_resources = detect_embedded_resources(f'{selected_text} {page_text}')
+    extracted_job_url = extract_external_job_url(f'{selected_text} {page_text}', source_url=clip.url)
 
     # --- Try AI-powered summarization first ---
     metadata = None
@@ -132,7 +138,14 @@ def extract_clip_metadata(clip) -> dict:
     metadata['source_author'] = author
     metadata['source_post_url'] = post_url
     metadata['embedded_resources'] = embedded_resources
-    if embedded_resources:
+
+    if extracted_job_url:
+        metadata['extracted_resource_url'] = extracted_job_url
+        metadata['category_fields']['job_url'] = extracted_job_url
+        metadata['category_fields']['apply_url'] = extracted_job_url
+        if metadata.get('content_type') == 'webpage':
+            metadata['content_type'] = 'job'
+    elif embedded_resources:
         metadata['is_resource_hub'] = True
         metadata['extracted_resource_url'] = embedded_resources[0]['url']
     else:

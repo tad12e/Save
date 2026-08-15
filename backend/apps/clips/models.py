@@ -23,6 +23,8 @@ class Clip(models.Model):
     PLATFORM_REDDIT = 'reddit'
     PLATFORM_YOUTUBE = 'youtube'
     PLATFORM_GITHUB = 'github'
+    PLATFORM_INSTAGRAM = 'instagram'
+    PLATFORM_TIKTOK = 'tiktok'
 
     PLATFORM_CHOICES = (
         (PLATFORM_WEB, 'Web'),
@@ -31,6 +33,8 @@ class Clip(models.Model):
         (PLATFORM_REDDIT, 'Reddit'),
         (PLATFORM_YOUTUBE, 'YouTube'),
         (PLATFORM_GITHUB, 'GitHub'),
+        (PLATFORM_INSTAGRAM, 'Instagram'),
+        (PLATFORM_TIKTOK, 'TikTok'),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

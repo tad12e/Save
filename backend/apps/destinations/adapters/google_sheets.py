@@ -37,7 +37,8 @@ CATEGORY_SCHEMAS = {
             'Location / Remote',
             'Salary / Comp',
             'Deadline',
-            'Application URL',
+            'Job Link',
+            'Source Post URL',
             'Key Requirements & Summary',
             'Source Platform',
             'Source Author',
@@ -49,7 +50,14 @@ CATEGORY_SCHEMAS = {
             clean_text(extra.get('location') or ('Remote' if 'remote' in (clip.tags or []) else 'Unspecified')),
             clean_text(extra.get('salary') or 'Not Specified'),
             clean_text(deadline or 'Open'),
-            clip.url,
+            clean_text(
+                extra.get('job_url')
+                or extra.get('apply_url')
+                or getattr(clip, 'extracted_resource_url', None)
+                or (clip.url if not any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com/feed')) else None)
+                or 'None'
+            ),
+            clean_text(getattr(clip, 'source_post_url', '') or (clip.url if any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com')) else 'None')),
             clean_text(extra.get('requirements_summary') or clip.summary or ''),
             platform,
             author,
@@ -124,21 +132,25 @@ CATEGORY_SCHEMAS = {
     },
     'Tools': {
         'headers': [
-            'Tool / Library Name',
-            'Category / Domain',
+            'Tool Name',
+            'Website URL',
+            'Description',
+            'Section / Category',
             'Pricing Model',
-            'Website / Repo URL',
-            'Core Features Summary',
-            'Source Platform',
+            'Content Type',
+            'Source Repo',
+            'Source URL',
             'Saved At',
         ],
         'row_builder': lambda clip, extra, deadline, platform, author, saved_at: [
-            clean_text(clip.title or ''),
-            clean_text(extra.get('category_domain') or (', '.join(clip.tags[:2]) if clip.tags else 'Software Tool')),
-            clean_text(extra.get('pricing_model') or 'Freemium / Open Source'),
+            clean_text(clip.title or extra.get('name') or ''),
             clip.url,
-            clean_text(extra.get('features_summary') or clip.summary or ''),
-            platform,
+            clean_text(clip.summary or extra.get('description') or ''),
+            clean_text(extra.get('section') or extra.get('category_domain') or 'General'),
+            clean_text(extra.get('pricing') or extra.get('pricing_model') or 'free tier'),
+            clean_text(clip.content_type or extra.get('content_type') or 'tool'),
+            clean_text(extra.get('source_repo') or author or ''),
+            clean_text(getattr(clip, 'source_post_url', '') or extra.get('source_url') or ''),
             saved_at,
         ],
     },
@@ -472,8 +484,29 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                     row.append(clean_text(str(val)))
                 elif any(k in h_lower for k in ('title', 'name', 'role')):
                     row.append(clean_text(clip.title or ''))
+                elif any(k in h_lower for k in ('job link', 'job url', 'application url', 'apply link', 'apply url', 'resource link', 'resource url')):
+                    extracted_link = (
+                        extra.get('job_url')
+                        or extra.get('apply_url')
+                        or extra.get('extracted_resource_url')
+                        or getattr(clip, 'extracted_resource_url', None)
+                        or (clip.url if not any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com/feed')) else None)
+                    )
+                    row.append(clean_text(extracted_link or 'None'))
+                elif 'source' in h_lower and any(k in h_lower for k in ('url', 'link', 'post')):
+                    source_link = getattr(clip, 'source_post_url', '') or (clip.url if any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com')) else '')
+                    row.append(clean_text(source_link or 'None'))
                 elif any(k in h_lower for k in ('url', 'link')):
-                    row.append(clip.url)
+                    extracted_link = (
+                        extra.get('job_url')
+                        or extra.get('apply_url')
+                        or extra.get('extracted_resource_url')
+                        or getattr(clip, 'extracted_resource_url', None)
+                    )
+                    if extracted_link and not any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com/feed')):
+                        row.append(clean_text(extracted_link))
+                    else:
+                        row.append(clip.url or 'None')
                 elif any(k in h_lower for k in ('summary', 'overview', 'description', 'notes', 'takeaway')):
                     row.append(clean_text(clip.summary or ''))
                 elif 'platform' in h_lower or 'source' in h_lower and 'author' not in h_lower:
@@ -551,6 +584,211 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                 return ExportResult(success=False, error=f'Google Sheets API error: {body}')
         except urllib.error.URLError as exc:
             return ExportResult(success=False, error=f'Google Sheets request failed: {exc}')
+
+        sheet_url = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
+        updated_range = data.get('updates', {}).get('updatedRange', '')
+        return ExportResult(success=True, external_url=sheet_url, external_id=updated_range)
+
+    def _format_tab_headers(
+        self,
+        spreadsheet_id: str,
+        access_token: str,
+        tab_name: str,
+        col_count: int,
+        sheet_id: int | None = None,
+    ):
+        """Format header row: bold, dark background #1a1a2e, white text #ffffff, freeze row 1, auto-resize."""
+        try:
+            if sheet_id is None:
+                meta_req = urllib.request.Request(
+                    f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}?fields=sheets(properties(sheetId,title))',
+                    headers={'Authorization': f'Bearer {access_token}'},
+                )
+                with urllib.request.urlopen(meta_req, timeout=15) as resp:
+                    meta = json.loads(resp.read().decode())
+                    for s in meta.get('sheets', []):
+                        if s.get('properties', {}).get('title') == tab_name:
+                            sheet_id = s.get('properties', {}).get('sheetId')
+                            break
+
+            if sheet_id is None:
+                return
+
+            requests = [
+                # 1. Format Header Row (Dark background #1a1a2e, bold white text)
+                {
+                    'repeatCell': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'startRowIndex': 0,
+                            'endRowIndex': 1,
+                            'startColumnIndex': 0,
+                            'endColumnIndex': col_count,
+                        },
+                        'cell': {
+                            'userEnteredFormat': {
+                                'backgroundColor': {'red': 0.102, 'green': 0.102, 'blue': 0.180},
+                                'textFormat': {
+                                    'bold': True,
+                                    'foregroundColor': {'red': 1.0, 'green': 1.0, 'blue': 1.0},
+                                    'fontSize': 10,
+                                },
+                                'horizontalAlignment': 'LEFT',
+                                'verticalAlignment': 'MIDDLE',
+                            }
+                        },
+                        'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
+                    }
+                },
+                # 2. Freeze Row 1
+                {
+                    'updateSheetProperties': {
+                        'properties': {
+                            'sheetId': sheet_id,
+                            'gridProperties': {
+                                'frozenRowCount': 1,
+                            },
+                        },
+                        'fields': 'gridProperties.frozenRowCount',
+                    }
+                },
+                # 3. Auto-resize all columns
+                {
+                    'autoResizeDimensions': {
+                        'dimensions': {
+                            'sheetId': sheet_id,
+                            'dimension': 'COLUMNS',
+                            'startIndex': 0,
+                            'endIndex': col_count,
+                        }
+                    }
+                },
+            ]
+
+            batch_req = urllib.request.Request(
+                f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}:batchUpdate',
+                data=json.dumps({'requests': requests}).encode(),
+                headers={
+                    'Authorization': f'Bearer {access_token}',
+                    'Content-Type': 'application/json',
+                },
+                method='POST',
+            )
+            with urllib.request.urlopen(batch_req, timeout=15):
+                logger.info('Formatted header row and froze row 1 for tab %s in Google Sheet %s', tab_name, spreadsheet_id)
+        except Exception as exc:
+            logger.warning('Failed formatting header row for tab %s: %s', tab_name, exc)
+
+    def batch_export_tools(
+        self,
+        destination,
+        resources: list[dict],
+        source_url: str = '',
+        source_repo: str = '',
+        saved_at_str: str = '',
+    ) -> ExportResult:
+        """
+        Batch export all individual resources from a list repository to the "Tools" tab in Google Sheets.
+        Uses a single values_append batch call.
+        """
+        if not resources:
+            return ExportResult(success=True, external_url='', external_id='')
+
+        access_token = destination.config.get('access_token')
+        spreadsheet_id = destination.config.get('spreadsheet_id')
+
+        # Dev / Demo mode check
+        if not access_token or access_token.startswith('mock_') or access_token == 'demo_google_sheets_token':
+            logger.info('Dev/Demo Mode: Simulated batch Tools export of %d items to Google Sheets', len(resources))
+            return ExportResult(
+                success=True,
+                external_url='https://docs.google.com/spreadsheets/d/1BxiMVs0XRon539e0-vA28VPb3znu82345/edit',
+                external_id=f'Tools!A1:I{len(resources)+1}',
+            )
+
+        if not access_token and destination.config.get('refresh_token'):
+            access_token = self._refresh_access_token(destination)
+
+        if not spreadsheet_id and access_token:
+            result = self._create_spreadsheet(access_token)
+            if result:
+                spreadsheet_id = result.get('spreadsheetId')
+                destination.config['spreadsheet_id'] = spreadsheet_id
+                destination.save(update_fields=['config'])
+
+        if not spreadsheet_id:
+            return ExportResult(success=False, error='Missing Google Sheets spreadsheet_id.')
+
+        # Ensure "Tools" tab exists
+        target_tab = 'Tools'
+        tools_schema = CATEGORY_SCHEMAS['Tools']
+        headers = tools_schema['headers']
+
+        _, access_token, _ = self._ensure_category_tab(
+            spreadsheet_id,
+            access_token,
+            target_tab,
+            dynamic_headers=headers,
+            destination=destination,
+        )
+
+        # Build all rows
+        rows = []
+        for r in resources:
+            row = [
+                clean_text(r.get('name') or ''),
+                r.get('url') or '',
+                clean_text(r.get('description') or ''),
+                clean_text(r.get('section') or 'General'),
+                clean_text(r.get('pricing') or 'free tier'),
+                clean_text(r.get('content_type') or 'tool'),
+                clean_text(r.get('source_repo') or source_repo or ''),
+                clean_text(r.get('source_url') or source_url or ''),
+                saved_at_str or r.get('saved_at') or '',
+            ]
+            rows.append(row)
+
+        end_col = _col_letter(len(headers))
+        range_name = urllib.parse.quote(f'{target_tab}!A:{end_col}')
+        url = (
+            f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/'
+            f'{range_name}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS'
+        )
+
+        def _append_batch(tok: str):
+            req = urllib.request.Request(
+                url,
+                data=json.dumps({'values': rows}).encode(),
+                headers={
+                    'Authorization': f'Bearer {tok}',
+                    'Content-Type': 'application/json',
+                },
+                method='POST',
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode())
+
+        try:
+            data = _append_batch(access_token)
+        except urllib.error.HTTPError as exc:
+            if (exc.code == 401 or exc.code == 400) and destination.config.get('refresh_token'):
+                refreshed_token = self._refresh_access_token(destination)
+                if refreshed_token:
+                    try:
+                        data = _append_batch(refreshed_token)
+                        access_token = refreshed_token
+                    except Exception as retry_exc:
+                        return ExportResult(success=False, error=f'Batch append retry error: {retry_exc}')
+                else:
+                    return ExportResult(success=False, error='Google OAuth token expired.')
+            else:
+                body = exc.read().decode() if exc.fp else str(exc)
+                return ExportResult(success=False, error=f'Google Sheets API error: {body}')
+        except Exception as exc:
+            return ExportResult(success=False, error=f'Google Sheets batch request failed: {exc}')
+
+        # Format header row and auto-resize
+        self._format_tab_headers(spreadsheet_id, access_token, target_tab, len(headers))
 
         sheet_url = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
         updated_range = data.get('updates', {}).get('updatedRange', '')
