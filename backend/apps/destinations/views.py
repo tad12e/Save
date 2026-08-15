@@ -14,19 +14,25 @@ from .serializers import DestinationCreateSerializer, DestinationSerializer
 User = get_user_model()
 
 
-def get_or_create_demo_user():
-    user, _ = User.objects.get_or_create(
-        email='tadiwos@save.app',
-        defaults={'name': 'Tadiwos User', 'is_active': True},
-    )
-    return user
+# def get_or_create_demo_user():
+#     user, _ = User.objects.get_or_create(
+#         email='tadiwos@save.app',
+#         defaults={'name': 'Tadiwos User', 'is_active': True},
+#     )
+#     return user
 
 
 class DestinationListCreateView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        user = request.user
+        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
         destinations = Destination.objects.filter(user=user)
         if not destinations.exists():
             Destination.objects.create(
@@ -54,6 +60,12 @@ class DestinationListCreateView(APIView):
                 config={'target_resource_name': 'Connect a Notion Database...', 'access_type': 'full'}
             )
             destinations = Destination.objects.filter(user=user)
+        else:
+            defaults = destinations.filter(is_default=True)
+            if defaults.count() > 1:
+                first_default = defaults.first()
+                destinations.filter(is_default=True).exclude(pk=first_default.pk).update(is_default=False)
+                destinations = Destination.objects.filter(user=user)
         return Response(DestinationSerializer(destinations, many=True).data)
 
     def post(self, request):
@@ -171,7 +183,13 @@ class DestinationAuthorizeView(APIView):
                 is_real_oauth = True
                 auth_url = f"https://airtable.com/oauth2/v1/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={encoded_scopes}&state=scope_{access_type}"
 
-        user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        user = request.user
+        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
         destination_record, _ = Destination.objects.update_or_create(
             user=user,
             name=name,
@@ -227,7 +245,13 @@ class DestinationSetDefaultView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, destination_id):
-        user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        user = request.user
+        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
         try:
             destination = Destination.objects.get(pk=destination_id, user=user)
         except Destination.DoesNotExist:
