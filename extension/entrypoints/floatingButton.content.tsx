@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { FloatingButton } from '../components/FloatingButton';
 import { SelectionPanel } from '../components/SelectionPanel';
-import { isBlockedUrl, isSocialFeedPage } from '../lib/constants';
+import { isBlockedUrl } from '../lib/constants';
 import { getPanelPosition } from '../lib/position';
 
 declare const chrome: any;
@@ -114,24 +114,29 @@ export default defineContentScript({
 
   main() {
     if (isBlockedUrl()) return;
-    if (isSocialFeedPage()) return; // Hidden on social feed pages
+
+    if (document.getElementById('clipper-floating-root')) return;
 
     const host = document.createElement('div');
+    host.id = 'clipper-floating-root';
     Object.assign(host.style, {
       position: 'fixed',
-      inset: '0',
-      width: '0',
-      height: '0',
-      overflow: 'visible',
+      top: '0',
+      left: '0',
+      width: '100vw',
+      height: '100vh',
       zIndex: '2147483647',
       pointerEvents: 'none',
     });
 
     const shadowRoot = host.attachShadow({ mode: 'open' });
     const mountPoint = document.createElement('div');
+    mountPoint.style.pointerEvents = 'none';
     shadowRoot.appendChild(mountPoint);
-    document.documentElement.appendChild(host);
+    
+    (document.body || document.documentElement).appendChild(host);
 
     createRoot(mountPoint).render(<FloatingButtonOverlay />);
+    console.log('[Clipper] Floating button script active on', window.location.hostname);
   },
 });

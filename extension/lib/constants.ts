@@ -80,10 +80,10 @@ export interface PlatformConfig {
 export const PLATFORM_SELECTORS: Record<string, PlatformConfig> = {
   'twitter.com': { postSelector: '[data-testid="tweet"]', textSelector: '[data-testid="tweetText"]', urlSelector: 'a[href*="/status/"]' },
   'x.com':       { postSelector: '[data-testid="tweet"]', textSelector: '[data-testid="tweetText"]', urlSelector: 'a[href*="/status/"]' },
-  'linkedin.com': { postSelector: '.feed-shared-update-v2', textSelector: '.feed-shared-update-v2__description' },
-  'tiktok.com':  { postSelector: '[class*="DivItemContainer"], [class*="DivVideoCardContainer"]', textSelector: '[data-e2e="browse-video-desc"]' },
-  'instagram.com': { postSelector: 'article', textSelector: '._a9zs' },
-  'reddit.com':  { postSelector: '[data-click-id="body"], shreddit-post, article', textSelector: '[data-click-id="body"], [slot="text-body"]' },
+  'linkedin.com': { postSelector: '.feed-shared-update-v2, div[data-urn*="urn:li:activity"]', textSelector: '.feed-shared-update-v2__description, .update-components-text, .feed-shared-inline-show-more-text, .feed-shared-text, [data-test-id="main-feed-activity-card__commentary"]', urlSelector: 'a[href*="/feed/update/urn:li:activity:"], a.feed-shared-mini-update-v2__link-to-details, a[href*="/posts/"]' },
+  'tiktok.com':  { postSelector: '[class*="DivItemContainer"], [class*="DivVideoCardContainer"], div[data-e2e="recommend-list-item-container"], div[data-e2e="user-post-item"]', textSelector: '[data-e2e="browse-video-desc"], [data-e2e="user-post-item-desc"], [data-e2e="video-desc"], [class*="DivTextContainer"]', urlSelector: 'a[href*="/video/"]' },
+  'instagram.com': { postSelector: 'article, div[role="dialog"] article, main article', textSelector: 'h1, span._ap3a, div._a9zm, ._a9zs, span.x193iq5w', urlSelector: 'a[href*="/p/"], a[href*="/reel/"]' },
+  'reddit.com':  { postSelector: 'shreddit-post, article, div[data-testid="post-container"], [data-click-id="body"]', textSelector: '[slot="text-body"], [slot="title"], [data-click-id="body"], div[data-testid="post-container"] h1, div[data-testid="post-container"] h3', urlSelector: 'a[slot="full-post-link"], a[data-click-id="body"], a[href*="/comments/"]' },
 };
 
 // ─── Provider icons (simple emoji stand-ins) ───

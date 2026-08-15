@@ -47,18 +47,21 @@ function renderPanelOverlay(
 ) {
   if (!panelHostDiv) {
     panelHostDiv = document.createElement('div');
+    panelHostDiv.id = 'clipper-feed-panel-root';
     Object.assign(panelHostDiv.style, {
       position: 'fixed',
-      inset: '0',
-      width: '0',
-      height: '0',
+      top: '0',
+      left: '0',
+      width: '100vw',
+      height: '100vh',
       zIndex: '2147483647',
       pointerEvents: 'none',
     });
     const shadow = panelHostDiv.attachShadow({ mode: 'open' });
     const mountPoint = document.createElement('div');
+    mountPoint.style.pointerEvents = 'none';
     shadow.appendChild(mountPoint);
-    document.documentElement.appendChild(panelHostDiv);
+    (document.body || document.documentElement).appendChild(panelHostDiv);
     panelRoot = createRoot(mountPoint);
   }
 
@@ -83,17 +86,22 @@ function renderPanelOverlay(
 }
 
 function processPost(post: Element, config: PlatformConfig) {
-  if (processedPosts.has(post)) return;
-  processedPosts.add(post);
-
-  const text = extractPostText(post, config);
-  if (!text) return;
-
-  const result = detectOpportunity(text);
-  if (!result.detected || !result.type) return;
-
   if (injectedPosts.has(post)) return;
+  if (post.hasAttribute('data-clipper-injected')) return;
+  if (post.querySelector(':scope > .clipper-tweet-save-btn')) return;
+
+  // Prevent duplicate injection if this post is nested inside another post container
+  const parentPost = post.parentElement?.closest(`${config.postSelector}, [data-clipper-injected]`);
+  if (parentPost && parentPost !== post) {
+    return;
+  }
+
   injectedPosts.add(post);
+  post.setAttribute('data-clipper-injected', 'true');
+
+  const text = extractPostText(post, config) || post.textContent?.trim() || '';
+  const result = detectOpportunity(text);
+  const detectedType = (result && result.detected && result.type) ? result.type : 'tweet';
 
   const postEl = post as HTMLElement;
   const compPos = window.getComputedStyle(postEl).position;
@@ -102,12 +110,20 @@ function processPost(post: Element, config: PlatformConfig) {
   }
 
   const iconContainer = document.createElement('div');
-  iconContainer.style.position = 'absolute';
-  iconContainer.style.bottom = '8px';
-  iconContainer.style.right = '8px';
-  iconContainer.style.width = '20px';
-  iconContainer.style.height = '20px';
-  iconContainer.style.zIndex = '999';
+  iconContainer.className = 'clipper-tweet-save-btn';
+  Object.assign(iconContainer.style, {
+    position: 'absolute',
+    top: '12px',
+    right: '72px',
+    width: '20px',
+    height: '20px',
+    zIndex: '50',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    pointerEvents: 'auto',
+  });
+
   postEl.appendChild(iconContainer);
 
   const root = createRoot(iconContainer);
@@ -120,17 +136,24 @@ function processPost(post: Element, config: PlatformConfig) {
     const rect = iconContainer.getBoundingClientRect();
     const pos = getPanelPosition(rect, 240, 260);
 
-    renderPanelOverlay(text, postUrl, pos, result.type);
+    renderPanelOverlay(text, postUrl, pos, detectedType);
   };
 
-  root.render(<MicroIcon detectedType={result.type} onClick={handleClick} />);
+  root.render(<MicroIcon detectedType={detectedType} onClick={handleClick} />);
 }
 
-function scanPosts(config: PlatformConfig, observer: IntersectionObserver) {
-  const posts = document.querySelectorAll(config.postSelector);
+function scanPosts(config: PlatformConfig) {
+  const isLinkedIn = window.location.hostname.includes('linkedin.com');
+  const selector = isLinkedIn
+    ? '.feed-shared-update-v2, div[data-urn*="urn:li:activity"]'
+    : `${config.postSelector}, article[data-testid="tweet"], article[role="article"]`;
+
+  const posts = document.querySelectorAll(selector);
   posts.forEach((post) => {
-    if (!processedPosts.has(post)) {
-      observer.observe(post);
+    // Only inject on top-level cards, not nested reposts
+    const parentPost = post.parentElement?.closest(selector);
+    if (!parentPost && !injectedPosts.has(post) && !post.hasAttribute('data-clipper-injected')) {
+      processPost(post, config);
     }
   });
 }
@@ -149,35 +172,24 @@ export default defineContentScript({
   main() {
     const config = getPlatformConfig();
     if (!config) return;
+    console.log('[Clipper] Social feed detector active on', window.location.hostname);
 
-    // IntersectionObserver with threshold 0.6 and rootMargin "-20% 0px -20% 0px"
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            processPost(entry.target, config);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      {
-        threshold: 0.6,
-        rootMargin: '-20% 0px -20% 0px',
-      }
-    );
+    // Scan immediately
+    scanPosts(config);
 
-    scanPosts(config, observer);
-
-    // MutationObserver for infinite scrolling
+    // Observe dynamic infinite scrolling DOM mutations
     const mutationObserver = new MutationObserver(() => {
-      requestAnimationFrame(() => {
-        scanPosts(config, observer);
-      });
+      scanPosts(config);
     });
 
-    mutationObserver.observe(document.body, {
+    mutationObserver.observe(document.body || document.documentElement, {
       childList: true,
       subtree: true,
     });
+
+    // Periodic scan fallback
+    setInterval(() => {
+      scanPosts(config);
+    }, 1500);
   },
 });

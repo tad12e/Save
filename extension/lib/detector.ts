@@ -73,10 +73,11 @@ export function detectOpportunity(text: string): DetectionResult {
 
   for (const [type, keywords] of Object.entries(signals)) {
     const matches = keywords.filter((kw) => lower.includes(kw));
-    if (matches.length >= 2) {
+    if (matches.length >= 1) {
       return { detected: true, type };
     }
   }
 
-  return { detected: false, type: null };
+  // Fallback for social feed posts (every post can be clipped)
+  return { detected: true, type: 'post' };
 }
