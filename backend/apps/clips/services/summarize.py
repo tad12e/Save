@@ -1,81 +1,206 @@
 """
-AI-powered summarization using Google Gemini.
+AI-powered summarization using Google Gemini with Schema-Enforced Structured Outputs (Pydantic + responseSchema).
 
-Calls the Gemini REST API directly (no SDK dependency) to generate
-a structured summary of a saved clip's page content.
-
-Falls back gracefully if:
-  - GEMINI_API_KEY is not configured
-  - The API call fails or times out
+Uses Gemini's native constrained decoding (responseSchema) to mathematically
+guarantee that responses conform strictly to the specified JSON schema.
+Validates the parsed output via Pydantic models for type safety.
 """
 
 import json
 import logging
+import re
 import urllib.error
 import urllib.request
+from typing import Any
 
 from django.conf import settings
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-# The prompt template instructs Gemini to return structured JSON.
-_SYSTEM_PROMPT = """\
-You are a concise content analyst for a web clipper app called "Clipper".
-The user has saved a webpage. Analyse the provided page content and any
-highlighted text they selected, then return a JSON object with these fields:
 
-{
-  "title": "A clean, descriptive title (max 120 chars). Prefer the actual page title if it is good; otherwise rewrite it.",
-  "summary": "A 2-3 sentence summary capturing the key value of this page. Be specific, not generic. Max 400 chars.",
-  "content_type": "One of: job, scholarship, article, event, course, tool, video, music, social_post, webpage",
-  "tags": ["up to 6 lowercase tags relevant to the content"],
-  "deadline_date": "YYYY-MM-DD or null. Extract any application deadline, submission date, event date, or expiry date.",
-  "music_embed_url": "If this is a music/audio page (Spotify, YouTube Music, SoundCloud, Apple Music), extract the canonical URL. Otherwise null."
+def clean_text(text: str) -> str:
+    """
+    Clean text before sending to AI or saving to database/Google Sheets.
+    Strips raw newlines, tabs, excessive whitespace, and common scraping noise.
+    """
+    if not text:
+        return ''
+    # Strip HTML tags if any
+    text = re.sub(r'<[^>]+>', ' ', str(text))
+    # Remove scraping boilerplate
+    text = re.sub(r'(?i)\bshare\s+on\s+(twitter|linkedin|facebook|reddit|pinterest)\b', '', text)
+    text = re.sub(r'(?i)\bdate\s+published[:\s]*', '', text)
+    text = re.sub(r'(?i)\bexpected\s+start\s+date[:\s]*', '', text)
+    # Replace newlines, carriage returns, tabs with a single space
+    text = re.sub(r'[\r\n\t]+', ' ', text)
+    # Collapse multiple consecutive spaces
+    text = re.sub(r'\s{2,}', ' ', text)
+    return text.strip()
+
+
+class CategoryFields(BaseModel):
+    company: str = Field(default="", description="For jobs/opportunities: Company / Employer name")
+    location: str = Field(default="", description="Location (Remote, Hybrid, San Francisco, etc.)")
+    salary: str = Field(default="", description="Salary or compensation / price")
+    requirements_summary: str = Field(default="", description="Key qualifications or stack")
+    author: str = Field(default="", description="Author name or publication outlet")
+    reading_time: str = Field(default="", description="Estimated read time e.g. 5 min read")
+    key_takeaways: str = Field(default="", description="Concise takeaway sentence")
+    sponsor: str = Field(default="", description="Sponsoring organization/university")
+    award_amount: str = Field(default="", description="Funding or price amount")
+    eligibility: str = Field(default="", description="Eligibility criteria")
+    organizer: str = Field(default="", description="Organizer / Host name for events")
+    date_time: str = Field(default="", description="Date & Time text")
+    category_domain: str = Field(default="", description="Domain or industry")
+    pricing_model: str = Field(default="", description="Pricing model e.g. Free, Open-Source, $15/mo")
+    features_summary: str = Field(default="", description="Core feature or capability highlight")
+
+
+class ClipAnalysisResponse(BaseModel):
+    title: str = Field(description="Clean, concise title without boilerplate (max 120 chars)")
+    summary: str = Field(description="1-2 clean single-line sentences without newlines (max 350 chars)")
+    category_name: str = Field(description="Capitalized category tab name (e.g. 'Jobs', 'Articles', 'Scholarships', 'Recipes', 'Real Estate', 'Podcasts', 'Tools')")
+    content_type: str = Field(description="lowercase slug e.g. job, scholarship, article, event, tool, real_estate, recipe, podcast, webpage")
+    tags: list[str] = Field(default_factory=list, description="3-6 lowercase specific tags")
+    deadline_date: str = Field(default="", description="YYYY-MM-DD or empty string")
+    music_embed_url: str = Field(default="", description="Direct audio URL if applicable")
+    dynamic_headers: list[str] = Field(default_factory=list, description="List of 6-9 column names for the spreadsheet tab")
+    dynamic_row: dict[str, str] = Field(default_factory=dict, description="Mapping of column names to extracted values")
+    category_fields: CategoryFields = Field(default_factory=CategoryFields)
+
+
+# Gemini API native responseSchema definition enforcing the Pydantic structure
+_GEMINI_RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "title": {
+            "type": "STRING",
+            "description": "Clean, concise title without boilerplate (max 120 chars)"
+        },
+        "summary": {
+            "type": "STRING",
+            "description": "1-2 clean single-line sentences without newlines (max 350 chars)"
+        },
+        "category_name": {
+            "type": "STRING",
+            "description": "Capitalized category tab name e.g. Jobs, Articles, Scholarships, Recipes, Real Estate, Podcasts, Tools, Research Papers"
+        },
+        "content_type": {
+            "type": "STRING",
+            "description": "lowercase slug e.g. job, scholarship, article, event, tool, real_estate, recipe, podcast, webpage"
+        },
+        "tags": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+            "description": "3-6 lowercase tags"
+        },
+        "deadline_date": {
+            "type": "STRING",
+            "description": "YYYY-MM-DD or empty string"
+        },
+        "music_embed_url": {
+            "type": "STRING",
+            "description": "Direct audio URL if Spotify/SoundCloud/YouTube Music, otherwise empty"
+        },
+        "dynamic_headers": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+            "description": "List of 6-9 column names for the spreadsheet tab"
+        },
+        "dynamic_row": {
+            "type": "OBJECT",
+            "properties": {
+                "Title": {"type": "STRING"},
+                "URL": {"type": "STRING"},
+                "Summary": {"type": "STRING"},
+                "Author": {"type": "STRING"},
+                "Company": {"type": "STRING"},
+                "Location": {"type": "STRING"},
+                "Salary": {"type": "STRING"},
+                "Price": {"type": "STRING"},
+                "Deadline": {"type": "STRING"},
+                "Source Platform": {"type": "STRING"},
+                "Saved At": {"type": "STRING"}
+            },
+            "description": "Mapping of column names to extracted values"
+        },
+        "category_fields": {
+            "type": "OBJECT",
+            "properties": {
+                "company": {"type": "STRING"},
+                "location": {"type": "STRING"},
+                "salary": {"type": "STRING"},
+                "requirements_summary": {"type": "STRING"},
+                "author": {"type": "STRING"},
+                "reading_time": {"type": "STRING"},
+                "key_takeaways": {"type": "STRING"},
+                "sponsor": {"type": "STRING"},
+                "award_amount": {"type": "STRING"},
+                "eligibility": {"type": "STRING"},
+                "organizer": {"type": "STRING"},
+                "date_time": {"type": "STRING"},
+                "category_domain": {"type": "STRING"},
+                "pricing_model": {"type": "STRING"},
+                "features_summary": {"type": "STRING"}
+            }
+        }
+    },
+    "required": [
+        "title",
+        "summary",
+        "category_name",
+        "content_type",
+        "tags",
+        "dynamic_headers",
+        "category_fields"
+    ]
 }
 
-Rules:
-- Return ONLY the raw JSON object. No markdown fences, no extra text.
-- If selected_text is provided, weight your summary towards that content.
-- Tags should be specific and useful for filtering (e.g. "remote", "python", "startup", "ai", "design").
-- For content_type "music": use this for Spotify tracks/albums, YouTube music videos, SoundCloud tracks, Apple Music, etc.
-- For deadline_date: look for phrases like "deadline", "closes on", "apply by", "due date", "event date". Return null if none found.
-- For music_embed_url: return the direct page URL (e.g. https://open.spotify.com/track/...). Return null if not music.
+_SYSTEM_INSTRUCTION = """\
+You are an expert content analyzer for a web clipper application called "Clipper".
+The user has saved a webpage. Analyze the page content and any highlighted text they selected.
+Classify the content into an optimal category, generate structured fields, and generate an appropriate spreadsheet column schema.
+Ensure all text fields are clean single-line strings without any raw newlines or tabs.
 """
 
 
 def ai_summarize(url: str, page_text: str, selected_text: str = '') -> dict | None:
     """
-    Call Google Gemini to summarize a clip.
-
-    Returns a dict with keys: title, summary, content_type, tags
-    Returns None if the API key is missing or the call fails.
+    Call Google Gemini using Schema-Enforced Structured Outputs (responseSchema).
+    Validates output via Pydantic model and returns a clean dictionary.
     """
     api_key = getattr(settings, 'GEMINI_API_KEY', '')
-    model = getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
+    model = getattr(settings, 'GEMINI_MODEL', 'gemini-flash-latest')
 
     if not api_key:
         logger.info('GEMINI_API_KEY not configured — skipping AI summarization.')
         return None
 
+    # Clean text inputs before sending to Gemini
+    clean_page = clean_text(page_text)
+    clean_selected = clean_text(selected_text)
+
     # Build the user message with the page content
     user_content = f'URL: {url}\n\n'
-    if selected_text:
-        user_content += f'--- SELECTED TEXT ---\n{selected_text[:2000]}\n\n'
-    user_content += f'--- PAGE CONTENT ---\n{page_text[:6000]}'
+    if clean_selected:
+        user_content += f'--- SELECTED TEXT ---\n{clean_selected[:2000]}\n\n'
+    user_content += f'--- PAGE CONTENT ---\n{clean_page[:6000]}'
 
     payload = {
         'contents': [
             {
                 'role': 'user',
                 'parts': [
-                    {'text': f'{_SYSTEM_PROMPT}\n\n{user_content}'},
+                    {'text': f'{_SYSTEM_INSTRUCTION}\n\n{user_content}'},
                 ],
             },
         ],
         'generationConfig': {
-            'temperature': 0.3,
-            'maxOutputTokens': 512,
+            'temperature': 0.1,
+            'maxOutputTokens': 2048,
             'responseMimeType': 'application/json',
+            'responseSchema': _GEMINI_RESPONSE_SCHEMA,
         },
     }
 
@@ -105,46 +230,40 @@ def ai_summarize(url: str, page_text: str, selected_text: str = '') -> dict | No
         logger.error('Gemini API request failed: %s', exc)
         return None
 
-    # Parse the response — Gemini returns candidates[0].content.parts[0].text
+    # Parse and validate with Pydantic
     try:
-        text = data['candidates'][0]['content']['parts'][0]['text']
-        result = json.loads(text)
-    except (KeyError, IndexError, json.JSONDecodeError) as exc:
-        logger.error('Failed to parse Gemini response: %s — raw: %s', exc, str(data)[:500])
+        candidate = data['candidates'][0]
+        raw_json_text = candidate.get('content', {}).get('parts', [{}])[0].get('text', '')
+        
+        # Pydantic Schema Validation
+        parsed_model = ClipAnalysisResponse.model_validate_json(raw_json_text)
+        result = parsed_model.model_dump()
+    except Exception as exc:
+        logger.error('Pydantic validation failed for Gemini response: %s — raw: %s', exc, str(data)[:500])
         return None
 
-    # Validate the expected keys exist
-    if not all(k in result for k in ('title', 'summary', 'content_type', 'tags')):
-        logger.error('Gemini response missing expected keys: %s', result.keys())
-        return None
+    # Final text hygiene pass on validated fields
+    result['title'] = clean_text(result['title'])[:512]
+    result['summary'] = clean_text(result['summary'])[:500]
+    result['category_name'] = clean_text(result['category_name'])[:64]
+    result['content_type'] = str(result['content_type']).lower().strip()
+    result['tags'] = [clean_text(t).lower() for t in result.get('tags', []) if clean_text(t)][:6]
 
-    # Enforce constraints
-    result['title'] = str(result['title'])[:512]
-    result['summary'] = str(result['summary'])[:500]
-    result['content_type'] = str(result['content_type']).lower()
-    if isinstance(result['tags'], list):
-        result['tags'] = [str(t).lower() for t in result['tags'][:6]]
-    else:
-        result['tags'] = []
+    if result.get('dynamic_headers'):
+        result['dynamic_headers'] = [clean_text(h) for h in result['dynamic_headers'] if clean_text(h)]
 
-    # Normalize deadline_date (AI-extracted)
+    if result.get('dynamic_row'):
+        result['dynamic_row'] = {clean_text(k): clean_text(str(v)) for k, v in result['dynamic_row'].items() if v}
+
+    if result.get('category_fields'):
+        result['category_fields'] = {clean_text(k): clean_text(str(v)) for k, v in result['category_fields'].items()}
+
+    # Normalize deadline_date
     raw_deadline = result.get('deadline_date')
-    if raw_deadline and raw_deadline != 'null' and isinstance(raw_deadline, str):
-        import re
+    if raw_deadline and isinstance(raw_deadline, str):
         match = re.search(r'\d{4}-\d{2}-\d{2}', raw_deadline)
         result['deadline_date'] = match.group(0) if match else None
     else:
         result['deadline_date'] = None
 
-    # Normalize music_embed_url (AI-extracted)
-    raw_music = result.get('music_embed_url')
-    if raw_music and raw_music != 'null' and isinstance(raw_music, str) and raw_music.startswith('http'):
-        result['music_embed_url'] = raw_music[:2048]
-    else:
-        result['music_embed_url'] = None
-
-    logger.info(
-        'Gemini summarization succeeded: title=%r, type=%s, deadline=%s',
-        result['title'], result['content_type'], result.get('deadline_date'),
-    )
     return result

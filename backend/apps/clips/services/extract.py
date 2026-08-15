@@ -88,7 +88,12 @@ def extract_clip_metadata(clip) -> dict:
     page_title, page_text = _fetch_page_text(clip.url)
     selected_text = (clip.selected_text or '').strip()
 
+    from apps.clips.services.source_detector import detect_embedded_resources, detect_source_platform
+    platform, author, post_url = detect_source_platform(clip.url)
+    embedded_resources = detect_embedded_resources(f'{selected_text} {page_text}')
+
     # --- Try AI-powered summarization first ---
+    metadata = None
     try:
         from apps.clips.services.summarize import ai_summarize
 
@@ -99,21 +104,40 @@ def extract_clip_metadata(clip) -> dict:
         )
         if ai_result:
             logger.info('Using AI summary for clip URL: %s', clip.url)
-            return ai_result
+            metadata = ai_result
     except Exception as exc:
         logger.warning('AI summarization import/call failed, falling back to regex: %s', exc)
 
-    # --- Fallback: regex-based extraction ---
-    logger.info('Using regex fallback for clip URL: %s', clip.url)
-    title = page_title or urlparse(clip.url).netloc or 'Saved clip'
-    summary = _build_summary(selected_text, page_text, title)
-    content_type = _detect_content_type(f'{selected_text} {page_text}', clip.url)
-    tags = _build_tags(content_type, clip.url, f'{selected_text} {page_text}')
+    from apps.clips.services.summarize import clean_text
 
-    return {
-        'title': title[:512],
-        'summary': summary,
-        'content_type': content_type,
-        'tags': tags,
-    }
+    # --- Fallback: regex-based extraction ---
+    if not metadata:
+        logger.info('Using regex fallback for clip URL: %s', clip.url)
+        title = clean_text(page_title or urlparse(clip.url).netloc or 'Saved clip')
+        summary = clean_text(_build_summary(selected_text, page_text, title))
+        content_type = _detect_content_type(f'{selected_text} {page_text}', clip.url)
+        tags = _build_tags(content_type, clip.url, f'{selected_text} {page_text}')
+        metadata = {
+            'title': title[:512],
+            'summary': summary,
+            'content_type': content_type,
+            'tags': tags,
+            'category_fields': {},
+        }
+    elif 'category_fields' not in metadata:
+        metadata['category_fields'] = {}
+
+    # Attach detected source platform & embedded resource metadata
+    metadata['source_platform'] = platform
+    metadata['source_author'] = author
+    metadata['source_post_url'] = post_url
+    metadata['embedded_resources'] = embedded_resources
+    if embedded_resources:
+        metadata['is_resource_hub'] = True
+        metadata['extracted_resource_url'] = embedded_resources[0]['url']
+    else:
+        metadata['is_resource_hub'] = False
+        metadata['extracted_resource_url'] = ''
+
+    return metadata
 
