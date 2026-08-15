@@ -35,13 +35,22 @@ async function handleSaveClip(data: any): Promise<any> {
   const token = storage.jwt || storage.clipper_access_token;
   const apiUrl = storage.clipper_api_url || getApiUrl();
 
-  // 2. Build headers with token if available
+  if (!token) {
+    try {
+      if (chrome.action?.openPopup) {
+        chrome.action.openPopup();
+      }
+    } catch {
+      // Ignore
+    }
+    throw new Error('Please sign in to save clips.');
+  }
+
+  // 2. Build headers with token
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
   // 3. POST to /api/clips/
   const bodyData = {
@@ -69,7 +78,7 @@ async function handleSaveClip(data: any): Promise<any> {
     } catch {
       // Ignore
     }
-    throw new Error('Session expired. Please sign in again.');
+    throw new Error('Session expired or authentication required. Please sign in.');
   }
 
   if (!response.ok) {

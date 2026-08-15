@@ -23,6 +23,14 @@ export interface Clip {
   selected_text: string;
   status: 'pending' | 'processing' | 'done' | 'failed';
   duplicate: boolean;
+  source_platform?: string;
+  source_author?: string;
+  source_post_url?: string;
+  parent_clip_id?: string;
+  parent_clip_title?: string;
+  child_clips_count?: number;
+  is_resource_hub?: boolean;
+  extracted_resource_url?: string;
   title?: string;
   content_type?: string;
   tags?: string[];
