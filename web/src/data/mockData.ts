@@ -212,6 +212,51 @@ export const INITIAL_DESTINATIONS: DestinationConfig[] = [
       { id: 'cm3', sourceField: 'Selected Text', targetField: 'content (text)', enabled: true },
       { id: 'cm4', sourceField: 'Category', targetField: 'category (varchar)', enabled: true }
     ]
+  },
+  {
+    id: 'dest_spotify',
+    type: 'spotify',
+    name: 'Spotify',
+    description: 'Directly append songs, albums, and tracks detected across web pages and social feeds into your playlists.',
+    icon: 'Music',
+    color: '#1DB954',
+    bgColor: 'rgba(29, 185, 84, 0.1)',
+    connected: true,
+    isDefault: false,
+    status: 'active',
+    lastSync: 'Just now',
+    itemsSyncedCount: 48,
+    targetResourceName: 'Playlist: Clipper Tracks (Default)',
+    targetResourceId: 'spotify_default_playlist',
+    syncFrequency: 'instant',
+    autoCreateColumns: true,
+    fieldMappings: [
+      { id: 'sp1', sourceField: 'Track Title', targetField: 'Item Name', enabled: true },
+      { id: 'sp2', sourceField: 'Artist', targetField: 'Artist Name', enabled: true },
+      { id: 'sp3', sourceField: 'Spotify URL', targetField: 'Track URI', enabled: true }
+    ]
+  },
+  {
+    id: 'dest_youtube_music',
+    type: 'youtube_music',
+    name: 'YouTube Music',
+    description: 'Sync audio tracks, music videos, and song links into YouTube Music library playlists.',
+    icon: 'PlayCircle',
+    color: '#FF0000',
+    bgColor: 'rgba(255, 0, 0, 0.1)',
+    connected: false,
+    isDefault: false,
+    status: 'disconnected',
+    lastSync: 'Never',
+    itemsSyncedCount: 0,
+    targetResourceName: 'Playlist: Clipper Tunes',
+    targetResourceId: 'ytm_default_playlist',
+    syncFrequency: 'instant',
+    autoCreateColumns: true,
+    fieldMappings: [
+      { id: 'yt1', sourceField: 'Video/Audio Title', targetField: 'Track Title', enabled: true },
+      { id: 'yt2', sourceField: 'Channel/Artist', targetField: 'Artist', enabled: true }
+    ]
   }
 ];
 

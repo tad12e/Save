@@ -1,4 +1,4 @@
-export type DestinationType = 'google_sheets' | 'notion' | 'airtable' | 'webhook' | 'custom_db';
+export type DestinationType = 'google_sheets' | 'notion' | 'airtable' | 'webhook' | 'custom_db' | 'spotify' | 'youtube_music';
 
 export type ClipType = 'job' | 'education' | 'research' | 'book' | 'project' | 'programming' | 'course' | 'event' | 'scholarship' | 'music' | 'deal' | 'article' | 'general';
 

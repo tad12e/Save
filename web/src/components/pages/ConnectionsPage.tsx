@@ -219,6 +219,32 @@ const INTEGRATION_CATALOG: CatalogItem[] = [
     defaultResourceName: 'Clipped Research Doc',
     authMethod: 'Coda API Token',
     iconType: 'sheets'
+  },
+  {
+    id: 'cat_spotify',
+    name: 'Spotify Music',
+    type: 'spotify',
+    category: 'productivity',
+    description: 'Instantly append clipped songs, Spotify links, and tracks into custom playlists or your Liked Songs library.',
+    badge: 'Official API',
+    popular: true,
+    color: 'emerald',
+    defaultResourceName: 'Playlist: Clipper Tracks (Default)',
+    authMethod: 'Spotify OAuth 2.0',
+    iconType: 'productivity'
+  },
+  {
+    id: 'cat_youtube_music',
+    name: 'YouTube Music',
+    type: 'youtube_music',
+    category: 'productivity',
+    description: 'Sync audio tracks, music videos, and song links into YouTube Music library playlists.',
+    badge: 'Google OAuth',
+    popular: false,
+    color: 'rose',
+    defaultResourceName: 'Playlist: Clipper Tunes',
+    authMethod: 'Google OAuth 2.0',
+    iconType: 'productivity'
   }
 ];
 
