@@ -11,6 +11,9 @@ class ClipSerializer(serializers.ModelSerializer):
     destination_id = serializers.UUIDField(source='destination.id', read_only=True, allow_null=True)
     destination_name = serializers.CharField(source='destination.name', read_only=True, allow_null=True)
     destination_provider = serializers.CharField(source='destination.provider', read_only=True, allow_null=True)
+    parent_clip_id = serializers.UUIDField(source='parent_clip.id', read_only=True, allow_null=True)
+    parent_clip_title = serializers.CharField(source='parent_clip.title', read_only=True, allow_null=True)
+    child_clips_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Clip
@@ -20,6 +23,14 @@ class ClipSerializer(serializers.ModelSerializer):
             'selected_text',
             'status',
             'duplicate',
+            'source_platform',
+            'source_author',
+            'source_post_url',
+            'parent_clip_id',
+            'parent_clip_title',
+            'child_clips_count',
+            'is_resource_hub',
+            'extracted_resource_url',
             'title',
             'content_type',
             'tags',
@@ -38,6 +49,11 @@ class ClipSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    def get_child_clips_count(self, obj) -> int:
+        if hasattr(obj, 'child_clips'):
+            return obj.child_clips.count()
+        return 0
+
 
 class ClipCreateSerializer(serializers.Serializer):
     url = serializers.URLField(max_length=2048)
@@ -48,6 +64,7 @@ class ClipCreateSerializer(serializers.Serializer):
         allow_null=True,
         source='destination',
     )
+    unpack_sub_items = serializers.BooleanField(required=False, default=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
