@@ -9,6 +9,8 @@ class Destination(models.Model):
     PROVIDER_AIRTABLE = 'airtable'
     PROVIDER_WEBHOOK = 'webhook'
     PROVIDER_CUSTOM_DB = 'custom_db'
+    PROVIDER_SPOTIFY = 'spotify'
+    PROVIDER_YOUTUBE_MUSIC = 'youtube_music'
 
     PROVIDER_CHOICES = (
         (PROVIDER_NOTION, 'Notion'),
@@ -16,6 +18,8 @@ class Destination(models.Model):
         (PROVIDER_AIRTABLE, 'Airtable'),
         (PROVIDER_WEBHOOK, 'Webhook'),
         (PROVIDER_CUSTOM_DB, 'Custom Database'),
+        (PROVIDER_SPOTIFY, 'Spotify'),
+        (PROVIDER_YOUTUBE_MUSIC, 'YouTube Music'),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

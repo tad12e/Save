@@ -40,7 +40,7 @@ def batch_export_resources_to_destination(destination, resources: list[dict], so
     return ExportResult(success=True, external_url='', external_id='')
 
 
-def get_user_destination(user, destination_id=None):
+def get_user_destination(user, destination_id=None, content_type=None):
     if destination_id:
         dest = Destination.objects.filter(
             pk=destination_id,
@@ -49,7 +49,29 @@ def get_user_destination(user, destination_id=None):
         if dest:
             return dest
 
+    # 1. Special rule for Music: always route to a connected music provider
+    if content_type == 'music':
+        music_dest = Destination.objects.filter(
+            user=user,
+            is_active=True,
+            provider__in=['spotify', 'youtube_music'],
+        ).order_by('-is_default', 'name').first()
+        if music_dest:
+            return music_dest
+
+    # 2. Check if user configured a specific default destination for this category
+    if content_type:
+        category_dest = Destination.objects.filter(
+            user=user,
+            is_active=True,
+            config__content_types__contains=content_type,
+        ).first()
+        if category_dest:
+            return category_dest
+
+    # 3. Universal Global Default Destination (fallback for blogs, articles, and general clips)
     return Destination.objects.filter(
         user=user,
         is_active=True,
     ).order_by('-is_default', 'name').first()
+

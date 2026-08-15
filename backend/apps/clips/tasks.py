@@ -267,7 +267,7 @@ def process_clip(self, clip_id: str):
                         export_clip_to_destination(child_clip, clip.destination)
 
         # Export parent clip to destination
-        destination = clip.destination or get_user_destination(clip.user)
+        destination = clip.destination or get_user_destination(clip.user, content_type=clip.content_type)
         if not destination or destination.provider == 'custom_db' or destination.name.startswith('Save Vault'):
             clip.export_status = 'done'
             clip.save(update_fields=['export_status'])
