@@ -16,19 +16,25 @@ from .services.url import hash_url, normalise_url
 User = get_user_model()
 
 
-def get_or_create_demo_user():
-    user, _ = User.objects.get_or_create(
-        email='tadiwos@save.app',
-        defaults={'name': 'Tadiwos User', 'is_active': True},
-    )
-    return user
+# def get_or_create_demo_user():
+#     user, _ = User.objects.get_or_create(
+#         email='tadiwos@save.app',
+#         defaults={'name': 'Tadiwos User', 'is_active': True},
+#     )
+#     return user
 
 
 class ClipCreateView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in to save clips.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        user = request.user
+        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
 
         url_val = request.data.get('url')
         if not url_val:
@@ -130,7 +136,13 @@ class DashboardView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in to view dashboard.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        user = request.user
+        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
 
         qs = Clip.objects.filter(user=user)
         dest_qs = Destination.objects.filter(user=user, is_active=True)
@@ -194,8 +206,8 @@ class DashboardView(APIView):
 
         return Response({
             'user': {
-                'name': (getattr(user, 'name', '') or user.email) if user else 'Tadiwos',
-                'email': user.email if user else 'tadiwos@save.app',
+                'name': (getattr(user, 'name', '') or user.email) if user else '',
+                'email': user.email if user else '',
             },
             'stats': {
                 'total_clips': total_clips,
@@ -240,7 +252,13 @@ class SimilaritySearchView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        user = request.user
+        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
 
         text = request.data.get('text', '').strip()
         threshold = float(request.data.get('threshold', 0.65))
