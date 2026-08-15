@@ -90,6 +90,8 @@ export function SelectionPanel({
 
   // Save execution state
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   // Sync position prop
   useEffect(() => {
@@ -105,6 +107,12 @@ export function SelectionPanel({
 
   // Load storage state on mount
   useEffect(() => {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      chrome.storage.local.get(['jwt', 'clipper_access_token'], (res: any) => {
+        setIsAuthenticated(Boolean(res?.jwt || res?.clipper_access_token));
+      });
+    }
+
     getDefaultDestination().then((dest) => {
       if (dest) {
         setDefaultDest(dest);
@@ -253,6 +261,7 @@ export function SelectionPanel({
   const handleQuickSave = async () => {
     if (saveStatus === 'saving' || saveStatus === 'saved') return;
     setSaveStatus('saving');
+    setErrorMessage('');
 
     const destinationToUse = defaultDest || selectedDest || DEFAULT_PROVIDER_LIST[0];
 
@@ -269,8 +278,13 @@ export function SelectionPanel({
 
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage(messageData, (resData: any) => {
-        setSaveStatus('saved');
-        setTimeout(onClose, 800);
+        if (resData && resData.ok === false) {
+          setSaveStatus('error');
+          setErrorMessage(resData.error || 'Please sign in');
+        } else {
+          setSaveStatus('saved');
+          setTimeout(onClose, 800);
+        }
       });
     } else {
       setSaveStatus('saved');
@@ -282,6 +296,7 @@ export function SelectionPanel({
   const handleConfiguredSave = async () => {
     if (saveStatus === 'saving' || saveStatus === 'saved') return;
     setSaveStatus('saving');
+    setErrorMessage('');
 
     let finalTableName = selectedDest.tableName || 'Sheet1';
     let finalTableId = selectedDest.tableId || 'default';
@@ -327,8 +342,13 @@ export function SelectionPanel({
 
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
       chrome.runtime.sendMessage(messageData, (resData: any) => {
-        setSaveStatus('saved');
-        setTimeout(onClose, 800);
+        if (resData && resData.ok === false) {
+          setSaveStatus('error');
+          setErrorMessage(resData.error || 'Please sign in');
+        } else {
+          setSaveStatus('saved');
+          setTimeout(onClose, 800);
+        }
       });
     } else {
       setSaveStatus('saved');
@@ -419,7 +439,7 @@ export function SelectionPanel({
 
   const saveBtnStyle: React.CSSProperties = {
     width: '100%',
-    backgroundColor: saveStatus === 'saved' ? C.successBg : C.violetPrimary,
+    backgroundColor: saveStatus === 'saved' ? C.successBg : saveStatus === 'error' ? '#dc2626' : (isAuthenticated === false ? '#7c3aed' : C.violetPrimary),
     color: saveStatus === 'saved' ? C.successGreen : C.white,
     borderRadius: '8px',
     padding: '9px',
@@ -428,6 +448,20 @@ export function SelectionPanel({
     border: 'none',
     cursor: saveStatus === 'saving' ? 'wait' : 'pointer',
     transition: 'background-color 0.2s ease',
+  };
+
+  const openLoginPopup = () => {
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+      chrome.runtime.sendMessage({ type: 'OPEN_POPUP' });
+    }
+  };
+
+  const onSaveClick = () => {
+    if (isAuthenticated === false || saveStatus === 'error') {
+      openLoginPopup();
+      return;
+    }
+    handleQuickSave();
   };
 
   const stopEvent = (e: React.SyntheticEvent) => {
@@ -508,8 +542,16 @@ export function SelectionPanel({
             </span>
           </div>
 
-          <button type="button" style={saveBtnStyle} onClick={handleQuickSave}>
-            {saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'saving' ? 'Saving…' : 'Save now'}
+          <button type="button" style={saveBtnStyle} onClick={onSaveClick}>
+            {saveStatus === 'saved'
+              ? 'Saved ✓'
+              : saveStatus === 'saving'
+              ? 'Saving…'
+              : saveStatus === 'error'
+              ? (errorMessage ? `${errorMessage} (Click to Sign In)` : 'Sign In Required')
+              : isAuthenticated === false
+              ? 'Sign in to save'
+              : 'Save now'}
           </button>
         </div>
       ) : (
@@ -667,8 +709,27 @@ export function SelectionPanel({
             <span>Remember this choice</span>
           </label>
 
-          <button type="button" style={saveBtnStyle} onClick={handleConfiguredSave} onPointerDown={stopPointer}>
-            {saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'saving' ? 'Saving…' : 'Save with this config'}
+          <button
+            type="button"
+            style={saveBtnStyle}
+            onClick={() => {
+              if (isAuthenticated === false || saveStatus === 'error') {
+                openLoginPopup();
+                return;
+              }
+              handleConfiguredSave();
+            }}
+            onPointerDown={stopPointer}
+          >
+            {saveStatus === 'saved'
+              ? 'Saved ✓'
+              : saveStatus === 'saving'
+              ? 'Saving…'
+              : saveStatus === 'error'
+              ? (errorMessage ? `${errorMessage} (Click to Sign In)` : 'Sign In Required')
+              : isAuthenticated === false
+              ? 'Sign in to save'
+              : 'Save with this config'}
           </button>
         </div>
       )}
