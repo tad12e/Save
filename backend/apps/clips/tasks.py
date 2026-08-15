@@ -74,6 +74,8 @@ def _try_extract_sheet_rows(resource_url: str) -> list[dict]:
     acks_late=True,
 )
 def process_clip(self, clip_id: str):
+    from apps.clips.github_detector import get_repo_info, is_github_list_repo
+    from apps.clips.github_parser import fetch_repo_metadata
     from apps.clips.models import Clip
     from apps.clips.services.extract import extract_clip_metadata
     from apps.destinations.services import export_clip_to_destination, get_user_destination
@@ -87,6 +89,77 @@ def process_clip(self, clip_id: str):
     clip.status = Clip.STATUS_PROCESSING
     clip.save(update_fields=['status'])
     logger.info('Processing clip %s — %s', clip.id, clip.url)
+
+    # ─── STEP 1: GitHub Repository & List Detection ───
+    repo_info = get_repo_info(clip.url)
+    if repo_info:
+        is_list, reason = is_github_list_repo(clip.url)
+        logger.info('List detection: %s reason=%s for %s', is_list, reason, repo_info['full_repo'])
+        if is_list:
+            logger.info(
+                'Clip %s detected as GitHub Resource / Awesome List (%s, reason=%s). Delegating to process_github_list_repo.',
+                clip.id,
+                repo_info['full_repo'],
+                reason,
+            )
+            # Delegate to specialized GitHub list task
+            process_github_list_repo.delay(str(clip.id))
+            return
+
+        # Normal code repository handling (single clip with type 'repo')
+        logger.info('Clip %s is a standard GitHub code repo (%s).', clip.id, repo_info['full_repo'])
+        repo_meta = fetch_repo_metadata(repo_info['owner'], repo_info['repo'])
+
+        clip.title = repo_meta.get('full_name') or repo_meta.get('name') or clip.url
+        clip.summary = repo_meta.get('description') or f"GitHub repository by {repo_info['owner']}"
+        clip.content_type = 'repo'
+        clip.source_platform = Clip.PLATFORM_GITHUB
+        clip.source_author = repo_info['owner']
+        clip.source_post_url = clip.url
+        clip.tags = [
+            'repo',
+            'github',
+            repo_meta.get('language', 'Code').lower(),
+        ] + [str(t).lower() for t in repo_meta.get('topics', [])[:4]]
+
+        clip.extra_metadata = {
+            'repo_name': repo_meta.get('name'),
+            'stars': repo_meta.get('stars', 0),
+            'language': repo_meta.get('language', 'Code'),
+            'license': repo_meta.get('license', 'Open Source'),
+            'forks': repo_meta.get('forks', 0),
+            'topics': repo_meta.get('topics', []),
+            'source_type': 'github_repo',
+        }
+        clip.status = Clip.STATUS_DONE
+        clip.save(update_fields=[
+            'title',
+            'summary',
+            'content_type',
+            'tags',
+            'source_platform',
+            'source_author',
+            'source_post_url',
+            'extra_metadata',
+            'status',
+        ])
+
+        # Generate embedding for repository
+        try:
+            from apps.clips.services.embed import generate_embedding
+            text_to_embed = f"{clip.title} {clip.summary} {repo_meta.get('language', '')}"
+            embedding_vector = generate_embedding(text_to_embed)
+            if embedding_vector:
+                clip.embedding = embedding_vector
+                clip.save(update_fields=['embedding'])
+        except Exception as embed_exc:
+            logger.warning('Embedding generation for repo clip %s failed: %s', clip.id, embed_exc)
+
+        # Export normal repo clip
+        destination = clip.destination or get_user_destination(clip.user)
+        if destination and destination.provider != 'custom_db' and not destination.name.startswith('Save Vault'):
+            export_clip_to_destination(clip, destination)
+        return
 
     try:
         metadata = extract_clip_metadata(clip)
@@ -224,6 +297,187 @@ def process_clip(self, clip_id: str):
         raise self.retry(exc=exc)
 
 
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=20,
+    acks_late=True,
+)
+def process_github_list_repo(self, clip_id: str):
+    """
+    Dedicated background task to parse GitHub resource / awesome list repositories.
+    Fetches raw README, scrapes individual tools, saves each as a child Clip,
+    and batch exports them to the 'Tools' tab in Google Sheets.
+    """
+    from apps.clips.github_detector import get_repo_info
+    from apps.clips.github_parser import fetch_readme, parse_list_resources
+    from apps.clips.models import Clip
+    from apps.clips.services.summarize import clean_text
+    from apps.clips.services.url import hash_url, normalise_url
+    from apps.destinations.services import batch_export_resources_to_destination, get_user_destination
+
+    try:
+        clip = Clip.objects.select_related('destination', 'user').get(pk=clip_id)
+    except Clip.DoesNotExist:
+        logger.error('GitHub list clip %s not found.', clip_id)
+        return
+
+    repo_info = get_repo_info(clip.url)
+    if not repo_info:
+        logger.error('Invalid GitHub URL %s for clip %s', clip.url, clip.id)
+        clip.status = Clip.STATUS_FAILED
+        clip.save(update_fields=['status'])
+        return
+
+    # STEP 6 (Initial Progress): update clip status
+    clip.status = Clip.STATUS_PROCESSING
+    clip.is_resource_hub = True
+    clip.source_platform = Clip.PLATFORM_GITHUB
+    clip.source_author = repo_info['owner']
+    clip.source_post_url = clip.url
+    clip.extra_metadata = {
+        'total_found': 0,
+        'processed': 0,
+        'current': 'Parsing README...',
+        'source_type': 'github_list',
+        'source_repo': repo_info['full_repo'],
+    }
+    clip.save(update_fields=['status', 'is_resource_hub', 'source_platform', 'source_author', 'source_post_url', 'extra_metadata'])
+
+    try:
+        # STEP 2: Fetch and parse raw README
+        readme_text = fetch_readme(repo_info['owner'], repo_info['repo'], repo_info.get('branch'))
+        if not readme_text:
+            logger.warning('Could not fetch README for %s. Falling back to normal clip processing.', repo_info['full_repo'])
+            clip.status = Clip.STATUS_DONE
+            clip.title = repo_info['repo']
+            clip.summary = f"GitHub resource list {repo_info['full_repo']} (README not reachable)"
+            clip.save(update_fields=['status', 'title', 'summary'])
+            return
+
+        resources = parse_list_resources(readme_text, source_url=clip.url, source_repo=repo_info['full_repo'])
+        total_found = len(resources)
+
+        clip.extra_metadata['total_found'] = total_found
+        clip.extra_metadata['current'] = f'Found {total_found} resources. Processing & saving...'
+        clip.save(update_fields=['extra_metadata'])
+
+        if total_found == 0:
+            logger.info('No individual tool resources extracted from %s', repo_info['full_repo'])
+            clip.status = Clip.STATUS_DONE
+            clip.title = repo_info['repo']
+            clip.summary = f"GitHub list repository {repo_info['full_repo']} (0 tools parsed)"
+            clip.extra_metadata = {
+                'total_found': 0,
+                'saved': 0,
+                'skipped': 0,
+                'source_type': 'github_list',
+                'source_repo': repo_info['full_repo'],
+                'tab': 'Tools',
+            }
+            clip.save(update_fields=['status', 'title', 'summary', 'extra_metadata'])
+            return
+
+        # STEP 4: Save each resource as a separate Clip record
+        saved_count = 0
+        skipped_count = 0
+
+        for idx, r in enumerate(resources):
+            # url_hash incorporates normalized tool URL + child clip marker
+            norm_tool_url = normalise_url(r['url'])
+            u_hash = hash_url(f"{norm_tool_url}||child_{clip.id}_{r['position']}")
+
+            child_clip, created = Clip.objects.get_or_create(
+                user=clip.user,
+                url_hash=u_hash,
+                defaults={
+                    'parent_clip': clip,
+                    'url': r['url'],  # Actual tool website URL (NOT GitHub URL)
+                    'title': r['name'][:512],
+                    'summary': r['description'],
+                    'selected_text': r['description'],
+                    'content_type': r['content_type'],  # Usually 'tool'
+                    'tags': [
+                        r['content_type'],
+                        r['pricing'],
+                        clean_text(r['section']).lower()[:30],
+                    ],
+                    'status': Clip.STATUS_DONE,
+                    'source_platform': Clip.PLATFORM_GITHUB,
+                    'source_author': r['source_repo'],
+                    'source_post_url': r['source_url'],  # Original GitHub URL
+                    'destination': clip.destination,
+                    'extra_metadata': {
+                        'section': r['section'],
+                        'pricing': r['pricing'],
+                        'position': r['position'],
+                        'source_repo': r['source_repo'],
+                        'source_url': r['source_url'],
+                        'source_type': 'github_list',
+                    },
+                },
+            )
+
+            if created:
+                saved_count += 1
+            else:
+                skipped_count += 1
+
+            # Update progress periodically so frontend can display status
+            if (idx + 1) % 25 == 0 or (idx + 1) == total_found:
+                clip.extra_metadata['processed'] = idx + 1
+                clip.extra_metadata['current'] = f'Saving tools ({idx + 1}/{total_found})...'
+                clip.save(update_fields=['extra_metadata'])
+
+        # STEP 5: Batch export all resources to Google Sheets (Tools tab)
+        destination = clip.destination or get_user_destination(clip.user)
+        if destination and destination.provider == 'google_sheets':
+            clip.extra_metadata['current'] = 'Exporting tools batch to Google Sheets (Tools tab)...'
+            clip.save(update_fields=['extra_metadata'])
+
+            export_res = batch_export_resources_to_destination(
+                destination=destination,
+                resources=resources,
+                source_url=clip.url,
+                source_repo=repo_info['full_repo'],
+                saved_at_str=clip.created_at.strftime('%Y-%m-%d %H:%M:%S') if clip.created_at else '',
+            )
+
+            if export_res.success:
+                clip.export_status = 'done'
+                clip.export_url = export_res.external_url
+                clip.export_error = ''
+                logger.info('Successfully batch-exported %d tools from %s to Google Sheets.', len(resources), repo_info['full_repo'])
+            else:
+                clip.export_status = 'failed'
+                clip.export_error = export_res.error
+                logger.warning('Google Sheets batch export failed for list %s: %s', clip.id, export_res.error)
+
+            clip.save(update_fields=['export_status', 'export_url', 'export_error'])
+
+        # STEP 6: Final status update
+        clip.status = Clip.STATUS_DONE
+        clip.title = f"{repo_info['repo']} ({saved_count} tools)"
+        clip.summary = f"Curated resource list with {total_found} tools extracted from {repo_info['full_repo']}."
+        clip.extra_metadata = {
+            'total_found': total_found,
+            'saved': saved_count,
+            'skipped': skipped_count,
+            'source_type': 'github_list',
+            'source_repo': repo_info['full_repo'],
+            'tab': 'Tools',
+        }
+        clip.save(update_fields=['status', 'title', 'summary', 'extra_metadata'])
+        logger.info('Finished processing GitHub list %s: %d saved, %d skipped.', repo_info['full_repo'], saved_count, skipped_count)
+
+    except Exception as exc:
+        clip.status = Clip.STATUS_FAILED
+        clip.extra_metadata['error'] = str(exc)
+        clip.save(update_fields=['status', 'extra_metadata'])
+        logger.exception('Failed processing GitHub list repo %s: %s', clip.id, exc)
+        raise self.retry(exc=exc)
+
+
 @shared_task(bind=True)
 def check_deadline_reminders(self):
     """
@@ -280,3 +534,4 @@ def check_deadline_reminders(self):
 
     logger.info('Deadline reminder check complete: %d reminders sent.', count)
     return count
+

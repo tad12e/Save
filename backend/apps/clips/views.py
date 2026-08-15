@@ -1,11 +1,15 @@
 from datetime import timedelta
+import logging
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+logger = logging.getLogger(__name__)
 
 from apps.destinations.models import Destination
 
@@ -300,4 +304,129 @@ class SimilaritySearchView(APIView):
             'similarity_score': round(best_score, 4),
             'reason': 'below_threshold',
         })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def github_selection_save(request):
+    """
+    Saves an individual resource highlighted by the user on a GitHub repository/list page.
+    Directly extracts resource metadata, saves Clip record, and exports to Google Sheets Tools tab synchronously.
+    """
+    selected_text = str(request.data.get('selected_text', '')).strip()
+    page_url = str(request.data.get('page_url', '')).strip()
+    section = str(request.data.get('section', '')).strip()
+
+    # 1. Validate inputs
+    if not selected_text or not page_url:
+        return Response(
+            {'error': 'missing_fields', 'message': 'Both selected_text and page_url are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # 2. Validate GitHub URL
+    from urllib.parse import urlparse
+    parsed_page = urlparse(page_url)
+    if 'github.com' not in parsed_page.netloc:
+        return Response(
+            {'error': 'invalid_url', 'message': 'This endpoint only works on GitHub pages'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # 3. Extract resource from selection
+    from .github_parser import extract_resource_from_selection
+    resource = extract_resource_from_selection(
+        selected_text=selected_text,
+        page_url=page_url,
+        section=section,
+    )
+
+    # 4. Handle no resource found
+    if not resource:
+        return Response(
+            {
+                'error': 'no_resource_found',
+                'message': 'Could not find a resource link in your selection. Try selecting the full line including the URL.',
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # 5. Create Clip record
+    user = request.user
+    norm_url = normalise_url(resource['url'])
+    u_hash = hash_url(f"{norm_url}||selection_{user.id}")
+
+    # Deduplication check
+    existing = Clip.objects.filter(user=user, url=resource['url']).first()
+    if not existing:
+        existing = Clip.objects.filter(user=user, url_hash=u_hash).first()
+
+    if existing:
+        return Response(
+            {
+                **ClipSerializer(existing).data,
+                'duplicate': True,
+                'saved_as': 'single_selection',
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    from apps.destinations.services import get_user_destination
+    destination = get_user_destination(user)
+
+    clip = Clip.objects.create(
+        user=user,
+        url=resource['url'],
+        url_hash=u_hash,
+        title=resource['name'][:512],
+        summary=resource['description'],
+        selected_text=selected_text,
+        content_type=resource['content_type'],
+        source_platform=Clip.PLATFORM_GITHUB,
+        source_author=resource['source_repo'],
+        source_post_url=resource['source_url'],
+        destination=destination,
+        status=Clip.STATUS_DONE,
+        tags=[
+            resource['content_type'],
+            resource['pricing'],
+            'github_selection',
+        ],
+        extra_metadata={
+            'section': resource['section'],
+            'pricing': resource['pricing'],
+            'source_url': resource['source_url'],
+            'source_repo': resource['source_repo'],
+            'saved_as': 'single_selection',
+        },
+    )
+
+    # Synchronous Google Sheets export to Tools tab
+    if destination and destination.provider == 'google_sheets':
+        try:
+            from apps.destinations.services import batch_export_resources_to_destination
+            export_res = batch_export_resources_to_destination(
+                destination=destination,
+                resources=[resource],
+                source_url=resource['source_url'],
+                source_repo=resource['source_repo'],
+                saved_at_str=clip.created_at.strftime('%Y-%m-%d %H:%M:%S') if clip.created_at else '',
+            )
+            if export_res.success:
+                clip.export_status = 'done'
+                clip.export_url = export_res.external_url
+            else:
+                clip.export_status = 'failed'
+                clip.export_error = export_res.error
+            clip.save(update_fields=['export_status', 'export_url', 'export_error'])
+        except Exception as sheet_exc:
+            logger.warning('Synchronous sheets sync for selection clip failed: %s', sheet_exc)
+
+    return Response(
+        {
+            **ClipSerializer(clip).data,
+            'saved_as': 'single_selection',
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
