@@ -74,9 +74,15 @@ export interface ClipItem {
     deadline?: string;
     author?: string;
     rating?: string;
-    duration?: string;
-  };
   isFavorite?: boolean;
+  sourcePlatform?: 'web' | 'x_twitter' | 'linkedin' | 'reddit' | 'youtube' | 'github';
+  sourceAuthor?: string;
+  sourcePostUrl?: string;
+  parentClipId?: string;
+  parentClipTitle?: string;
+  childClipsCount?: number;
+  isResourceHub?: boolean;
+  extractedResourceUrl?: string;
 }
 
 export interface JobCard {

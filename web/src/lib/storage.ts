@@ -49,14 +49,28 @@ export const getStoredDestinations = (): DestinationConfig[] => {
     const item = localStorage.getItem(DESTINATIONS_KEY);
     if (!item) return INITIAL_DESTINATIONS;
     const parsed: DestinationConfig[] = JSON.parse(item);
-    const hasUnconnectedActiveExternal = parsed.some(
+    
+    // Enforce strictly one default destination
+    let foundDefault = false;
+    const normalized = parsed.map(d => {
+      if (d.isDefault) {
+        if (!foundDefault) {
+          foundDefault = true;
+          return d;
+        }
+        return { ...d, isDefault: false };
+      }
+      return d;
+    });
+
+    const hasUnconnectedActiveExternal = normalized.some(
       d => d.id !== 'dest_save_vault' && d.connected
     );
     if (hasUnconnectedActiveExternal) {
       localStorage.removeItem(DESTINATIONS_KEY);
       return INITIAL_DESTINATIONS;
     }
-    return parsed;
+    return normalized;
   } catch (e) {
     console.error('Error loading stored destinations', e);
     return INITIAL_DESTINATIONS;
