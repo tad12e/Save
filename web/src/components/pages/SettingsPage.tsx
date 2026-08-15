@@ -140,6 +140,75 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
         </div>
       </div>
 
+      {/* Destination Category Routing Mode */}
+      <div className="bg-[#080808] border border-white/10 rounded-sm p-6 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 text-sm font-bold text-white font-serif">
+          <Sliders className="w-4 h-4 text-amber-500" />
+          <span>Destination Table Routing Mode</span>
+        </div>
+        <p className="text-xs text-stone-400 font-sans leading-relaxed">
+          Choose how clips are organized in external destinations like Google Sheets, Notion, and Airtable.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 font-mono text-xs">
+          <label className="p-4 rounded-sm border bg-[#050505] border-amber-500/50 text-amber-300 flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="routingMode"
+              defaultChecked
+              className="mt-0.5 w-4 h-4 text-amber-500 accent-amber-500"
+            />
+            <div className="space-y-1">
+              <span className="font-serif font-bold text-white block text-sm">Dynamic Category Tabs</span>
+              <p className="text-[11px] text-stone-400 font-sans">
+                Automatically creates and routes clips into dedicated category tabs (<code className="text-amber-400">Jobs</code>, <code className="text-amber-400">Scholarships</code>, <code className="text-amber-400">Articles</code>, <code className="text-amber-400">Events</code>).
+              </p>
+            </div>
+          </label>
+
+          <label className="p-4 rounded-sm border bg-[#050505] border-white/10 text-stone-400 hover:border-white/20 flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="routingMode"
+              className="mt-0.5 w-4 h-4 text-amber-500 accent-amber-500"
+            />
+            <div className="space-y-1">
+              <span className="font-serif font-bold text-white block text-sm">Single Consolidated Table</span>
+              <p className="text-[11px] text-stone-400 font-sans">
+                Stores all clips in a single master sheet/table regardless of content category.
+              </p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      {/* Linked Resource Hubs (X/Twitter, Sheets, Lists) */}
+      <div className="bg-[#080808] border border-white/10 rounded-sm p-6 shadow-sm space-y-4">
+        <div className="flex items-center gap-2 text-sm font-bold text-white font-serif">
+          <Puzzle className="w-4 h-4 text-amber-500" />
+          <span>Social Media & Linked Resource Hubs</span>
+        </div>
+        <p className="text-xs text-stone-400 font-sans leading-relaxed">
+          When clipping an X/Twitter post, LinkedIn share, or article containing an embedded Google Sheet or job list:
+        </p>
+
+        <div className="space-y-2 font-mono text-xs">
+          <label className="flex items-center justify-between p-3.5 bg-[#050505] border border-white/10 rounded-sm cursor-pointer hover:border-amber-500/30 transition-all">
+            <div className="space-y-0.5">
+              <span className="font-serif text-white font-bold block text-sm">Auto-Extract Linked Sub-Rows (Parent-Child Items)</span>
+              <p className="text-[11px] text-stone-400 font-sans">
+                Extracts rows from linked Google Sheets into individual items referencing the parent tweet/post author and source URL.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              defaultChecked
+              className="w-5 h-5 rounded text-amber-500 accent-amber-500 cursor-pointer"
+            />
+          </label>
+        </div>
+      </div>
+
       {/* AI Extraction Prompt Configuration */}
       <div className="bg-[#080808] border border-white/10 rounded-sm p-6 shadow-sm space-y-4">
         <div className="flex items-center gap-2 text-sm font-serif font-bold text-white">
@@ -147,7 +216,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
           <span>AI Extraction Prompt Rules</span>
         </div>
         <p className="text-xs text-stone-400 font-sans">
-          Customize instructions passed to Gemini/Claude when parsing scraped webpage content into structured fields.
+          Customize instructions passed to Gemini when parsing scraped webpage content into structured fields.
         </p>
 
         <textarea

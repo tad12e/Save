@@ -346,6 +346,31 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
                           {clip.type}
                         </span>
                       )}
+
+                      {/* Source Platform Badge */}
+                      {clip.sourcePlatform && clip.sourcePlatform !== 'web' && (
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono border flex items-center gap-1 font-semibold ${
+                          clip.sourcePlatform === 'x_twitter' ? 'bg-black text-white border-white/20' :
+                          clip.sourcePlatform === 'linkedin' ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' :
+                          clip.sourcePlatform === 'reddit' ? 'bg-orange-600/20 text-orange-400 border-orange-500/30' :
+                          clip.sourcePlatform === 'youtube' ? 'bg-red-600/20 text-red-400 border-red-500/30' :
+                          'bg-stone-800 text-stone-300 border-white/10'
+                        }`}>
+                          <span>{clip.sourcePlatform === 'x_twitter' ? '𝕏 X' : clip.sourcePlatform === 'linkedin' ? 'in LinkedIn' : clip.sourcePlatform}</span>
+                          {clip.sourceAuthor && <span className="text-amber-400 font-normal">{clip.sourceAuthor}</span>}
+                        </span>
+                      )}
+
+                      {/* Resource Hub or Linked Sub-Item Badge */}
+                      {clip.childClipsCount && clip.childClipsCount > 0 ? (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">
+                          📦 Hub ({clip.childClipsCount} items)
+                        </span>
+                      ) : clip.parentClipId ? (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-stone-800 text-stone-400 border border-white/10">
+                          ↳ Sub-item
+                        </span>
+                      ) : null}
                     </div>
 
                     {/* Storage Mode Pill Indicator & Direct Toggle */}

@@ -71,22 +71,29 @@ export default function App() {
     async function loadBackendDestinations() {
       const backendDestList = await fetchDestinationsBackend();
       if (backendDestList && Array.isArray(backendDestList) && backendDestList.length > 0) {
+        // Find which destination the backend says is default (if any)
+        const defaultBackend = backendDestList.find((b: any) => b.is_default);
+
         setDestinations(prev => {
           return prev.map(localDest => {
             const match = backendDestList.find((b: any) => 
               b.id === localDest.id || b.provider === localDest.type || b.name.toLowerCase() === localDest.name.toLowerCase()
             );
             if (match) {
+              const isThisDefault = defaultBackend ? match.id === defaultBackend.id : match.is_default;
               return {
                 ...localDest,
                 id: match.id,
-                isDefault: match.is_default,
+                isDefault: Boolean(isThisDefault),
                 connected: match.is_active,
                 status: match.is_active ? 'active' : 'disconnected',
                 targetResourceName: match.config?.target_resource_name || localDest.targetResourceName
               };
             }
-            return localDest;
+            return {
+              ...localDest,
+              isDefault: false
+            };
           });
         });
       }
