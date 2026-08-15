@@ -41,8 +41,13 @@ class Destination(models.Model):
         return f'{self.name} ({self.provider})'
 
     def save(self, *args, **kwargs):
-        if self.is_default and self.user:
-            Destination.objects.filter(user=self.user, is_default=True).exclude(pk=self.pk).update(
-                is_default=False,
-            )
+        if self.is_default:
+            if self.user:
+                Destination.objects.filter(user=self.user, is_default=True).exclude(pk=self.pk).update(
+                    is_default=False,
+                )
+            else:
+                Destination.objects.filter(user__isnull=True, is_default=True).exclude(pk=self.pk).update(
+                    is_default=False,
+                )
         super().save(*args, **kwargs)
