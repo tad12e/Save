@@ -227,3 +227,139 @@ export async function googleAuthBackend(idToken: string) {
   return await parseJsonResponse(response, 'Google Auth failed');
 }
 
+// ---------------------------------------------------------------------------
+// Spotify Web API Integration
+// ---------------------------------------------------------------------------
+
+export interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  description: string;
+  total_tracks: number;
+  image_url: string;
+  uri: string;
+  external_url: string;
+}
+
+export interface SpotifyTrack {
+  id: string;
+  name: string;
+  artists: string;
+  album: string;
+  album_art: string;
+  uri: string;
+  external_url: string;
+  preview_url: string;
+  duration_ms: number;
+}
+
+export async function fetchSpotifyPlaylists(): Promise<SpotifyPlaylist[]> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/spotify/playlists/`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.playlists || [];
+  } catch (error) {
+    console.warn('Could not fetch Spotify playlists from backend:', error);
+    return [];
+  }
+}
+
+export async function createSpotifyPlaylist(name: string, description: string = '', isPublic: boolean = false): Promise<SpotifyPlaylist | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/spotify/playlists/`, {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ name, description, is_public: isPublic }),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not create Spotify playlist:', error);
+    return null;
+  }
+}
+
+export async function searchSpotifyTracks(query: string, limit: number = 5): Promise<SpotifyTrack[]> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/spotify/search/?q=${encodeURIComponent(query)}&limit=${limit}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.tracks || [];
+  } catch (error) {
+    console.warn('Could not search Spotify tracks:', error);
+    return [];
+  }
+}
+
+export async function addTrackToSpotifyPlaylist(params: {
+  playlist_id?: string;
+  track_uri?: string;
+  track_id?: string;
+  query?: string;
+}) {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/spotify/add-track/`, {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(params),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not add track to Spotify:', error);
+    return null;
+  }
+}
+
+export async function setMusicProviderBackend(provider: 'spotify' | 'youtube_music') {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/set-music-provider/`, {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ provider }),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not update default music provider on backend:', error);
+    return null;
+  }
+}
+
+export async function fetchCategoryRoutingRules(): Promise<Record<string, string> | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/category-rules/`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.rules || null;
+  } catch (error) {
+    console.warn('Could not fetch category routing rules from backend:', error);
+    return null;
+  }
+}
+
+export async function saveCategoryRoutingRules(rules: Record<string, string>) {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/category-rules/`, {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ rules }),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not save category routing rules to backend:', error);
+    return null;
+  }
+}
+
+
+
+
