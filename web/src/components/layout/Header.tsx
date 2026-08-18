@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   User as UserIcon,
   LogOut,
-  KeyRound
+  KeyRound,
+  Music
 } from 'lucide-react';
 import { DestinationConfig } from '../../types';
 
@@ -23,6 +24,7 @@ interface HeaderProps {
   setSearchQuery: (query: string) => void;
   destinations: DestinationConfig[];
   onQuickAddClip: () => void;
+  onOpenMusicRadar?: () => void;
   onRefreshSync: () => void;
   isRefreshing: boolean;
   theme: 'terminal' | 'dark' | 'light';
@@ -37,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   setSearchQuery,
   destinations,
   onQuickAddClip,
+  onOpenMusicRadar,
   onRefreshSync,
   isRefreshing,
   theme,
@@ -257,6 +260,18 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <KeyRound className="w-3.5 h-3.5" />
             <span>Sign In / Register</span>
+          </button>
+        )}
+
+        {/* Identify Music Radar Button */}
+        {onOpenMusicRadar && (
+          <button
+            onClick={onOpenMusicRadar}
+            className="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 px-3.5 py-2 rounded-sm text-xs font-mono tracking-wider uppercase font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+            title="Identify song playing around you with AI Music Radar"
+          >
+            <Music className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+            <span className="hidden sm:inline">Identify Music</span>
           </button>
         )}
 

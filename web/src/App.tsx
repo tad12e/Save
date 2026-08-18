@@ -13,6 +13,7 @@ import { ExtensionSimulator } from './components/extension/ExtensionSimulator';
 import { ManualAddClipModal } from './components/modals/ManualAddClipModal';
 import { CreatePageModal } from './components/modals/CreatePageModal';
 import { AuthModal } from './components/modals/AuthModal';
+import { MusicRadarModal } from './components/modals/MusicRadarModal';
 
 import { 
   DestinationConfig, 
@@ -51,6 +52,7 @@ export default function App() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showMusicRadarModal, setShowMusicRadarModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(() => {
     const storedUser = localStorage.getItem('clipper_user');
     return storedUser ? JSON.parse(storedUser) : { name: 'Tadiwos User', email: 'tadiwos@save.app' };
@@ -287,6 +289,7 @@ export default function App() {
           setSearchQuery={setSearchQuery}
           destinations={destinations}
           onQuickAddClip={() => handleOpenAddClipForPage()}
+          onOpenMusicRadar={() => setShowMusicRadarModal(true)}
           onRefreshSync={handleRefreshSync}
           isRefreshing={isRefreshing}
           theme={theme}
@@ -410,6 +413,12 @@ export default function App() {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onAuthSuccess={handleAuthSuccess}
+      />
+
+      {/* Music Radar & Song Identifier Modal */}
+      <MusicRadarModal
+        isOpen={showMusicRadarModal}
+        onClose={() => setShowMusicRadarModal(false)}
       />
 
       {/* Toast Notification Banner */}
