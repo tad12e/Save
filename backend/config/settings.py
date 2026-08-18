@@ -225,6 +225,65 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 5 * 60  # hard kill after 5 minutes
 CELERY_TASK_SOFT_TIME_LIMIT = 4 * 60  # raise SoftTimeLimitExceeded at 4 min
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+OTP_EXPIRY_MINUTES = int(os.getenv('OTP_EXPIRY_MINUTES', '10'))
+
+def _default_email_backend():
+    explicit_backend = os.getenv('EMAIL_BACKEND')
+    if explicit_backend:
+        return explicit_backend
+
+    if any(
+        os.getenv(value)
+        for value in ('EMAIL_HOST', 'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD', 'EMAIL_PORT')
+    ):
+        return 'django.core.mail.backends.smtp.EmailBackend'
+
+    return 'django.core.mail.backends.console.EmailBackend'
+
+
+EMAIL_BACKEND = _default_email_backend()
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@save.app')
+BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
+
+# ---------------------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------------------
+REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
+DJANGO_CACHE_URL = os.getenv('DJANGO_CACHE_URL', 'redis://127.0.0.1:6379/2')
+DJANGO_CACHE_BACKEND = os.getenv(
+    'DJANGO_CACHE_BACKEND',
+    'django.core.cache.backends.redis.RedisCache',
+)
+
+# ---------------------------------------------------------------------------
+# Django Cache (used for OTP rate-limiting, etc.)
+# ---------------------------------------------------------------------------
+CACHES = {
+    'default': {
+        'BACKEND': DJANGO_CACHE_BACKEND,
+        'LOCATION': DJANGO_CACHE_URL,
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Celery
+# ---------------------------------------------------------------------------
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', REDIS_URL)
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/1')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 5 * 60  # hard kill after 5 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 4 * 60  # raise SoftTimeLimitExceeded at 4 min
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     'visibility_timeout': int(os.getenv('CELERY_VISIBILITY_TIMEOUT', '3600')),
 }
@@ -240,15 +299,24 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# ---------------------------------------------------------------------------
 # OAuth Provider Keys
+# ---------------------------------------------------------------------------
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
+
+SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID', '')
+SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET', '')
+SPOTIFY_REDIRECT_URI = os.getenv(
+    'SPOTIFY_REDIRECT_URI',
+    'http://127.0.0.1:8000/api/destinations/oauth/callback/spotify/',
+)
+
+AUDD_API_TOKEN = os.getenv('AUDD_API_TOKEN', '')
 
 # ---------------------------------------------------------------------------
 # Simple JWT Authentication (LeetCode / GitHub style long-lived session)
 # ---------------------------------------------------------------------------
-from datetime import timedelta
-
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=90),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=365),
@@ -256,4 +324,3 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
-

@@ -430,3 +430,40 @@ def github_selection_save(request):
         status=status.HTTP_201_CREATED,
     )
 
+
+class AudioRecognizeView(APIView):
+    """
+    POST /api/clips/recognize-audio/
+    Receives an audio sample (base64) recorded from tab audio or microphone,
+    queries AudD / recognition engine, and returns identified track metadata + Spotify URIs.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from .services.audio_recognizer import AudioRecognizer
+
+        audio_data = request.data.get('audio', '')
+        audio_format = request.data.get('format', 'webm')
+        title_hint = request.data.get('title_hint', '')
+
+        if not audio_data:
+            return Response(
+                {'success': False, 'error': 'Audio data is required (base64 string).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        match_result = AudioRecognizer.recognize_audio(
+            audio_base64=audio_data,
+            audio_format=audio_format,
+            sample_title_hint=title_hint
+        )
+
+        if not match_result.get('success'):
+            return Response(
+                {'success': False, 'error': match_result.get('error', 'Song could not be identified')},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response(match_result, status=status.HTTP_200_OK)
+
+
