@@ -1,10 +1,12 @@
 from apps.destinations.adapters.google_sheets import GoogleSheetsAdapter
 from apps.destinations.adapters.notion import NotionAdapter
+from apps.destinations.adapters.spotify import SpotifyAdapter
 from apps.destinations.models import Destination
 
 ADAPTERS = {
     Destination.PROVIDER_NOTION: NotionAdapter(),
     Destination.PROVIDER_GOOGLE_SHEETS: GoogleSheetsAdapter(),
+    Destination.PROVIDER_SPOTIFY: SpotifyAdapter(),
 }
 
 
@@ -49,8 +51,17 @@ def get_user_destination(user, destination_id=None, content_type=None):
         if dest:
             return dest
 
-    # 1. Special rule for Music: always route to a connected music provider
+    # 1. Special rule for Music: route to preferred or default connected music provider
     if content_type == 'music':
+        preferred_music = Destination.objects.filter(
+            user=user,
+            is_active=True,
+            provider__in=['spotify', 'youtube_music'],
+            config__is_preferred_music=True,
+        ).first()
+        if preferred_music:
+            return preferred_music
+
         music_dest = Destination.objects.filter(
             user=user,
             is_active=True,
