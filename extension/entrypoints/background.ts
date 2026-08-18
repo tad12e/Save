@@ -95,6 +95,42 @@ async function handleSaveClip(data: any): Promise<any> {
   return await response.json();
 }
 
+async function handleRecognizeAudio(data: any): Promise<any> {
+  const apiUrl = getApiUrl();
+  const response = await fetch(`${apiUrl}/api/clips/recognize-audio/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      audio: data.audio,
+      format: data.format || 'webm',
+      title_hint: data.title_hint || '',
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.error || `Recognition failed with status ${response.status}`);
+  }
+
+  return await response.json();
+}
+
+async function handleSpotifyAddTrack(data: any): Promise<any> {
+  const apiUrl = getApiUrl();
+  const response = await fetch(`${apiUrl}/api/destinations/spotify/add-track/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    throw new Error(errorData?.error || `Spotify add failed with status ${response.status}`);
+  }
+
+  return await response.json();
+}
+
 export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: any) => {
     if (!message?.type) return false;
@@ -108,6 +144,20 @@ export default defineBackground(() => {
         // Ignore
       }
       return false;
+    }
+
+    if (message.type === 'RECOGNIZE_AUDIO') {
+      handleRecognizeAudio(message.data || message.payload || {})
+        .then((resData) => sendResponse({ ok: true, data: resData }))
+        .catch((err: Error) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+
+    if (message.type === 'SPOTIFY_ADD_TRACK') {
+      handleSpotifyAddTrack(message.data || message.payload || {})
+        .then((resData) => sendResponse({ ok: true, data: resData }))
+        .catch((err: Error) => sendResponse({ ok: false, error: err.message }));
+      return true;
     }
 
     if (message.type === 'SAVE_CLIP') {
