@@ -70,20 +70,24 @@ function FloatingButtonOverlay() {
     }, 1500);
   };
 
-  // Open panel on floating button click when text is selected (CASE B)
+  // Open panel on floating button click
   const handleOpenPanel = () => {
+    const isSocialMedia = /instagram\.com|tiktok\.com|youtube\.com|linkedin\.com|twitter\.com|x\.com/i.test(window.location.hostname);
     const selection = window.getSelection();
     const text = selection?.toString().trim() || '';
-    let pos = { left: window.innerWidth - 260, top: window.innerHeight / 2 - 130 };
+    let pos = {
+      left: Math.max(20, Math.min(window.innerWidth - 300, window.innerWidth - 320)),
+      top: Math.max(20, Math.min(window.innerHeight - 380, 70)),
+    };
 
     if (selection && selection.rangeCount > 0) {
       const rect = selection.getRangeAt(0).getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        pos = getPanelPosition(rect, 240, 260);
+        pos = getPanelPosition(rect, 270, 320);
       }
     }
 
-    setPanelText(text);
+    setPanelText(text || document.title || 'Web Clip');
     setPanelPos(pos);
     setPanelOpen(true);
   };
@@ -101,6 +105,8 @@ function FloatingButtonOverlay() {
           text={panelText}
           url={window.location.href}
           position={panelPos}
+          contentType="music"
+          source="floating_button"
           onClose={() => setPanelOpen(false)}
         />
       )}

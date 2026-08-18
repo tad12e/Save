@@ -134,6 +134,26 @@ export async function getDestinationForContentType(contentType?: string | null):
 }
 
 export async function getMusicPlaylists(provider: string = 'spotify'): Promise<MusicPlaylist[]> {
+  try {
+    const resp = await fetch('http://localhost:8000/api/destinations/spotify/playlists/');
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.playlists && data.playlists.length > 0) {
+        const mapped: MusicPlaylist[] = data.playlists.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          isDefault: p.id === 'clipper_tracks_default' || p.id === 'default'
+        }));
+        if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+          chrome.storage.local.set({ [`music_playlists_${provider}`]: mapped });
+        }
+        return mapped;
+      }
+    }
+  } catch (err) {
+    // Fallback to storage or defaults
+  }
+
   return new Promise((resolve) => {
     if (typeof chrome === 'undefined' || !chrome.storage?.local) {
       resolve([
