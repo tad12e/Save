@@ -49,8 +49,11 @@ const getGoogleAccessToken = () => {
   });
 };
 
-
-
+const handleAutoFill = (setter: (val: string) => void) => (e: React.AnimationEvent<HTMLInputElement>) => {
+  if (e.animationName === 'onAutoFillStart' && e.currentTarget.value) {
+    setter(e.currentTarget.value);
+  }
+};
 
 function App() {
   // Screens & Navigation
@@ -586,11 +589,21 @@ function App() {
 
             <form onSubmit={handleSignIn} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Email</label>
+                <label htmlFor="signin-email" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Email</label>
                 <input 
                   type="email"
+                  id="signin-email"
+                  name="email"
+                  autoComplete="username email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onInput={(e) => setEmail(e.currentTarget.value)}
+                  onAnimationStart={handleAutoFill(setEmail)}
+                  onBlur={(e) => {
+                    if (e.currentTarget.value && e.currentTarget.value !== email) {
+                      setEmail(e.currentTarget.value);
+                    }
+                  }}
                   placeholder="you@example.com"
                   className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 outline-none text-[14px] text-gray-800 transition-all placeholder:text-gray-400"
                   required
@@ -598,12 +611,22 @@ function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Password</label>
+                <label htmlFor="signin-password" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Password</label>
                 <div className="relative">
                   <input 
                     type={passwordVisible ? 'text' : 'password'}
+                    id="signin-password"
+                    name="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onInput={(e) => setPassword(e.currentTarget.value)}
+                    onAnimationStart={handleAutoFill(setPassword)}
+                    onBlur={(e) => {
+                      if (e.currentTarget.value && e.currentTarget.value !== password) {
+                        setPassword(e.currentTarget.value);
+                      }
+                    }}
                     placeholder="Your password"
                     className="w-full pl-3.5 pr-12 py-2.5 border border-gray-200 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 outline-none text-[14px] text-gray-800 transition-all placeholder:text-gray-400"
                     required
@@ -675,11 +698,21 @@ function App() {
 
             <form onSubmit={handleSignUp} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Full name</label>
+                <label htmlFor="signup-name" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Full name</label>
                 <input 
                   type="text"
+                  id="signup-name"
+                  name="name"
+                  autoComplete="name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  onInput={(e) => setFullName(e.currentTarget.value)}
+                  onAnimationStart={handleAutoFill(setFullName)}
+                  onBlur={(e) => {
+                    if (e.currentTarget.value && e.currentTarget.value !== fullName) {
+                      setFullName(e.currentTarget.value);
+                    }
+                  }}
                   placeholder="Tadiwos Alemu"
                   className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 outline-none text-[14px] text-gray-800 transition-all placeholder:text-gray-400"
                   required
@@ -687,11 +720,21 @@ function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Email</label>
+                <label htmlFor="signup-email" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Email</label>
                 <input 
                   type="email"
+                  id="signup-email"
+                  name="email"
+                  autoComplete="username email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onInput={(e) => setEmail(e.currentTarget.value)}
+                  onAnimationStart={handleAutoFill(setEmail)}
+                  onBlur={(e) => {
+                    if (e.currentTarget.value && e.currentTarget.value !== email) {
+                      setEmail(e.currentTarget.value);
+                    }
+                  }}
                   placeholder="you@example.com"
                   className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 outline-none text-[14px] text-gray-800 transition-all placeholder:text-gray-400"
                   required
@@ -699,12 +742,22 @@ function App() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Password</label>
+                <label htmlFor="signup-password" className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1.5">Password</label>
                 <div className="relative">
                   <input 
                     type={passwordVisible ? 'text' : 'password'}
+                    id="signup-password"
+                    name="password"
+                    autoComplete="new-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onInput={(e) => setPassword(e.currentTarget.value)}
+                    onAnimationStart={handleAutoFill(setPassword)}
+                    onBlur={(e) => {
+                      if (e.currentTarget.value && e.currentTarget.value !== password) {
+                        setPassword(e.currentTarget.value);
+                      }
+                    }}
                     placeholder="Min. 8 characters"
                     className="w-full pl-3.5 pr-12 py-2.5 border border-gray-200 rounded-xl focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 outline-none text-[14px] text-gray-800 transition-all placeholder:text-gray-400"
                     required

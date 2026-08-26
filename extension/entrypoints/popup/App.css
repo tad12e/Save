@@ -1,1 +1,10 @@
-/* Empty file since styles are handled by Tailwind CSS */
+/* Ensure Chrome Autofill triggers animation for React state sync */
+@keyframes onAutoFillStart {
+  from { /**/ }
+  to { /**/ }
+}
+
+input:-webkit-autofill {
+  animation-name: onAutoFillStart;
+  transition: background-color 50000s ease-in-out 0s;
+}
