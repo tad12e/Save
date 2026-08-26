@@ -4,6 +4,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from django.utils import timezone
 from apps.clips.services.summarize import clean_text
 from .base import BaseDestinationAdapter, ExportResult
 
@@ -188,6 +189,22 @@ def _col_letter(col_count: int) -> str:
     return result
 
 
+def _format_link_formula(url: str, default_label: str = 'Link ↗') -> str:
+    """Format a raw URL into a clean Google Sheets =HYPERLINK formula pill."""
+    if not url or str(url).strip().lower() in ('none', 'null', '', 'unspecified', '-'):
+        return '—'
+    url_clean = str(url).strip()
+    if url_clean.startswith('//'):
+        url_clean = 'https:' + url_clean
+    if not url_clean.startswith(('http://', 'https://')):
+        return url_clean
+
+    escaped_url = url_clean.replace('"', '""')
+    escaped_label = default_label.replace('"', '""')
+    return f'=HYPERLINK("{escaped_url}", "{escaped_label}")'
+
+
+
 class GoogleSheetsAdapter(BaseDestinationAdapter):
     provider = 'google_sheets'
 
@@ -223,7 +240,11 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                 new_token = data.get('access_token')
                 if new_token:
                     destination.config['access_token'] = new_token
-                    destination.save(update_fields=['config'])
+                    if data.get('refresh_token'):
+                        destination.config['refresh_token'] = data['refresh_token']
+                    destination.config['token_refreshed_at'] = timezone.now().isoformat()
+                    destination.is_active = True
+                    destination.save(update_fields=['config', 'is_active'])
                     logger.info('Successfully refreshed Google OAuth access token.')
                     return new_token
         except Exception as exc:
@@ -268,7 +289,11 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
 
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
-                return json.loads(response.read().decode())
+                sheet_data = json.loads(response.read().decode())
+                new_sheet_id = sheet_data.get('spreadsheetId')
+                if new_sheet_id:
+                    self._beautify_tab(new_sheet_id, access_token, 'Clips', STANDARD_HEADERS, sheet_id=0)
+                return sheet_data
         except (urllib.error.HTTPError, urllib.error.URLError) as exc:
             logger.error('Failed to create Google Sheet: %s', exc)
             return None
@@ -395,6 +420,7 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
         except Exception as h_exc:
             logger.warning('Could not write header row for tab %s: %s', tab_name, h_exc)
 
+        self._beautify_tab(spreadsheet_id, tok, tab_name, headers_to_write)
         return True, tok, headers_to_write
 
     def export_clip(self, clip, destination) -> ExportResult:
@@ -467,77 +493,76 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
         deadline_str = ''
         if hasattr(clip, 'deadline_date') and clip.deadline_date:
             deadline_str = clip.deadline_date.strftime('%Y-%m-%d')
+        elif extra.get('deadline'):
+            deadline_str = clean_text(str(extra.get('deadline')))
 
         platform_str = clip.get_source_platform_display() if hasattr(clip, 'get_source_platform_display') else getattr(clip, 'source_platform', 'web')
-        author_str = getattr(clip, 'source_author', '') or ''
-        saved_at_str = clip.created_at.isoformat() if clip.created_at else ''
+        author_str = getattr(clip, 'source_author', '') or extra.get('author') or ''
+        
+        # Native Date/Time formatting for Google Sheets (YYYY-MM-DD HH:MM)
+        saved_at_str = clip.created_at.strftime('%Y-%m-%d %H:%M') if getattr(clip, 'created_at', None) else ''
 
-        # Build row values aligning with active_headers
+        # Ensure active_headers is populated
+        if not active_headers:
+            active_headers = CATEGORY_SCHEMAS.get(target_tab, CATEGORY_SCHEMAS['Clips'])['headers']
+
+        cat_fields = extra.get('category_fields') or {}
+        company_val = extra.get('company') or cat_fields.get('company') or author_str or ''
+        location_val = extra.get('location') or cat_fields.get('location') or ('Remote' if 'remote' in (clip.tags or []) else 'Unspecified')
+        salary_val = extra.get('salary') or cat_fields.get('salary') or extra.get('award_amount') or cat_fields.get('award_amount') or 'Not Specified'
+        summary_val = extra.get('requirements_summary') or cat_fields.get('requirements_summary') or extra.get('key_takeaways') or cat_fields.get('key_takeaways') or clip.summary or ''
+
+        # Map values aligning with each header in active_headers
         row = []
-        if dynamic_row and active_headers:
-            # Map dynamic AI values to the active columns of the tab
-            for header in active_headers:
-                h_clean = header.strip()
-                h_lower = h_clean.lower()
-                val = dynamic_row.get(h_clean) or dynamic_row.get(header)
-                if val:
-                    row.append(clean_text(str(val)))
-                elif any(k in h_lower for k in ('title', 'name', 'role')):
-                    row.append(clean_text(clip.title or ''))
-                elif any(k in h_lower for k in ('job link', 'job url', 'application url', 'apply link', 'apply url', 'resource link', 'resource url')):
-                    extracted_link = (
-                        extra.get('job_url')
-                        or extra.get('apply_url')
-                        or extra.get('extracted_resource_url')
-                        or getattr(clip, 'extracted_resource_url', None)
-                        or (clip.url if not any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com/feed')) else None)
-                    )
-                    row.append(clean_text(extracted_link or 'None'))
-                elif 'source' in h_lower and any(k in h_lower for k in ('url', 'link', 'post')):
-                    source_link = getattr(clip, 'source_post_url', '') or (clip.url if any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com')) else '')
-                    row.append(clean_text(source_link or 'None'))
-                elif any(k in h_lower for k in ('url', 'link')):
-                    extracted_link = (
-                        extra.get('job_url')
-                        or extra.get('apply_url')
-                        or extra.get('extracted_resource_url')
-                        or getattr(clip, 'extracted_resource_url', None)
-                    )
-                    if extracted_link and not any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com/feed')):
-                        row.append(clean_text(extracted_link))
-                    else:
-                        row.append(clip.url or 'None')
-                elif any(k in h_lower for k in ('summary', 'overview', 'description', 'notes', 'takeaway')):
-                    row.append(clean_text(clip.summary or ''))
-                elif 'platform' in h_lower or 'source' in h_lower and 'author' not in h_lower:
-                    row.append(platform_str)
-                elif 'author' in h_lower or 'host' in h_lower:
-                    row.append(clean_text(author_str or extra.get('author') or ''))
-                elif 'saved' in h_lower or 'date' in h_lower and 'deadline' not in h_lower:
-                    row.append(saved_at_str)
-                elif 'deadline' in h_lower:
-                    row.append(deadline_str or 'Open')
-                elif 'company' in h_lower:
-                    row.append(clean_text(extra.get('company') or author_str or ''))
-                elif 'location' in h_lower:
-                    row.append(clean_text(extra.get('location') or ''))
-                elif 'salary' in h_lower or 'price' in h_lower or 'award' in h_lower:
-                    row.append(clean_text(extra.get('salary') or extra.get('award_amount') or ''))
-                elif 'tags' in h_lower:
-                    row.append(clean_text(', '.join(clip.tags or [])))
-                else:
-                    row.append('')
-        else:
-            # Fallback to hardcoded category schema builder if AI dynamic mapping is not available
-            schema = CATEGORY_SCHEMAS.get(target_tab, CATEGORY_SCHEMAS['Clips'])
-            row = schema['row_builder'](
-                clip=clip,
-                extra=extra,
-                deadline=deadline_str,
-                platform=platform_str,
-                author=author_str,
-                saved_at=saved_at_str,
-            )
+        for header in active_headers:
+            h_clean = header.strip()
+            h_lower = h_clean.lower()
+            val = (dynamic_row or {}).get(h_clean) or (dynamic_row or {}).get(header)
+
+            if any(k in h_lower for k in ('job link', 'job url', 'application url', 'apply link', 'apply url', 'resource link', 'resource url')):
+                extracted_link = (
+                    extra.get('job_url')
+                    or extra.get('apply_url')
+                    or extra.get('extracted_resource_url')
+                    or getattr(clip, 'extracted_resource_url', None)
+                    or (clip.url if not any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com/feed')) else None)
+                )
+                row.append(_format_link_formula(val or extracted_link or clip.url, 'Apply ↗'))
+            elif 'source' in h_lower and any(k in h_lower for k in ('url', 'link', 'post')):
+                source_link = getattr(clip, 'source_post_url', '') or (clip.url if any(d in (clip.url or '') for d in ('x.com', 'twitter.com', 'linkedin.com')) else '')
+                row.append(_format_link_formula(val or source_link, 'Source Post ↗'))
+            elif any(k in h_lower for k in ('url', 'link', 'website')):
+                row.append(_format_link_formula(val or clip.url, 'Open Link ↗'))
+            elif any(k in h_lower for k in ('title', 'name', 'role')):
+                raw_t = clean_text(val or clip.title or '')
+                row.append(raw_t[:62] + '...' if len(raw_t) > 65 else raw_t)
+            elif any(k in h_lower for k in ('saved', 'date')) and 'deadline' not in h_lower:
+                row.append(saved_at_str)
+            elif 'deadline' in h_lower:
+                row.append(clean_text(val or deadline_str or 'Open'))
+            elif 'company' in h_lower:
+                row.append(clean_text(val or company_val))
+            elif 'location' in h_lower or 'remote' in h_lower:
+                row.append(clean_text(val or location_val))
+            elif any(k in h_lower for k in ('salary', 'comp', 'price', 'award')):
+                row.append(clean_text(val or salary_val))
+            elif any(k in h_lower for k in ('summary', 'overview', 'description', 'notes', 'takeaway', 'requirement')):
+                full_sum = clean_text(val or summary_val)
+                preview = full_sum[:95] + '...' if len(full_sum) > 95 else full_sum
+                row.append(preview)
+            elif 'platform' in h_lower:
+                row.append(clean_text(val or platform_str))
+            elif any(k in h_lower for k in ('author', 'host', 'organizer', 'sponsor')):
+                row.append(clean_text(val or author_str or extra.get('organizer') or extra.get('sponsor') or ''))
+            elif 'tag' in h_lower or 'topic' in h_lower:
+                raw_tags = clean_text(val or ', '.join(clip.tags or []))
+                row.append(raw_tags[:42] + '...' if len(raw_tags) > 45 else raw_tags)
+            elif 'type' in h_lower or 'category' in h_lower:
+                row.append(clean_text(val or clip.content_type or 'webpage'))
+            elif val:
+                row.append(clean_text(str(val)))
+            else:
+                row.append('')
 
         end_col = _col_letter(len(row))
         range_name = urllib.parse.quote(f'{target_tab}!A:{end_col}')
@@ -575,6 +600,7 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                     )
                     try:
                         data = _append_row(refreshed_token)
+                        access_token = refreshed_token
                     except Exception as retry_exc:
                         return ExportResult(success=False, error=f'Google Sheets API retry error: {retry_exc}')
                 else:
@@ -584,6 +610,9 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                 return ExportResult(success=False, error=f'Google Sheets API error: {body}')
         except urllib.error.URLError as exc:
             return ExportResult(success=False, error=f'Google Sheets request failed: {exc}')
+
+        # Ensure tab is beautifully formatted (navy header, banding, frozen row, proper widths, date format)
+        self._beautify_tab(spreadsheet_id, access_token, target_tab, active_headers)
 
         sheet_url = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
         updated_range = data.get('updates', {}).get('updatedRange', '')
@@ -597,11 +626,38 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
         col_count: int,
         sheet_id: int | None = None,
     ):
-        """Format header row: bold, dark background #1a1a2e, white text #ffffff, freeze row 1, auto-resize."""
+        """Backward-compatible wrapper pointing to _beautify_tab."""
+        self._beautify_tab(spreadsheet_id, access_token, tab_name, [], sheet_id=sheet_id)
+
+    def _beautify_tab(
+        self,
+        spreadsheet_id: str,
+        access_token: str,
+        tab_name: str,
+        headers: list[str],
+        sheet_id: int | None = None,
+    ):
+        """
+        Apply modern executive-grade dashboard styling to a Google Sheets tab:
+        1. Deep Navy (#1A365D) Header with bold white text, Roboto font, centered vertically.
+        2. Taller header row height (38px).
+        3. Frozen Row 1 so headers remain pinned while scrolling.
+        4. Alternating Row Banding (Zebra striping: pure white and soft cool-slate tint).
+        5. Data rows vertical alignment (MIDDLE), modern font (Roboto, 10pt), soft borders (#E2E8F0).
+        6. Native Date/Time number formatting (yyyy-mm-dd hh:mm) and center alignment for date columns.
+        7. Center alignment for status, deadlines, platform, author, and link badge columns.
+        8. Auto-resizing all columns + enforcing sensible minimum widths.
+        """
+        if not access_token or access_token.startswith('mock_') or access_token == 'demo_google_sheets_token':
+            return
+
+        col_count = len(headers) if headers else 10
+        existing_banded_ranges = []
+
         try:
             if sheet_id is None:
                 meta_req = urllib.request.Request(
-                    f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}?fields=sheets(properties(sheetId,title))',
+                    f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}?fields=sheets(properties(sheetId,title),bandedRanges)',
                     headers={'Authorization': f'Bearer {access_token}'},
                 )
                 with urllib.request.urlopen(meta_req, timeout=15) as resp:
@@ -609,13 +665,14 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                     for s in meta.get('sheets', []):
                         if s.get('properties', {}).get('title') == tab_name:
                             sheet_id = s.get('properties', {}).get('sheetId')
+                            existing_banded_ranges = s.get('bandedRanges', [])
                             break
 
             if sheet_id is None:
                 return
 
             requests = [
-                # 1. Format Header Row (Dark background #1a1a2e, bold white text)
+                # 1. Header Row (Deep Navy #1A365D, bold white text, Roboto font, vertical MIDDLE)
                 {
                     'repeatCell': {
                         'range': {
@@ -627,32 +684,104 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                         },
                         'cell': {
                             'userEnteredFormat': {
-                                'backgroundColor': {'red': 0.102, 'green': 0.102, 'blue': 0.180},
+                                'backgroundColor': {'red': 0.102, 'green': 0.212, 'blue': 0.365},
                                 'textFormat': {
                                     'bold': True,
                                     'foregroundColor': {'red': 1.0, 'green': 1.0, 'blue': 1.0},
                                     'fontSize': 10,
+                                    'fontFamily': 'Roboto',
                                 },
                                 'horizontalAlignment': 'LEFT',
                                 'verticalAlignment': 'MIDDLE',
+                                'wrapStrategy': 'WRAP',
+                                'borders': {
+                                    'bottom': {
+                                        'style': 'SOLID_MEDIUM',
+                                        'color': {'red': 0.06, 'green': 0.14, 'blue': 0.26},
+                                    }
+                                },
                             }
                         },
-                        'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
+                        'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy,borders)',
                     }
                 },
-                # 2. Freeze Row 1
+                # 2. Freeze Row 1 & Show Gridlines
                 {
                     'updateSheetProperties': {
                         'properties': {
                             'sheetId': sheet_id,
                             'gridProperties': {
                                 'frozenRowCount': 1,
+                                'hideGridlines': False,
                             },
                         },
-                        'fields': 'gridProperties.frozenRowCount',
+                        'fields': 'gridProperties.frozenRowCount,gridProperties.hideGridlines',
                     }
                 },
-                # 3. Auto-resize all columns
+                # 3. Header Row Height = 46px
+                {
+                    'updateDimensionProperties': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'dimension': 'ROWS',
+                            'startIndex': 0,
+                            'endIndex': 1,
+                        },
+                        'properties': {'pixelSize': 46},
+                        'fields': 'pixelSize',
+                    }
+                },
+                # 3b. Data Rows Height = 44px (generous breathing room, never tight or cramped)
+                {
+                    'updateDimensionProperties': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'dimension': 'ROWS',
+                            'startIndex': 1,
+                            'endIndex': 200,
+                        },
+                        'properties': {'pixelSize': 44},
+                        'fields': 'pixelSize',
+                    }
+                },
+                # 4. Base Data Rows Styling (Font Roboto 10pt, vertical MIDDLE, subtle borders #E2E8F0)
+                {
+                    'repeatCell': {
+                        'range': {
+                            'sheetId': sheet_id,
+                            'startRowIndex': 1,
+                            'startColumnIndex': 0,
+                            'endColumnIndex': col_count,
+                        },
+                        'cell': {
+                            'userEnteredFormat': {
+                                'textFormat': {
+                                    'fontSize': 10,
+                                    'fontFamily': 'Roboto',
+                                    'foregroundColor': {'red': 0.12, 'green': 0.16, 'blue': 0.22},
+                                },
+                                'verticalAlignment': 'MIDDLE',
+                                'wrapStrategy': 'CLIP',
+                                'borders': {
+                                    'top': {
+                                        'style': 'SOLID',
+                                        'color': {'red': 0.886, 'green': 0.910, 'blue': 0.941},
+                                    },
+                                    'bottom': {
+                                        'style': 'SOLID',
+                                        'color': {'red': 0.886, 'green': 0.910, 'blue': 0.941},
+                                    },
+                                    'right': {
+                                        'style': 'SOLID',
+                                        'color': {'red': 0.886, 'green': 0.910, 'blue': 0.941},
+                                    },
+                                },
+                            }
+                        },
+                        'fields': 'userEnteredFormat(textFormat,verticalAlignment,wrapStrategy,borders)',
+                    }
+                },
+                # 5. Auto-Resize Columns
                 {
                     'autoResizeDimensions': {
                         'dimensions': {
@@ -665,6 +794,351 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                 },
             ]
 
+            # Retroactively format existing rows in this tab:
+            # 1. Turn raw URLs into clean =HYPERLINK("...", "Link ↗")
+            # 2. Attach full text to cell note (so hovering shows the full summary) and truncate cell preview
+            try:
+                val_url = f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{urllib.parse.quote(tab_name)}!A1:Z100?valueRenderOption=FORMULA'
+                val_req = urllib.request.Request(val_url, headers={'Authorization': f'Bearer {access_token}'})
+                with urllib.request.urlopen(val_req, timeout=15) as val_resp:
+                    val_data = json.loads(val_resp.read().decode())
+                    tab_rows = val_data.get('values', [])
+
+                if tab_rows and len(tab_rows) > 1:
+                    tab_headers = [str(h).strip().lower() for h in tab_rows[0]]
+                    u_col = None
+                    s_col = None
+                    p_col = None
+                    t_col = None
+                    tag_col = None
+                    for idx, h in enumerate(tab_headers):
+                        if h == 'url' or ('link' in h and 'parent' not in h and 'hub' not in h and 'source' not in h):
+                            u_col = idx
+                        elif any(k in h for k in ('summary', 'overview', 'description', 'notes', 'takeaway')):
+                            s_col = idx
+                        elif 'parent' in h or 'hub' in h or 'source' in h:
+                            p_col = idx
+                        elif any(k in h for k in ('title', 'name', 'role')):
+                            t_col = idx
+                        elif 'tag' in h or 'topic' in h:
+                            tag_col = idx
+
+                    note_reqs = []
+                    modified = False
+                    for r_i in range(1, len(tab_rows)):
+                        r = tab_rows[r_i]
+                        # 1. URL Link Pill
+                        if u_col is not None and len(r) > u_col:
+                            raw_u = str(r[u_col]).strip()
+                            if raw_u.startswith(('http://', 'https://', '//')):
+                                r[u_col] = _format_link_formula(raw_u, 'Link ↗')
+                                modified = True
+                        # 2. Parent / Source Link Pill
+                        if p_col is not None and len(r) > p_col:
+                            raw_p = str(r[p_col]).strip()
+                            if raw_p.startswith(('http://', 'https://', '//')):
+                                r[p_col] = _format_link_formula(raw_p, 'Source ↗')
+                                modified = True
+                        # 3. Title (Hover Note + Clean Preview)
+                        if t_col is not None and len(r) > t_col:
+                            full_title = str(r[t_col]).strip()
+                            if full_title and not full_title.startswith('='):
+                                note_reqs.append({
+                                    'repeatCell': {
+                                        'range': {
+                                            'sheetId': sheet_id,
+                                            'startRowIndex': r_i,
+                                            'endRowIndex': r_i + 1,
+                                            'startColumnIndex': t_col,
+                                            'endColumnIndex': t_col + 1,
+                                        },
+                                        'cell': {'note': f"Full Title:\n{full_title}"},
+                                        'fields': 'note',
+                                    }
+                                })
+                                clean_t = ' '.join(full_title.split())
+                                if len(clean_t) > 65:
+                                    clean_t = clean_t[:62] + '...'
+                                if clean_t != full_title:
+                                    r[t_col] = clean_t
+                                    modified = True
+                        # 4. Summary (Hover Note + Clean 1-Line Preview)
+                        if s_col is not None and len(r) > s_col:
+                            full_s = str(r[s_col]).strip()
+                            if full_s and not full_s.startswith('='):
+                                note_reqs.append({
+                                    'repeatCell': {
+                                        'range': {
+                                            'sheetId': sheet_id,
+                                            'startRowIndex': r_i,
+                                            'endRowIndex': r_i + 1,
+                                            'startColumnIndex': s_col,
+                                            'endColumnIndex': s_col + 1,
+                                        },
+                                        'cell': {'note': f"Full AI Summary:\n{full_s}"},
+                                        'fields': 'note',
+                                    }
+                                })
+                                clean_s = ' '.join(full_s.split())
+                                if len(clean_s) > 95:
+                                    clean_s = clean_s[:92] + '...'
+                                if clean_s != full_s:
+                                    r[s_col] = clean_s
+                                    modified = True
+                        # 5. Tags (Hover Note + Clean Preview)
+                        if tag_col is not None and len(r) > tag_col:
+                            full_tags = str(r[tag_col]).strip()
+                            if full_tags and not full_tags.startswith('='):
+                                note_reqs.append({
+                                    'repeatCell': {
+                                        'range': {
+                                            'sheetId': sheet_id,
+                                            'startRowIndex': r_i,
+                                            'endRowIndex': r_i + 1,
+                                            'startColumnIndex': tag_col,
+                                            'endColumnIndex': tag_col + 1,
+                                        },
+                                        'cell': {'note': f"All Extracted Tags:\n{full_tags}"},
+                                        'fields': 'note',
+                                    }
+                                })
+                                clean_tags = ' '.join(full_tags.split())
+                                if len(clean_tags) > 45:
+                                    clean_tags = clean_tags[:42] + '...'
+                                if clean_tags != full_tags:
+                                    r[tag_col] = clean_tags
+                                    modified = True
+
+                    if modified:
+                        put_url = f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{urllib.parse.quote(tab_name)}!A1:Z{len(tab_rows)}?valueInputOption=USER_ENTERED'
+                        put_req = urllib.request.Request(
+                            put_url,
+                            data=json.dumps({'values': tab_rows}).encode(),
+                            headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
+                            method='PUT',
+                        )
+                        with urllib.request.urlopen(put_req, timeout=15):
+                            pass
+
+                    if note_reqs:
+                        requests.extend(note_reqs)
+            except Exception as scan_err:
+                logger.info('Retroactive row scan in beautify skipped: %s', scan_err)
+
+            # 6. Column-specific formatting (Dates, Deadlines, Links, Platform, Minimum widths)
+            for idx, h in enumerate(headers):
+                h_clean = str(h).strip().lower()
+
+                # Built-in Date/Time formatting for Saved At / Date columns
+                if ('saved' in h_clean or 'date' in h_clean) and 'deadline' not in h_clean:
+                    requests.append({
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'startRowIndex': 1,
+                                'startColumnIndex': idx,
+                                'endColumnIndex': idx + 1,
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'numberFormat': {
+                                        'type': 'DATE_TIME',
+                                        'pattern': 'yyyy-mm-dd hh:mm',
+                                    },
+                                    'horizontalAlignment': 'CENTER',
+                                }
+                            },
+                            'fields': 'userEnteredFormat(numberFormat,horizontalAlignment)',
+                        }
+                    })
+                    requests.append({
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': idx,
+                                'endIndex': idx + 1,
+                            },
+                            'properties': {'pixelSize': 140},
+                            'fields': 'pixelSize',
+                        }
+                    })
+                elif 'deadline' in h_clean:
+                    requests.append({
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'startRowIndex': 1,
+                                'startColumnIndex': idx,
+                                'endColumnIndex': idx + 1,
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'horizontalAlignment': 'CENTER',
+                                }
+                            },
+                            'fields': 'userEnteredFormat(horizontalAlignment)',
+                        }
+                    })
+                    requests.append({
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': idx,
+                                'endIndex': idx + 1,
+                            },
+                            'properties': {'pixelSize': 120},
+                            'fields': 'pixelSize',
+                        }
+                    })
+                elif any(k in h_clean for k in ('url', 'link')):
+                    requests.append({
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'startRowIndex': 1,
+                                'startColumnIndex': idx,
+                                'endColumnIndex': idx + 1,
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'horizontalAlignment': 'CENTER',
+                                }
+                            },
+                            'fields': 'userEnteredFormat(horizontalAlignment)',
+                        }
+                    })
+                    requests.append({
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': idx,
+                                'endIndex': idx + 1,
+                            },
+                            'properties': {'pixelSize': 130},
+                            'fields': 'pixelSize',
+                        }
+                    })
+                elif 'platform' in h_clean or 'author' in h_clean:
+                    requests.append({
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'startRowIndex': 1,
+                                'startColumnIndex': idx,
+                                'endColumnIndex': idx + 1,
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'horizontalAlignment': 'CENTER',
+                                }
+                            },
+                            'fields': 'userEnteredFormat(horizontalAlignment)',
+                        }
+                    })
+                    requests.append({
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': idx,
+                                'endIndex': idx + 1,
+                            },
+                            'properties': {'pixelSize': 130},
+                            'fields': 'pixelSize',
+                        }
+                    })
+                elif any(k in h_clean for k in ('title', 'name', 'role')):
+                    requests.append({
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': idx,
+                                'endIndex': idx + 1,
+                            },
+                            'properties': {'pixelSize': 220},
+                            'fields': 'pixelSize',
+                        }
+                    })
+                elif any(k in h_clean for k in ('summary', 'requirement', 'overview', 'notes', 'takeaway')):
+                    requests.append({
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': idx,
+                                'endIndex': idx + 1,
+                            },
+                            'properties': {'pixelSize': 280},
+                            'fields': 'pixelSize',
+                        }
+                    })
+                elif any(k in h_clean for k in ('company', 'organizer', 'sponsor', 'location', 'remote')):
+                    requests.append({
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': idx,
+                                'endIndex': idx + 1,
+                            },
+                            'properties': {'pixelSize': 150},
+                            'fields': 'pixelSize',
+                        }
+                    })
+                elif any(k in h_clean for k in ('salary', 'comp', 'price', 'award')):
+                    requests.append({
+                        'repeatCell': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'startRowIndex': 1,
+                                'startColumnIndex': idx,
+                                'endColumnIndex': idx + 1,
+                            },
+                            'cell': {
+                                'userEnteredFormat': {
+                                    'horizontalAlignment': 'CENTER',
+                                }
+                            },
+                            'fields': 'userEnteredFormat(horizontalAlignment)',
+                        }
+                    })
+                    requests.append({
+                        'updateDimensionProperties': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'dimension': 'COLUMNS',
+                                'startIndex': idx,
+                                'endIndex': idx + 1,
+                            },
+                            'properties': {'pixelSize': 130},
+                            'fields': 'pixelSize',
+                        }
+                    })
+
+            # 7. Alternating Row Banding (Zebra striping)
+            if not existing_banded_ranges:
+                requests.append({
+                    'addBanding': {
+                        'bandedRange': {
+                            'range': {
+                                'sheetId': sheet_id,
+                                'startRowIndex': 0,
+                                'startColumnIndex': 0,
+                                'endColumnIndex': col_count,
+                            },
+                            'rowProperties': {
+                                'headerColor': {'red': 0.102, 'green': 0.212, 'blue': 0.365},
+                                'firstBandColor': {'red': 1.0, 'green': 1.0, 'blue': 1.0},
+                                'secondBandColor': {'red': 0.957, 'green': 0.969, 'blue': 0.984},
+                            },
+                        }
+                    }
+                })
+
             batch_req = urllib.request.Request(
                 f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}:batchUpdate',
                 data=json.dumps({'requests': requests}).encode(),
@@ -674,10 +1148,64 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                 },
                 method='POST',
             )
-            with urllib.request.urlopen(batch_req, timeout=15):
-                logger.info('Formatted header row and froze row 1 for tab %s in Google Sheet %s', tab_name, spreadsheet_id)
+            with urllib.request.urlopen(batch_req, timeout=20):
+                logger.info('Successfully applied modern dashboard styling to tab %s in Google Sheet %s', tab_name, spreadsheet_id)
+        except urllib.error.HTTPError as h_err:
+            err_msg = h_err.read().decode() if h_err.fp else str(h_err)
+            if any(k in err_msg.lower() for k in ('banded', 'already exists', 'alternating background', 'addbanding')) :
+                try:
+                    retry_requests = [r for r in requests if 'addBanding' not in r]
+                    retry_req = urllib.request.Request(
+                        f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}:batchUpdate',
+                        data=json.dumps({'requests': retry_requests}).encode(),
+                        headers={
+                            'Authorization': f'Bearer {access_token}',
+                            'Content-Type': 'application/json',
+                        },
+                        method='POST',
+                    )
+                    with urllib.request.urlopen(retry_req, timeout=20):
+                        logger.info('Applied styling without duplicate banding to tab %s', tab_name)
+                except Exception as retry_err:
+                    logger.warning('Retry formatting failed for tab %s: %s', tab_name, retry_err)
+            else:
+                logger.warning('Failed beautifying tab %s (HTTP %s): %s', tab_name, h_err.code, err_msg)
         except Exception as exc:
-            logger.warning('Failed formatting header row for tab %s: %s', tab_name, exc)
+            logger.warning('Failed beautifying tab %s: %s', tab_name, exc)
+
+    def beautify_all_tabs(self, destination, spreadsheet_id: str | None = None) -> dict:
+        """
+        Retroactively apply executive dashboard styling to every tab in the connected Google Sheet.
+        """
+        access_token = destination.config.get('access_token')
+        sheet_id_target = spreadsheet_id or destination.config.get('spreadsheet_id')
+        if not access_token and destination.config.get('refresh_token'):
+            access_token = self._refresh_access_token(destination)
+        if not access_token or not sheet_id_target:
+            return {'success': False, 'error': 'Missing access token or spreadsheet_id'}
+
+        try:
+            meta_req = urllib.request.Request(
+                f'https://sheets.googleapis.com/v4/spreadsheets/{sheet_id_target}?fields=sheets(properties(sheetId,title))',
+                headers={'Authorization': f'Bearer {access_token}'},
+            )
+            with urllib.request.urlopen(meta_req, timeout=20) as resp:
+                meta = json.loads(resp.read().decode())
+
+            beautified = []
+            for s in meta.get('sheets', []):
+                t_name = s.get('properties', {}).get('title')
+                s_id = s.get('properties', {}).get('sheetId')
+                headers = self._get_existing_tab_headers(sheet_id_target, access_token, t_name)
+                if not headers:
+                    headers = CATEGORY_SCHEMAS.get(t_name, CATEGORY_SCHEMAS['Clips'])['headers']
+                self._beautify_tab(sheet_id_target, access_token, t_name, headers, sheet_id=s_id)
+                beautified.append(t_name)
+
+            return {'success': True, 'beautified_tabs': beautified}
+        except Exception as exc:
+            logger.error('Failed to beautify all tabs for sheet %s: %s', sheet_id_target, exc)
+            return {'success': False, 'error': str(exc)}
 
     def batch_export_tools(
         self,
@@ -689,7 +1217,7 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
     ) -> ExportResult:
         """
         Batch export all individual resources from a list repository to the "Tools" tab in Google Sheets.
-        Uses a single values_append batch call.
+        Uses a single values_append batch call with modern formatting.
         """
         if not resources:
             return ExportResult(success=True, external_url='', external_id='')
@@ -737,13 +1265,13 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
         for r in resources:
             row = [
                 clean_text(r.get('name') or ''),
-                r.get('url') or '',
+                _format_link_formula(r.get('url') or '', 'Website ↗'),
                 clean_text(r.get('description') or ''),
                 clean_text(r.get('section') or 'General'),
                 clean_text(r.get('pricing') or 'free tier'),
                 clean_text(r.get('content_type') or 'tool'),
                 clean_text(r.get('source_repo') or source_repo or ''),
-                clean_text(r.get('source_url') or source_url or ''),
+                _format_link_formula(r.get('source_url') or source_url or '', 'Repo ↗'),
                 saved_at_str or r.get('saved_at') or '',
             ]
             rows.append(row)
@@ -788,7 +1316,7 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
             return ExportResult(success=False, error=f'Google Sheets batch request failed: {exc}')
 
         # Format header row and auto-resize
-        self._format_tab_headers(spreadsheet_id, access_token, target_tab, len(headers))
+        self._beautify_tab(spreadsheet_id, access_token, target_tab, headers)
 
         sheet_url = f'https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit#gid=0'
         updated_range = data.get('updates', {}).get('updatedRange', '')
