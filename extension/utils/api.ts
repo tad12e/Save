@@ -106,7 +106,13 @@ class ApiService {
         headers,
       });
 
-      if (response.status === 401 && !endpoint.includes('/login') && !endpoint.includes('/register')) {
+      if (
+        response.status === 401 &&
+        !endpoint.includes('/login') &&
+        !endpoint.includes('/signin') &&
+        !endpoint.includes('/register') &&
+        !endpoint.includes('/signup')
+      ) {
         // Try token refresh or notify user
         this.logout();
         throw new Error('Session expired. Please log in again.');
@@ -116,7 +122,21 @@ class ApiService {
         let errorMsg = `Request failed: ${response.statusText}`;
         try {
           const errData = await response.json();
-          errorMsg = errData.error || errData.detail || JSON.stringify(errData);
+          if (errData.error) {
+            errorMsg = errData.error;
+          } else if (errData.detail) {
+            errorMsg = errData.detail;
+          } else if (errData.message) {
+            errorMsg = errData.message;
+          } else if (errData.non_field_errors && Array.isArray(errData.non_field_errors) && errData.non_field_errors.length) {
+            errorMsg = errData.non_field_errors[0];
+          } else if (typeof errData === 'object' && errData !== null) {
+            const firstKey = Object.keys(errData)[0];
+            if (firstKey) {
+              const val = errData[firstKey];
+              errorMsg = Array.isArray(val) ? val[0] : String(val);
+            }
+          }
         } catch {
           // ignore parsing error
         }
@@ -175,7 +195,7 @@ class ApiService {
   // --- Auth Endpoints ---
 
   async register(email: string, password: string, name: string): Promise<AuthResponse> {
-    const res = await this.request<AuthResponse>('/api/auth/register/', {
+    const res = await this.request<AuthResponse>('/api/auth/signup/', {
       method: 'POST',
       body: JSON.stringify({ email, password, name }),
     });
@@ -184,7 +204,7 @@ class ApiService {
   }
 
   async login(email: string, password: string): Promise<AuthResponse> {
-    const res = await this.request<AuthResponse>('/api/auth/login/', {
+    const res = await this.request<AuthResponse>('/api/auth/signin/', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
@@ -223,10 +243,12 @@ class ApiService {
   }
 
   async googleAuth(accessToken: string): Promise<AuthResponse> {
-    const res = await this.request<AuthResponse>('/api/auth/google/', {
+    const res = await this.request<AuthResponse>('/api/auth/social/google/', {
       method: 'POST',
       body: JSON.stringify({
         google_access_token: accessToken,
+        token: accessToken,
+        id_token: accessToken,
       }),
     });
     this.saveAuth(res);

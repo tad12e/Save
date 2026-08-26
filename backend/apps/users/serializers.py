@@ -172,12 +172,20 @@ class SigninSerializer(serializers.Serializer):
 
 
 class GoogleAuthSerializer(serializers.Serializer):
-    google_access_token = serializers.CharField(write_only=True)
+    google_access_token = serializers.CharField(write_only=True, required=False)
+    token = serializers.CharField(write_only=True, required=False)
+    id_token = serializers.CharField(write_only=True, required=False)
     name = serializers.CharField(max_length=255, required=False, allow_blank=True)
     avatar_url = serializers.URLField(required=False, allow_blank=True)
 
     def validate(self, attrs):
-        access_token = attrs['google_access_token']
+        access_token = (
+            attrs.get('google_access_token')
+            or attrs.get('token')
+            or attrs.get('id_token')
+        )
+        if not access_token:
+            raise serializers.ValidationError({'google_access_token': 'Token is required.'})
 
         try:
             google_profile = verify_google_access_token(access_token)
