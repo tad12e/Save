@@ -180,24 +180,32 @@ class DestinationAuthorizeView(APIView):
         is_real_oauth = False
         auth_url = None
 
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        user = request.user
+        state_str = urllib.parse.quote(f"user_{user.id}:{access_type}")
+
         if provider == 'google_sheets':
             client_id = os.getenv('GOOGLE_CLIENT_ID', getattr(settings, 'GOOGLE_CLIENT_ID', ''))
             if client_id:
                 is_real_oauth = True
-                prompt = 'consent' if access_type == 'full' else 'select_account'
-                scopes_str = 'email profile https://www.googleapis.com/auth/spreadsheets' if access_type == 'full' else 'email profile'
+                prompt = 'consent select_account'
+                scopes_str = 'email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file'
                 encoded_scopes = urllib.parse.quote(scopes_str)
-                auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&scope={encoded_scopes}&access_type=offline&prompt={prompt}&state=scope_{access_type}"
+                auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&scope={encoded_scopes}&access_type=offline&prompt={prompt}&state={state_str}"
         elif provider == 'notion':
             client_id = os.getenv('NOTION_CLIENT_ID', '')
             if client_id:
                 is_real_oauth = True
-                auth_url = f"https://api.notion.com/v1/oauth/authorize?client_id={client_id}&response_type=code&owner=user&redirect_uri={redirect_uri}&state=scope_{access_type}"
+                auth_url = f"https://api.notion.com/v1/oauth/authorize?client_id={client_id}&response_type=code&owner=user&redirect_uri={redirect_uri}&state={state_str}"
         elif provider == 'airtable':
             client_id = os.getenv('AIRTABLE_CLIENT_ID', '')
             if client_id:
                 is_real_oauth = True
-                auth_url = f"https://airtable.com/oauth2/v1/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={encoded_scopes}&state=scope_{access_type}"
+                auth_url = f"https://airtable.com/oauth2/v1/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={encoded_scopes}&state={state_str}"
         elif provider == 'spotify':
             client_id = os.getenv('SPOTIFY_CLIENT_ID', getattr(settings, 'SPOTIFY_CLIENT_ID', ''))
             if client_id:
@@ -207,15 +215,8 @@ class DestinationAuthorizeView(APIView):
                     'http://127.0.0.1:8000/api/destinations/oauth/callback/spotify/',
                 )
                 encoded_spotify_redirect = urllib.parse.quote(spotify_redirect_uri, safe='')
-                auth_url = f"https://accounts.spotify.com/authorize?response_type=code&client_id={client_id}&scope={encoded_scopes}&redirect_uri={encoded_spotify_redirect}&show_dialog=true&state=scope_{access_type}"
+                auth_url = f"https://accounts.spotify.com/authorize?response_type=code&client_id={client_id}&scope={encoded_scopes}&redirect_uri={encoded_spotify_redirect}&show_dialog=true&state={state_str}"
 
-        if not request.user or not request.user.is_authenticated:
-            return Response(
-                {'error': 'Authentication required. Please sign in.'},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-        user = request.user
-        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
         destination_record, _ = Destination.objects.update_or_create(
             user=user,
             name=name,
@@ -315,6 +316,46 @@ class DestinationTestPingView(APIView):
         })
 
 
+class DestinationBeautifySheetView(APIView):
+    """
+    Retroactively apply executive dashboard styling to all tabs of the connected Google Sheet.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, destination_id):
+        try:
+            if request.user and request.user.is_authenticated:
+                dest = Destination.objects.get(pk=destination_id, user=request.user)
+            else:
+                dest = Destination.objects.get(pk=destination_id)
+        except Destination.DoesNotExist:
+            return Response({'status': 'error', 'message': 'Destination not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if dest.provider != 'google_sheets':
+            return Response({'status': 'error', 'message': 'Destination is not a Google Sheets provider'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.destinations.services import ADAPTERS
+        adapter = ADAPTERS.get('google_sheets')
+        if not adapter or not hasattr(adapter, 'beautify_all_tabs'):
+            return Response({'status': 'error', 'message': 'Google Sheets adapter not available'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        spreadsheet_id = request.data.get('spreadsheet_id') or dest.config.get('spreadsheet_id')
+        result = adapter.beautify_all_tabs(dest, spreadsheet_id=spreadsheet_id)
+
+        if result.get('success'):
+            return Response({
+                'status': 'success',
+                'message': f"Successfully styled tabs: {', '.join(result.get('beautified_tabs', []))}",
+                'beautified_tabs': result.get('beautified_tabs', []),
+            })
+        else:
+            return Response({
+                'status': 'error',
+                'message': result.get('error', 'Failed to beautify Google Sheet'),
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 from django.http import HttpResponseRedirect
 import json
 import urllib.request
@@ -371,6 +412,14 @@ class GoogleOAuthCallbackView(APIView):
                 expires_in = tokens.get('expires_in')
 
                 user = request.user if (request.user and request.user.is_authenticated) else None
+                state = request.query_params.get('state', '')
+                if not user and state and state.startswith('user_'):
+                    try:
+                        uid = state.split(':')[0].replace('user_', '')
+                        user = User.objects.filter(pk=uid).first()
+                    except Exception:
+                        pass
+
                 dest_filter = {'user': user, 'provider': 'google_sheets'} if user else {'provider': 'google_sheets'}
                 dest = Destination.objects.filter(**dest_filter).first()
                 if not dest:

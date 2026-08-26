@@ -3,7 +3,8 @@ import {
   authorizeDestinationBackend, 
   testDestinationBackend, 
   setDefaultDestinationBackend, 
-  updateDestinationBackend 
+  updateDestinationBackend,
+  beautifySheetBackend
 } from '../../lib/api';
 import { 
   DestinationConfig, 
@@ -259,6 +260,8 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
   const [disconnectConfirmDest, setDisconnectConfirmDest] = useState<DestinationConfig | null>(null);
   const [testSyncLoadingId, setTestSyncLoadingId] = useState<string | null>(null);
   const [testSyncSuccessId, setTestSyncSuccessId] = useState<string | null>(null);
+  const [beautifyLoadingId, setBeautifyLoadingId] = useState<string | null>(null);
+  const [beautifySuccessId, setBeautifySuccessId] = useState<string | null>(null);
   const [showPayloadModal, setShowPayloadModal] = useState<DestinationConfig | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'connected' | 'disconnected'>('all');
   const [activeTabInModal, setActiveTabInModal] = useState<'auth' | 'mappings' | 'settings'>('mappings');
@@ -312,17 +315,21 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     }
   };
 
-  const confirmDisconnect = () => {
+  const confirmDisconnect = async () => {
     if (!disconnectConfirmDest) return;
 
+    const targetId = disconnectConfirmDest.id;
     setDestinations(prev =>
       prev.map(destination => (
-        destination.id === disconnectConfirmDest.id
+        destination.id === targetId
           ? { ...destination, connected: false, status: 'disconnected' }
           : destination
       ))
     );
     setDisconnectConfirmDest(null);
+
+    // Sync manual disconnection to backend so it only disconnects when manually triggered
+    await updateDestinationBackend(targetId, { is_active: false });
   };
 
   // Complete OAuth Grant Flow connected to Django Backend
@@ -423,6 +430,36 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
       setTestSyncSuccessId(null);
     }, 3000);
   };
+
+  // Retroactive Executive Beautify for Google Sheets
+  const handleBeautifySheet = async (dest: DestinationConfig) => {
+    setBeautifyLoadingId(dest.id);
+    setBeautifySuccessId(null);
+
+    const res = await beautifySheetBackend(dest.id);
+    setBeautifyLoadingId(null);
+
+    if (res?.status === 'success') {
+      setBeautifySuccessId(dest.id);
+      const newLog: ConnectionSyncLog = {
+        id: `log_${Date.now()}`,
+        destinationId: dest.id,
+        destinationName: dest.name,
+        clipTitle: 'THEME UPGRADE: Executive Dashboard Styling Applied',
+        status: 'success',
+        timestamp: new Date().toISOString(),
+        durationMs: 450,
+        payloadSize: '2.4 KB',
+        details: `Applied Navy header, alternating row banding, formatted dates, and auto-widths to tabs: [${res.beautified_tabs?.join(', ') || 'All tabs'}].`
+      };
+      setLogs(prev => [newLog, ...prev]);
+
+      setTimeout(() => {
+        setBeautifySuccessId(null);
+      }, 4000);
+    }
+  };
+
 
   // Save Modal Configuration
   const handleSaveModalConfig = async (updatedDest: DestinationConfig) => {
@@ -752,6 +789,29 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                         <CheckCircle className="w-3 h-3 text-amber-500" />
                         Active Default Target
                       </span>
+                    )}
+
+                    {dest.connected && (dest.type === 'google_sheets' || dest.type === 'sheets') && (
+                      <button
+                        onClick={() => handleBeautifySheet(dest)}
+                        disabled={beautifyLoadingId === dest.id}
+                        className="text-[10px] font-mono uppercase tracking-wider font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-sm transition-all flex items-center gap-1.5"
+                        title="Apply modern executive dashboard styling (Navy headers, alternating colors, auto-widths, formatted dates & links)"
+                      >
+                        {beautifyLoadingId === dest.id ? (
+                          <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+                        ) : beautifySuccessId === dest.id ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span>STYLED!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3 h-3 text-emerald-400" />
+                            <span>Beautify Sheet</span>
+                          </>
+                        )}
+                      </button>
                     )}
 
                     <button

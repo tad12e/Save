@@ -133,6 +133,22 @@ export async function testDestinationBackend(destinationId: string) {
   }
 }
 
+export async function beautifySheetBackend(destinationId: string) {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/beautify/`, {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not beautify sheet on backend:', error);
+    return null;
+  }
+}
+
+
 export async function updateDestinationBackend(destinationId: string, data: any) {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/`, {

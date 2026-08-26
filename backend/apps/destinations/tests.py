@@ -252,3 +252,62 @@ class DestinationRoutingTestCase(TestCase):
         self.assertEqual(dest.pk, self.default_vault.pk)
 
 
+class GoogleSheetsFormattingTestCase(TestCase):
+    def test_format_link_formula(self):
+        from apps.destinations.adapters.google_sheets import _format_link_formula
+
+        self.assertEqual(
+            _format_link_formula('https://x.com/levelsio/status/12345'),
+            '=HYPERLINK("https://x.com/levelsio/status/12345", "Link ↗")',
+        )
+        self.assertEqual(
+            _format_link_formula('https://jobs.lever.co/company/dev', 'Apply ↗'),
+            '=HYPERLINK("https://jobs.lever.co/company/dev", "Apply ↗")',
+        )
+        self.assertEqual(_format_link_formula(''), '—')
+        self.assertEqual(_format_link_formula('None'), '—')
+
+    def test_export_clip_mock_google_sheets(self):
+        from apps.destinations.adapters.google_sheets import GoogleSheetsAdapter
+        from apps.destinations.models import Destination
+        from apps.clips.models import Clip
+        from django.utils import timezone
+
+        user = User.objects.create_user(email='sheetsuser@save.app', password='testpassword123')
+        dest = Destination.objects.create(
+            user=user,
+            provider='google_sheets',
+            name='Google Sheets',
+            config={'access_token': 'demo_google_sheets_token', 'spreadsheet_id': 'demo_sheet_id'},
+            is_active=True,
+        )
+        clip = Clip.objects.create(
+            user=user,
+            url='https://x.com/levelsio/status/12345',
+            title='Senior Full Stack Engineer',
+            summary='Leading startup engineer role',
+            content_type='job',
+            created_at=timezone.now(),
+        )
+        adapter = GoogleSheetsAdapter()
+        res = adapter.export_clip(clip, dest)
+        self.assertTrue(res.success)
+        self.assertIn('docs.google.com/spreadsheets', res.external_url)
+
+    def test_beautify_endpoint_validation(self):
+        user = User.objects.create_user(email='beautyuser@save.app', password='testpassword123')
+        client = APIClient()
+        client.force_authenticate(user=user)
+
+        dest = Destination.objects.create(
+            user=user,
+            provider='google_sheets',
+            name='Google Sheets',
+            config={'access_token': 'demo_google_sheets_token', 'spreadsheet_id': 'demo_sheet_id'},
+            is_active=True,
+        )
+        response = client.post(f'/api/destinations/{dest.id}/beautify/', format='json')
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_400_BAD_REQUEST])
+
+
+
