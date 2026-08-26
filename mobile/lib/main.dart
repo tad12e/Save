@@ -192,7 +192,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: AppTheme.primaryAmber.withOpacity(0.15),
+                color: AppTheme.primaryAmber.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: AppTheme.borderAmber),
               ),
@@ -264,7 +264,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: _categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (ctx, idx) {
                 final cat = _categories[idx];
                 final isSelected = clipsProvider.selectedCategory == cat;
@@ -273,7 +273,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: isSelected ? AppTheme.primaryAmber.withOpacity(0.15) : AppTheme.surfaceCard,
+                      color: isSelected ? AppTheme.primaryAmber.withValues(alpha: 0.15) : AppTheme.surfaceCard,
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
                         color: isSelected ? AppTheme.primaryAmber : AppTheme.borderSubtle,
@@ -354,9 +354,9 @@ class ClipCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         author.isNotEmpty ? '$label $author' : label,
@@ -387,7 +387,7 @@ class ClipCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryAmber.withOpacity(0.15),
+                        color: AppTheme.primaryAmber.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: AppTheme.borderAmber),
                       ),
