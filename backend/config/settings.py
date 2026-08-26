@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.clips',
     'apps.destinations',
+    'apps.analytics',
 ]
 
 MIDDLEWARE = [
@@ -324,3 +325,4 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
