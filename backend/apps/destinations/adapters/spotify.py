@@ -44,6 +44,9 @@ class SpotifyAdapter(BaseDestinationAdapter):
         Retrieves a valid access token for Spotify API.
         Refreshes expired tokens using the refresh_token if available.
         """
+        if not destination:
+            return None
+
         config = destination.config or {}
         access_token = config.get('access_token') or config.get('spotify_token')
         refresh_token = config.get('refresh_token')
@@ -337,7 +340,8 @@ class SpotifyAdapter(BaseDestinationAdapter):
                 error=f'Could not resolve a Spotify track for music clip "{clip.title}".',
             )
 
-        target_playlist_id = destination.config.get('target_playlist_id') or destination.config.get('target_resource_name', '')
+        dest_config = destination.config if destination else {}
+        target_playlist_id = dest_config.get('target_playlist_id') or dest_config.get('target_resource_name', '')
         external_url = f'https://open.spotify.com/track/{track_id}' if track_id else 'https://open.spotify.com'
 
         # Route 1: Liked Songs Library
