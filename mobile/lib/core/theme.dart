@@ -63,12 +63,12 @@ class AppTheme {
         elevation: 0,
         centerTitle: false,
       ),
-      cardTheme: CardTheme(
+      cardTheme: const CardThemeData(
         color: surfaceCard,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          side: const BorderSide(color: borderSubtle, width: 1),
-          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: borderSubtle, width: 1),
+          borderRadius: BorderRadius.all(Radius.circular(8)),
         ),
       ),
     );
