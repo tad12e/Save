@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -6,8 +6,6 @@ import 'package:provider/provider.dart';
 import '../../core/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../settings/server_settings_modal.dart';
-import 'otp_verification_screen.dart';
-import 'sign_up_screen.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -35,21 +33,10 @@ class _SignInScreenState extends State<SignInScreen> {
     FocusScope.of(context).unfocus();
     final auth = Provider.of<AuthProvider>(context, listen: false);
 
-    final success = await auth.signIn(
+    await auth.signIn(
       _emailController.text.trim(),
       _passwordController.text,
     );
-
-    if (!mounted) return;
-
-    if (!success && auth.status == AuthStatus.pendingVerification) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => OtpVerificationScreen(email: _emailController.text.trim()),
-        ),
-      );
-    }
   }
 
   @override
@@ -136,7 +123,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(LucideIcons.alertCircle, size: 16, color: Colors.redAccent),
+                          const Icon(LucideIcons.circleAlert, size: 16, color: Colors.redAccent),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -286,9 +273,8 @@ class _SignInScreenState extends State<SignInScreen> {
                       GestureDetector(
                         onTap: () {
                           auth.clearError();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Account creation is managed via the Web App / Admin.')),
                           );
                         },
                         child: Text(

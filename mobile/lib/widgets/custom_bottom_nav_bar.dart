@@ -40,7 +40,7 @@ class CustomBottomNavBar extends StatelessWidget {
               _buildTabItem(
                 index: 0,
                 label: 'Home',
-                icon: LucideIcons.home,
+                icon: LucideIcons.house,
                 isSelected: selectedIndex == 0,
               ),
 

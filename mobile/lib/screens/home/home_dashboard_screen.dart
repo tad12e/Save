@@ -273,7 +273,7 @@ class HomeDashboardScreen extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(LucideIcons.alertTriangle, size: 18, color: Colors.black87),
+            const Icon(LucideIcons.triangleAlert, size: 18, color: Colors.black87),
             const SizedBox(width: 10),
             Expanded(
               child: Text(

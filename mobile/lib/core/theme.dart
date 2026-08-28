@@ -17,6 +17,8 @@ class AppTheme {
   static const Color borderSubtle = Color(0x14FFFFFF); // rgba(255, 255, 255, 0.08)
   
   static const Color amberAlert = Color(0xFFF59E0B);
+  static const Color primaryAmber = Color(0xFFF59E0B);
+  static const Color borderAmber = Color(0x33F59E0B);
   static const Color trendGreen = Color(0xFF10B981);
   static const Color urgencyRed = Color(0xFFEF4444);
 
