@@ -2,32 +2,38 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  // Brand Colors (Matching Web OLED Amber Design)
-  static const Color background = Color(0xFF050505);
-  static const Color surface = Color(0xFF0A0A0A);
-  static const Color surfaceCard = Color(0xFF101010);
-  static const Color primaryAmber = Color(0xFFF59E0B);
-  static const Color primaryAmberLight = Color(0xFFFBBF24);
-  static const Color accentEmerald = Color(0xFF10B981);
+  // Brand Colors (Violet & Dark Palette)
+  static const Color primaryViolet = Color(0xFF7C3AED);
+  static const Color primaryVioletLight = Color(0xFF8B5CF6);
+  static const Color primaryVioletMuted = Color(0x337C3AED);
+  
+  static const Color background = Color(0xFF0F0F1A);
+  static const Color surface = Color(0xFF141424);
+  static const Color surfaceCard = Color(0xFF1A1A2E);
+  
+  static const Color inactiveGrey = Color(0xFF64748B);
   static const Color textWhite = Color(0xFFFFFFFF);
-  static const Color textMuted = Color(0xFFA8A29E);
-  static const Color borderSubtle = Color(0x1FFFFFFF);
-  static const Color borderAmber = Color(0x4DF59E0B);
+  static const Color textMuted = Color(0xFF94A3B8);
+  static const Color borderSubtle = Color(0x14FFFFFF); // rgba(255, 255, 255, 0.08)
+  
+  static const Color amberAlert = Color(0xFFF59E0B);
+  static const Color trendGreen = Color(0xFF10B981);
+  static const Color urgencyRed = Color(0xFFEF4444);
 
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: background,
-      primaryColor: primaryAmber,
+      primaryColor: primaryViolet,
       colorScheme: const ColorScheme.dark(
-        primary: primaryAmber,
-        secondary: primaryAmberLight,
+        primary: primaryViolet,
+        secondary: primaryVioletLight,
         surface: surface,
-        error: Colors.redAccent,
+        error: urgencyRed,
       ),
       textTheme: TextTheme(
         headlineLarge: GoogleFonts.outfit(
-          fontSize: 28,
+          fontSize: 26,
           fontWeight: FontWeight.bold,
           color: textWhite,
         ),
@@ -36,8 +42,13 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: textWhite,
         ),
+        titleLarge: GoogleFonts.outfit(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: textWhite,
+        ),
         titleMedium: GoogleFonts.outfit(
-          fontSize: 16,
+          fontSize: 15,
           fontWeight: FontWeight.w600,
           color: textWhite,
         ),
@@ -51,11 +62,15 @@ class AppTheme {
           fontWeight: FontWeight.normal,
           color: textMuted,
         ),
-        labelSmall: GoogleFonts.jetBrainsMono(
+        bodySmall: GoogleFonts.inter(
+          fontSize: 10,
+          fontWeight: FontWeight.normal,
+          color: textMuted,
+        ),
+        labelSmall: GoogleFonts.inter(
           fontSize: 10,
           fontWeight: FontWeight.w500,
-          letterSpacing: 1.1,
-          color: primaryAmber,
+          color: inactiveGrey,
         ),
       ),
       appBarTheme: const AppBarTheme(
@@ -67,8 +82,8 @@ class AppTheme {
         color: surfaceCard,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          side: BorderSide(color: borderSubtle, width: 1),
-          borderRadius: BorderRadius.all(Radius.circular(8)),
+          side: BorderSide(color: borderSubtle, width: 0.5),
+          borderRadius: BorderRadius.all(Radius.circular(16)),
         ),
       ),
     );
