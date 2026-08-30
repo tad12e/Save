@@ -107,9 +107,9 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         height: 56,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: const BoxDecoration(
-          color: AppTheme.background,
+          color: AppTheme.surface,
           border: Border(
-            bottom: BorderSide(color: AppTheme.borderSubtle, width: 0.5),
+            bottom: BorderSide(color: AppTheme.borderSubtle, width: 1.0),
           ),
         ),
         child: _buildContent(context),
@@ -132,24 +132,31 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
   Widget _buildHomeHeader(BuildContext context) {
     return Row(
       children: [
-        // Left: App logo mark (small, 24px)
+        // Left: App logo mark (Green + White)
         Container(
-          width: 24,
-          height: 24,
+          width: 32,
+          height: 32,
           margin: const EdgeInsets.only(right: 10),
           decoration: BoxDecoration(
-            color: AppTheme.primaryViolet,
-            borderRadius: BorderRadius.circular(6),
+            color: const Color(0xFF2D6A4F), // Forest green
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF2D6A4F).withValues(alpha: 0.2),
+                blurRadius: 4,
+                offset: const Offset(0, 1.5),
+              ),
+            ],
           ),
           child: const Center(
             child: Icon(
               LucideIcons.bookmark,
-              size: 14,
+              size: 16,
               color: Colors.white,
             ),
           ),
         ),
-        // Greeting text + expiring subtext
+        // Greeting text + subtext (Clean & Compact)
         Expanded(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -158,28 +165,31 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
               Text(
                 greeting,
                 style: GoogleFonts.outfit(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textWhite,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 1),
-              Text(
-                subtitle,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: AppTheme.textMuted,
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 1),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textMuted,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              ],
             ],
           ),
         ),
         const SizedBox(width: 8),
-        // Notification bell with red badge count
+        // Notification bell with badge count
         GestureDetector(
           onTap: onNotificationTap,
           child: Stack(
@@ -189,15 +199,15 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceCard,
+                  color: AppTheme.surfaceMuted,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.borderSubtle, width: 0.5),
+                  border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
                 ),
                 child: const Center(
                   child: Icon(
                     LucideIcons.bell,
-                    size: 18,
-                    color: AppTheme.textWhite,
+                    size: 17,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ),
@@ -208,7 +218,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
-                      color: AppTheme.urgencyRed,
+                      color: const Color(0xFF10B981), // Emerald indicator badge
                       borderRadius: BorderRadius.circular(8),
                     ),
                     constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
@@ -227,7 +237,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           ),
         ),
         const SizedBox(width: 10),
-        // Avatar circle (initials or photo)
+        // Avatar circle (initials with green gradient)
         GestureDetector(
           onTap: onAvatarTap,
           child: Container(
@@ -235,12 +245,18 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
             height: 36,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [AppTheme.primaryViolet, AppTheme.primaryVioletLight],
+                colors: [Color(0xFF2D6A4F), Color(0xFF40916C)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white24, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF2D6A4F).withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Center(
               child: Text(
@@ -263,13 +279,13 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        // Left: Screen title Bold, 22px, weight 500
+        // Left: Screen title Bold, 22px, weight 600
         Text(
           title,
           style: GoogleFonts.outfit(
             fontSize: 22,
-            fontWeight: FontWeight.w500,
-            color: AppTheme.textWhite,
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textPrimary,
           ),
         ),
         // Right: Search icon + Filter icon
@@ -278,13 +294,13 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
           children: [
             if (onSearchTap != null)
               IconButton(
-                icon: const Icon(LucideIcons.search, size: 20, color: AppTheme.textWhite),
+                icon: const Icon(LucideIcons.search, size: 20, color: AppTheme.textPrimary),
                 onPressed: onSearchTap,
                 splashRadius: 20,
               ),
             if (onFilterTap != null)
               IconButton(
-                icon: const Icon(LucideIcons.slidersHorizontal, size: 20, color: AppTheme.textWhite),
+                icon: const Icon(LucideIcons.slidersHorizontal, size: 20, color: AppTheme.textPrimary),
                 onPressed: onFilterTap,
                 splashRadius: 20,
               ),
@@ -300,7 +316,7 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
       children: [
         // Left: Back arrow
         IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, size: 20, color: AppTheme.textWhite),
+          icon: const Icon(LucideIcons.arrowLeft, size: 20, color: AppTheme.textPrimary),
           onPressed: onBackTap ?? () => Navigator.of(context).maybePop(),
           splashRadius: 20,
         ),
@@ -310,16 +326,16 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
             child: Text(
               title,
               style: GoogleFonts.outfit(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textWhite,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
-        // Right: Action button (edit, share, delete) or spacer to balance
+        // Right: Action button (save, edit, share, delete) or spacer to balance
         if (actionWidget != null)
           actionWidget!
         else

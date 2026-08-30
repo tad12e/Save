@@ -29,7 +29,14 @@ class _MiniAreaChartState extends State<MiniAreaChart> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.borderSubtle, width: 0.5),
+        border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -51,7 +58,7 @@ class _MiniAreaChartState extends State<MiniAreaChart> {
               Container(
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: AppTheme.background,
+                  color: AppTheme.surfaceMuted,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
@@ -71,9 +78,9 @@ class _MiniAreaChartState extends State<MiniAreaChart> {
               size: Size.infinite,
               painter: _AreaChartPainter(
                 data: activeData,
-                lineColor: AppTheme.primaryVioletLight,
+                lineColor: AppTheme.primaryViolet,
                 fillGradientColors: [
-                  AppTheme.primaryViolet.withValues(alpha: 0.35),
+                  AppTheme.primaryViolet.withValues(alpha: 0.20),
                   AppTheme.primaryViolet.withValues(alpha: 0.0),
                 ],
               ),

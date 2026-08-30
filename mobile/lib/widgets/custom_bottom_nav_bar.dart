@@ -6,13 +6,13 @@ import '../core/theme.dart';
 class CustomBottomNavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
-  final VoidCallback onSavePressed;
+  final VoidCallback? onSavePressed;
 
   const CustomBottomNavBar({
     super.key,
     required this.selectedIndex,
     required this.onTabSelected,
-    required this.onSavePressed,
+    this.onSavePressed,
   });
 
   @override
@@ -20,23 +20,33 @@ class CustomBottomNavBar extends StatelessWidget {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.surfaceCard,
-        border: Border(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: const Border(
           top: BorderSide(
-            color: AppTheme.borderSubtle,
-            width: 0.5,
+            color: Color(0xFFE5E7EB),
+            width: 1.0,
           ),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, -3),
+          ),
+        ],
       ),
       child: Padding(
-        padding: EdgeInsets.only(bottom: bottomPadding),
+        padding: EdgeInsets.only(
+          bottom: bottomPadding > 0 ? bottomPadding : 6,
+          top: 8,
+        ),
         child: SizedBox(
-          height: 72,
+          height: 56,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // Tab 1: Home (Index 0)
+              // Tab 0: Home
               _buildTabItem(
                 index: 0,
                 label: 'Home',
@@ -44,31 +54,36 @@ class CustomBottomNavBar extends StatelessWidget {
                 isSelected: selectedIndex == 0,
               ),
 
-              // Tab 2: Clips (Index 1)
+              // Tab 1: Feed
               _buildTabItem(
                 index: 1,
-                label: 'Clips',
-                icon: LucideIcons.bookmark,
+                label: 'Feed',
+                icon: LucideIcons.newspaper,
                 isSelected: selectedIndex == 1,
               ),
 
-              // Center: Save FAB (Elevated Violet Circle +, NOT a tab)
-              _buildCenterSaveButton(),
-
-              // Tab 4: Jobs (Index 2)
+              // Tab 2: Tasks
               _buildTabItem(
                 index: 2,
-                label: 'Jobs',
-                icon: LucideIcons.briefcase,
+                label: 'Tasks',
+                icon: LucideIcons.circleCheck,
                 isSelected: selectedIndex == 2,
               ),
 
-              // Tab 5: Profile (Index 3)
+              // Tab 3: Analytics
               _buildTabItem(
                 index: 3,
+                label: 'Analytics',
+                icon: LucideIcons.chartColumn,
+                isSelected: selectedIndex == 3,
+              ),
+
+              // Tab 4: Profile
+              _buildTabItem(
+                index: 4,
                 label: 'Profile',
                 icon: LucideIcons.user,
-                isSelected: selectedIndex == 3,
+                isSelected: selectedIndex == 4,
               ),
             ],
           ),
@@ -83,47 +98,34 @@ class CustomBottomNavBar extends StatelessWidget {
     required IconData icon,
     required bool isSelected,
   }) {
-    final activeColor = AppTheme.primaryViolet;
-    const inactiveColor = AppTheme.inactiveGrey;
+    // Active forest green color matching the green & white theme
+    const activeColor = Color(0xFF2D6A4F);
+    // Inactive muted grey
+    const inactiveColor = Color(0xFF9CA3AF);
 
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => onTabSelected(index),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Icon container with active state
-            SizedBox(
-              height: 26,
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: 22,
-                  color: isSelected ? activeColor : inactiveColor,
-                ),
-              ),
+            // Icon
+            Icon(
+              icon,
+              size: 22,
+              color: isSelected ? activeColor : inactiveColor,
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             // Label
             Text(
               label,
               style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                 color: isSelected ? activeColor : inactiveColor,
-              ),
-            ),
-            const SizedBox(height: 3),
-            // Dot / pill indicator below icon (matching image 1)
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              width: isSelected ? 12 : 0,
-              height: 3,
-              decoration: BoxDecoration(
-                color: isSelected ? activeColor : Colors.transparent,
-                borderRadius: BorderRadius.circular(2),
+                letterSpacing: -0.2,
               ),
             ),
           ],
@@ -131,40 +133,5 @@ class CustomBottomNavBar extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildCenterSaveButton() {
-    return Expanded(
-      child: Center(
-        child: Transform.translate(
-          offset: const Offset(0, -8), // Elevated slightly above bar
-          child: GestureDetector(
-            onTap: onSavePressed,
-            child: Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryViolet,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryViolet.withValues(alpha: 0.35),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Center(
-                child: Icon(
-                  LucideIcons.plus,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
+
