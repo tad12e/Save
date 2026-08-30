@@ -183,9 +183,10 @@ class ApiService {
         };
       }
     } catch (e) {
+      debugPrint('[ApiService.signIn] Error: $e');
       return {
         'success': false,
-        'message': 'Cannot reach backend at $baseUrl. Please verify the server is running.',
+        'message': 'Cannot reach backend at $baseUrl ($e)',
       };
     }
   }
@@ -207,7 +208,7 @@ class ApiService {
           'password': password,
           'confirm_password': confirmPassword,
         }),
-      );
+      ).timeout(const Duration(seconds: 8));
 
       final Map<String, dynamic> body = response.body.isNotEmpty
           ? jsonDecode(utf8.decode(response.bodyBytes))
@@ -227,9 +228,10 @@ class ApiService {
         };
       }
     } catch (e) {
+      debugPrint('[ApiService.signUp] Error: $e');
       return {
         'success': false,
-        'message': 'Cannot reach backend at $baseUrl. Please check your network.',
+        'message': 'Cannot reach backend at $baseUrl ($e)',
       };
     }
   }

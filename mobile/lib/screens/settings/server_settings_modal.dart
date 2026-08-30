@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../core/theme.dart';
@@ -11,9 +11,9 @@ class ServerSettingsModal extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surfaceCard,
+      backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => const ServerSettingsModal(),
     );
@@ -58,7 +58,9 @@ class _ServerSettingsModalState extends State<ServerSettingsModal> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Backend URL set to: $url'),
-          backgroundColor: AppTheme.surfaceCard,
+          backgroundColor: AppTheme.primaryViolet,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -68,7 +70,7 @@ class _ServerSettingsModalState extends State<ServerSettingsModal> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
         left: 20,
         right: 20,
         top: 20,
@@ -82,20 +84,28 @@ class _ServerSettingsModalState extends State<ServerSettingsModal> {
             children: [
               Row(
                 children: [
-                  const Icon(LucideIcons.server, size: 18, color: AppTheme.primaryAmber),
-                  const SizedBox(width: 8),
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryVioletBg,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(LucideIcons.server, size: 16, color: AppTheme.primaryViolet),
+                  ),
+                  const SizedBox(width: 10),
                   Text(
                     'Backend Server Settings',
                     style: GoogleFonts.outfit(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.textWhite,
+                      color: AppTheme.textPrimary,
                     ),
                   ),
                 ],
               ),
               IconButton(
-                icon: const Icon(LucideIcons.x, size: 18, color: AppTheme.textMuted),
+                icon: const Icon(LucideIcons.x, size: 18, color: AppTheme.inactiveGrey),
                 onPressed: () => Navigator.pop(context),
               ),
             ],
@@ -107,32 +117,33 @@ class _ServerSettingsModalState extends State<ServerSettingsModal> {
           ),
           const SizedBox(height: 16),
           if (_isLoading)
-            const Center(child: CircularProgressIndicator(color: AppTheme.primaryAmber))
+            const Center(child: CircularProgressIndicator(color: AppTheme.primaryViolet))
           else ...[
             TextField(
               controller: _urlController,
-              style: GoogleFonts.jetBrainsMono(fontSize: 13, color: AppTheme.textWhite),
+              style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary),
               decoration: InputDecoration(
                 hintText: 'http://localhost:8000',
-                hintStyle: GoogleFonts.jetBrainsMono(color: AppTheme.textMuted),
+                hintStyle: GoogleFonts.inter(color: AppTheme.inactiveGrey),
                 filled: true,
-                fillColor: AppTheme.background,
-                prefixIcon: const Icon(LucideIcons.link, size: 16, color: AppTheme.primaryAmber),
+                fillColor: AppTheme.surfaceMuted,
+                prefixIcon: const Icon(LucideIcons.link, size: 16, color: AppTheme.primaryViolet),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(color: AppTheme.borderSubtle),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   borderSide: const BorderSide(color: AppTheme.borderSubtle),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppTheme.primaryAmber),
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppTheme.primaryViolet),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Text(
               'Quick Presets:',
               style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textMuted),
@@ -150,11 +161,11 @@ class _ServerSettingsModalState extends State<ServerSettingsModal> {
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
-              height: 44,
+              height: 46,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryAmber,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  backgroundColor: AppTheme.primaryViolet,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 onPressed: () {
                   final text = _urlController.text.trim();
@@ -165,8 +176,9 @@ class _ServerSettingsModalState extends State<ServerSettingsModal> {
                 child: Text(
                   'Save Server URL',
                   style: GoogleFonts.outfit(
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -188,17 +200,19 @@ class _ServerSettingsModalState extends State<ServerSettingsModal> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryAmber.withValues(alpha: 0.15) : AppTheme.background,
-          borderRadius: BorderRadius.circular(6),
+          color: isSelected ? AppTheme.primaryVioletBg : AppTheme.surfaceMuted,
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? AppTheme.primaryAmber : AppTheme.borderSubtle,
+            color: isSelected ? AppTheme.primaryViolet : AppTheme.borderSubtle,
+            width: 1.0,
           ),
         ),
         child: Text(
           label,
-          style: GoogleFonts.jetBrainsMono(
-            fontSize: 10,
-            color: isSelected ? AppTheme.primaryAmber : AppTheme.textMuted,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? AppTheme.primaryViolet : AppTheme.textMuted,
           ),
         ),
       ),
