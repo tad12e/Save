@@ -93,8 +93,16 @@ class _JobsScreenState extends State<JobsScreen> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isSelected ? AppTheme.primaryViolet : AppTheme.borderSubtle,
-                        width: 0.5,
+                        width: 1.0,
                       ),
+                      boxShadow: [
+                        if (!isSelected)
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.02),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                      ],
                     ),
                     child: Text(
                       _stages[idx],
@@ -130,7 +138,14 @@ class _JobsScreenState extends State<JobsScreen> {
                         decoration: BoxDecoration(
                           color: AppTheme.surfaceCard,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppTheme.borderSubtle, width: 0.5),
+                          border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.02),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,14 +158,15 @@ class _JobsScreenState extends State<JobsScreen> {
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: AppTheme.primaryVioletLight,
+                                    color: AppTheme.primaryViolet,
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.amberAlert.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(4),
+                                    color: AppTheme.amberAlertBg,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: AppTheme.borderAmber, width: 0.5),
                                   ),
                                   child: Text(
                                     job['deadline'],
@@ -163,16 +179,16 @@ class _JobsScreenState extends State<JobsScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8),
                             Text(
                               job['role'],
                               style: GoogleFonts.outfit(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: AppTheme.textWhite,
+                                color: AppTheme.textPrimary,
                               ),
                             ),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8),
                             Row(
                               children: [
                                 const Icon(LucideIcons.mapPin, size: 13, color: AppTheme.textMuted),
@@ -194,20 +210,25 @@ class _JobsScreenState extends State<JobsScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 12),
                             Wrap(
                               spacing: 6,
                               runSpacing: 4,
                               children: (job['tags'] as List<String>).map((tag) {
                                 return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.background,
-                                    borderRadius: BorderRadius.circular(4),
+                                    color: AppTheme.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: AppTheme.borderLight, width: 0.5),
                                   ),
                                   child: Text(
                                     '#$tag',
-                                    style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textMuted),
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppTheme.textMuted,
+                                    ),
                                   ),
                                 );
                               }).toList(),

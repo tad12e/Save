@@ -93,7 +93,7 @@ class _ClipsScreenState extends State<ClipsScreen> {
 
           // Horizontal Categories
           Container(
-            height: 38,
+            height: 40,
             margin: const EdgeInsets.symmetric(vertical: 8),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
@@ -109,11 +109,19 @@ class _ClipsScreenState extends State<ClipsScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
                       color: isSelected ? AppTheme.primaryViolet : AppTheme.surfaceCard,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                         color: isSelected ? AppTheme.primaryViolet : AppTheme.borderSubtle,
-                        width: 0.5,
+                        width: 1.0,
                       ),
+                      boxShadow: [
+                        if (!isSelected)
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.02),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                      ],
                     ),
                     child: Text(
                       cat,
@@ -164,11 +172,18 @@ class _ClipsScreenState extends State<ClipsScreen> {
   Widget _buildClipItem(BuildContext context, ClipModel clip) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surfaceCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.borderSubtle, width: 0.5),
+        border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,24 +193,24 @@ class _ClipsScreenState extends State<ClipsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryViolet.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
+                  color: AppTheme.primaryVioletBg,
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   clip.contentType.toUpperCase(),
                   style: GoogleFonts.inter(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.primaryVioletLight,
+                    color: AppTheme.primaryViolet,
                   ),
                 ),
               ),
               Text(
                 clip.exportStatus == 'done' ? '✓ SYNCED' : '⏳ PENDING',
                 style: GoogleFonts.inter(
-                  fontSize: 9,
+                  fontSize: 10,
                   fontWeight: FontWeight.w600,
                   color: clip.exportStatus == 'done' ? AppTheme.trendGreen : AppTheme.amberAlert,
                 ),
@@ -210,7 +225,7 @@ class _ClipsScreenState extends State<ClipsScreen> {
             style: GoogleFonts.outfit(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: AppTheme.textWhite,
+              color: AppTheme.textPrimary,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -223,12 +238,12 @@ class _ClipsScreenState extends State<ClipsScreen> {
             style: GoogleFonts.inter(
               fontSize: 12,
               color: AppTheme.textMuted,
-              height: 1.4,
+              height: 1.45,
             ),
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
           // Link & Tags Row
           Row(
@@ -240,22 +255,26 @@ class _ClipsScreenState extends State<ClipsScreen> {
                   runSpacing: 4,
                   children: clip.tags.map((tag) {
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: AppTheme.background,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: AppTheme.borderSubtle, width: 0.5),
+                        color: AppTheme.surfaceMuted,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppTheme.borderLight, width: 0.5),
                       ),
                       child: Text(
                         '#$tag',
-                        style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textMuted),
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textMuted,
+                        ),
                       ),
                     );
                   }).toList(),
                 ),
               ),
               IconButton(
-                icon: const Icon(LucideIcons.externalLink, size: 16, color: AppTheme.primaryVioletLight),
+                icon: const Icon(LucideIcons.externalLink, size: 16, color: AppTheme.primaryViolet),
                 onPressed: () async {
                   final uri = Uri.parse(clip.url);
                   if (await canLaunchUrl(uri)) {

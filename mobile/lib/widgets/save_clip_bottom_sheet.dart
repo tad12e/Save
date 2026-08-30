@@ -74,10 +74,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet> {
         bottom: viewInsets.bottom + 24,
       ),
       decoration: const BoxDecoration(
-        color: AppTheme.surfaceCard,
+        color: AppTheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         border: Border(
-          top: BorderSide(color: AppTheme.borderSubtle, width: 0.5),
+          top: BorderSide(color: AppTheme.borderSubtle, width: 1.0),
         ),
       ),
       child: Column(
@@ -94,7 +94,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet> {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryViolet.withValues(alpha: 0.15),
+                      color: AppTheme.primaryVioletBg,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(LucideIcons.plus, size: 18, color: AppTheme.primaryViolet),
@@ -105,7 +105,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet> {
                     style: GoogleFonts.outfit(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: AppTheme.textWhite,
+                      color: AppTheme.textPrimary,
                     ),
                   ),
                 ],
@@ -132,12 +132,12 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet> {
           TextField(
             controller: _urlController,
             autofocus: true,
-            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textWhite),
+            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary),
             decoration: InputDecoration(
               hintText: 'https://...',
               hintStyle: GoogleFonts.inter(color: AppTheme.inactiveGrey),
               filled: true,
-              fillColor: AppTheme.background,
+              fillColor: AppTheme.surfaceMuted,
               prefixIcon: const Icon(LucideIcons.link, size: 16, color: AppTheme.primaryViolet),
               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
