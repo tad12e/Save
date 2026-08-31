@@ -123,6 +123,13 @@ class ClipCreateView(APIView):
             except Exception:
                 pass
 
+        # Invalidate analytics cache for user so next load re-aggregates with fresh data
+        try:
+            from apps.analytics.olap_engine import DuckDBAnalyticsEngine
+            DuckDBAnalyticsEngine.invalidate_cache(user.id)
+        except Exception:
+            pass
+
         return Response(ClipSerializer(clip).data, status=status.HTTP_201_CREATED)
 
 
@@ -238,21 +245,11 @@ class DashboardView(APIView):
         })
 
 
-import math
-
-
-def cosine_similarity(vec1, vec2):
-    if not vec1 or not vec2 or len(vec1) != len(vec2):
-        return 0.0
-    dot_product = sum(a * b for a, b in zip(vec1, vec2))
-    magnitude1 = math.sqrt(sum(a * a for a in vec1))
-    magnitude2 = math.sqrt(sum(b * b for b in vec2))
-    if magnitude1 == 0 or magnitude2 == 0:
-        return 0.0
-    return dot_product / (magnitude1 * magnitude2)
-
-
 class SimilaritySearchView(APIView):
+    """
+    High-performance Semantic Similarity Search.
+    Uses SIMD-accelerated DuckDB / NumPy vector cosine similarity.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -262,48 +259,50 @@ class SimilaritySearchView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         user = request.user
-        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
 
         text = request.data.get('text', '').strip()
         threshold = float(request.data.get('threshold', 0.65))
+        limit = int(request.data.get('limit', 5))
 
         if not text:
             return Response({'relevant': False, 'reason': 'empty_text'})
 
         from .services.embed import generate_embedding
-        query_vec = generate_embedding(text)
+        from .services.similarity import VectorSimilarityEngine
 
+        query_vec = generate_embedding(text)
         if not query_vec:
             return Response({'relevant': False, 'reason': 'embedding_failed'})
 
-        clips_with_embeddings = Clip.objects.filter(user=user).exclude(embedding__isnull=True).exclude(embedding=[])
+        # High-performance SIMD vector search
+        matches = VectorSimilarityEngine.search_similar_clips(
+            user=user,
+            query_vector=query_vec,
+            threshold=threshold,
+            limit=limit,
+        )
 
-        best_score = 0.0
-        best_clip = None
-
-        for clip in clips_with_embeddings:
-            score = cosine_similarity(query_vec, clip.embedding)
-            if score > best_score:
-                best_score = score
-                best_clip = clip
-
-        if best_clip and best_score >= threshold:
+        if matches:
+            best_match = matches[0]
             return Response({
                 'relevant': True,
-                'similarity_score': round(best_score, 4),
+                'similarity_score': best_match['similarity_score'],
                 'matched_clip': {
-                    'id': str(best_clip.id),
-                    'title': best_clip.title,
-                    'summary': best_clip.summary,
-                    'content_type': best_clip.content_type,
-                }
+                    'id': best_match['id'],
+                    'title': best_match['title'],
+                    'summary': best_match['summary'],
+                    'content_type': best_match['content_type'],
+                    'url': best_match['url'],
+                },
+                'top_matches': matches,
             })
 
         return Response({
             'relevant': False,
-            'similarity_score': round(best_score, 4),
+            'similarity_score': 0.0,
             'reason': 'below_threshold',
         })
+
 
 
 @api_view(['POST'])
