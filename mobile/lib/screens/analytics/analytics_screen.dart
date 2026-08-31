@@ -525,6 +525,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // Section 4: Daily Saving Goal Circular Ring Card
   // ---------------------------------------------------------------------------
   Widget _buildDailyFocusCard() {
+    final dailyFocus = _backendData?['daily_focus'];
+    final target = (dailyFocus?['target_clips_per_day'] as num?)?.toInt() ?? 10;
+    final completed = (dailyFocus?['today_completed'] as num?)?.toInt() ?? 12;
+    final rate = (dailyFocus?['completion_rate'] as num?)?.toInt() ?? 100;
+    final progress = (rate / 100.0).clamp(0.0, 1.0);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -572,7 +578,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     const Icon(LucideIcons.circleCheck, size: 12, color: Color(0xFF16A34A)),
                     const SizedBox(width: 4),
                     Text(
-                      '100%',
+                      '$rate%',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -595,7 +601,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 height: 90,
                 child: CustomPaint(
                   painter: _GoalRingPainter(
-                    progress: 1.0,
+                    progress: progress,
                     progressColor: const Color(0xFF166534), // Darker green ring
                     backgroundColor: const Color(0xFFDCFCE7),
                   ),
@@ -604,7 +610,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          '12',
+                          '$completed',
                           style: GoogleFonts.outfit(
                             fontSize: 26,
                             fontWeight: FontWeight.bold,
@@ -1463,6 +1469,24 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // Section 4.5 [NEW]: Hourly Activity Heatmap (6 AM - 11 PM) & Peak Hours
   // ---------------------------------------------------------------------------
   Widget _buildHourlyActivityHeatmapCard() {
+    final hourlyDist = _backendData?['hourly_distribution'];
+    final peakWindow = hourlyDist?['peak_window']?.toString() ?? 'Peak 9 AM – 11 AM';
+    final buckets = hourlyDist?['hourly_buckets'] as List?;
+    final bucketMap = <int, int>{};
+    if (buckets != null) {
+      for (var b in buckets) {
+        if (b is Map && b['hour'] != null) {
+          bucketMap[(b['hour'] as num).toInt()] = (b['count'] as num?)?.toInt() ?? 0;
+        }
+      }
+    }
+    final maxHCount = bucketMap.values.isNotEmpty ? bucketMap.values.reduce(math.max) : 1;
+    final List<double> hourlyActivity = [];
+    for (int h = 6; h <= 23; h++) {
+      final c = bucketMap[h] ?? (h >= 9 && h <= 11 ? 4 : h >= 14 && h <= 16 ? 3 : 1);
+      hourlyActivity.add((c / math.max(1, maxHCount)).clamp(0.15, 1.0));
+    }
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1505,7 +1529,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  'Peak 9 AM – 11 AM',
+                  peakWindow.replaceAll(' Peak Saving Window', ''),
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -1530,7 +1554,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             height: 52,
             width: double.infinity,
             child: CustomPaint(
-              painter: _HourlyHeatmapPainter(),
+              painter: _HourlyHeatmapPainter(activityList: hourlyActivity),
             ),
           ),
           const SizedBox(height: 6),
@@ -1558,7 +1582,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'You are most active between 9:00 AM and 11:00 AM (avg 4.2 clips/hr).',
+                    'You are most active between 9:00 AM and 11:00 AM (avg ${(maxHCount / 2.0).toStringAsFixed(1)} clips/hr).',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -1578,6 +1602,35 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // Section 6.5 [NEW]: Opportunity Outcome Analytics (Funnel, Rates, Missed, Value)
   // ---------------------------------------------------------------------------
   Widget _buildOpportunityOutcomeSection() {
+    final oppFunnel = _backendData?['opportunity_funnel'];
+    final rawStages = oppFunnel?['stages'] as List?;
+    final missedCount = (oppFunnel?['missed_deadlines_count'] as num?)?.toInt() ?? 12;
+    final realizedValue = oppFunnel?['realized_value_index']?.toString() ?? '\$2,850 in scholarships & tickets';
+
+    List<Map<String, dynamic>>? customStages;
+    if (rawStages != null && rawStages.length >= 4) {
+      final totalDiscovered = (rawStages[0]['count'] as num?)?.toDouble() ?? 1.0;
+      final colors = [const Color(0xFF3B82F6), const Color(0xFF6366F1), const Color(0xFF8B5CF6), const Color(0xFF10B981)];
+      customStages = [];
+      for (int i = 0; i < 4; i++) {
+        final st = rawStages[i];
+        final countVal = st['count'] ?? 0;
+        final pctVal = (countVal / math.max(1.0, totalDiscovered));
+        final ratePct = (st['percentage'] as num?)?.toInt() ?? (pctVal * 100).toInt();
+        customStages.add({
+          'name': '${i + 1}. ${st['stage']}',
+          'count': '$countVal items',
+          'rate': '$ratePct%',
+          'pct': pctVal.clamp(0.1, 1.0),
+          'color': colors[i % colors.length],
+        });
+      }
+    }
+
+    final actionRatePct = customStages != null && customStages.length > 1
+        ? customStages[1]['rate']
+        : '34% Action Rate';
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1621,7 +1674,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  '34% Action Rate',
+                  actionRatePct.contains('Action Rate') ? actionRatePct : '$actionRatePct Action Rate',
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -1647,7 +1700,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             height: 130,
             width: double.infinity,
             child: CustomPaint(
-              painter: _OpportunityFunnelPainter(),
+              painter: _OpportunityFunnelPainter(stagesList: customStages),
             ),
           ),
           const SizedBox(height: 14),
@@ -1684,7 +1737,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '12 Opportunities Expired Unactioned',
+                        '$missedCount Opportunities Expired Unactioned',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -1693,7 +1746,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '3 jobs, 4 events, and 5 scholarships passed deadlines last month. Act earlier to secure slots!',
+                        'Jobs, events, and scholarships passed deadlines recently. Act earlier to secure slots!',
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           color: const Color(0xFFB91C1C),
@@ -1734,7 +1787,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           ),
                         ),
                         Text(
-                          '\$2,850 in scholarships & tickets',
+                          realizedValue,
                           style: GoogleFonts.outfit(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -1748,15 +1801,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF16A34A),
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    'TRACKED',
+                    '+18% VS LAST MONTH',
                     style: GoogleFonts.inter(
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: const Color(0xFF16A34A),
                     ),
                   ),
                 ),
@@ -3298,32 +3351,38 @@ class _AppleFitnessRingsPainter extends CustomPainter {
 
 /// Hourly Heatmap (6 AM – 11 PM) Bar Painter
 class _HourlyHeatmapPainter extends CustomPainter {
+  final List<double>? activityList;
+
+  _HourlyHeatmapPainter({this.activityList});
+
   @override
   void paint(Canvas canvas, Size size) {
     const hours = 18; // 6am to 11pm
     final barW = (size.width - (hours - 1) * 3) / hours;
 
     // Intensity values (0.0 to 1.0) simulating hourly distribution
-    final hourlyActivity = [
-      0.15, // 6 AM
-      0.25, // 7 AM
-      0.50, // 8 AM
-      0.95, // 9 AM (Peak)
-      1.00, // 10 AM (Peak)
-      0.85, // 11 AM
-      0.40, // 12 PM
-      0.45, // 1 PM
-      0.70, // 2 PM
-      0.75, // 3 PM
-      0.60, // 4 PM
-      0.50, // 5 PM
-      0.35, // 6 PM
-      0.40, // 7 PM
-      0.65, // 8 PM
-      0.70, // 9 PM
-      0.30, // 10 PM
-      0.20, // 11 PM
-    ];
+    final hourlyActivity = (activityList != null && activityList!.length == hours)
+        ? activityList!
+        : [
+            0.15, // 6 AM
+            0.25, // 7 AM
+            0.50, // 8 AM
+            0.95, // 9 AM (Peak)
+            1.00, // 10 AM (Peak)
+            0.85, // 11 AM
+            0.40, // 12 PM
+            0.45, // 1 PM
+            0.70, // 2 PM
+            0.75, // 3 PM
+            0.60, // 4 PM
+            0.50, // 5 PM
+            0.35, // 6 PM
+            0.40, // 7 PM
+            0.65, // 8 PM
+            0.70, // 9 PM
+            0.30, // 10 PM
+            0.20, // 11 PM
+          ];
 
     for (int i = 0; i < hours; i++) {
       final val = hourlyActivity[i];
@@ -3360,14 +3419,20 @@ class _HourlyHeatmapPainter extends CustomPainter {
 
 /// Opportunity Conversion Funnel Chart Painter
 class _OpportunityFunnelPainter extends CustomPainter {
+  final List<Map<String, dynamic>>? stagesList;
+
+  _OpportunityFunnelPainter({this.stagesList});
+
   @override
   void paint(Canvas canvas, Size size) {
-    final stages = [
-      {'name': '1. Saved', 'count': '47 clips', 'rate': '100%', 'pct': 1.0, 'color': const Color(0xFF3B82F6)},
-      {'name': '2. Applied', 'count': '18 jobs', 'rate': '38%', 'pct': 0.70, 'color': const Color(0xFF6366F1)},
-      {'name': '3. Interview', 'count': '8 rounds', 'rate': '17%', 'pct': 0.44, 'color': const Color(0xFF8B5CF6)},
-      {'name': '4. Offer', 'count': '2 offers', 'rate': '4%', 'pct': 0.22, 'color': const Color(0xFF10B981)},
-    ];
+    final stages = (stagesList != null && stagesList!.length >= 4)
+        ? stagesList!
+        : [
+            {'name': '1. Saved', 'count': '47 clips', 'rate': '100%', 'pct': 1.0, 'color': const Color(0xFF3B82F6)},
+            {'name': '2. Applied', 'count': '18 jobs', 'rate': '38%', 'pct': 0.70, 'color': const Color(0xFF6366F1)},
+            {'name': '3. Interview', 'count': '8 rounds', 'rate': '17%', 'pct': 0.44, 'color': const Color(0xFF8B5CF6)},
+            {'name': '4. Offer', 'count': '2 offers', 'rate': '4%', 'pct': 0.22, 'color': const Color(0xFF10B981)},
+          ];
 
     final rowHeight = (size.height - 18) / 4;
     final textPainter = TextPainter(textDirection: TextDirection.ltr);

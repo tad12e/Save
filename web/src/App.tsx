@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { DashboardPage } from './components/pages/DashboardPage';
+import { AnalyticsPage } from './components/pages/AnalyticsPage';
 import { ConnectionsPage } from './components/pages/ConnectionsPage';
 import { ClipsPage } from './components/pages/ClipsPage';
 import { CustomPageView } from './components/pages/CustomPageView';
@@ -316,6 +317,13 @@ export default function App() {
               isRefreshing={isRefreshing}
               toggleExtensionWidget={() => setIsExtensionOpen(!isExtensionOpen)}
               theme={theme}
+            />
+          )}
+
+          {activeTab === 'analytics' && (
+            <AnalyticsPage
+              clips={clips}
+              destinations={destinations}
             />
           )}
 

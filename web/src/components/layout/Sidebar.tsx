@@ -21,7 +21,8 @@ import {
   Layers,
   Compass,
   Rocket,
-  Terminal
+  Terminal,
+  BarChart3
 } from 'lucide-react';
 import { CustomPageConfig } from '../../types';
 
@@ -71,6 +72,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'dashboard', 
       label: 'Home', 
       icon: <LayoutDashboard className="w-4 h-4" />
+    },
+    { 
+      id: 'analytics', 
+      label: 'Analytics & OLAP', 
+      icon: <BarChart3 className="w-4 h-4 text-emerald-500" />
     },
     { 
       id: 'clips', 
