@@ -74,6 +74,9 @@ export interface ClipItem {
     deadline?: string;
     author?: string;
     rating?: string;
+    duration?: string;
+    [key: string]: any;
+  };
   isFavorite?: boolean;
   sourcePlatform?: 'web' | 'x_twitter' | 'linkedin' | 'reddit' | 'youtube' | 'github';
   sourceAuthor?: string;
