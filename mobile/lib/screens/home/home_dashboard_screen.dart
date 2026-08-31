@@ -78,78 +78,68 @@ class HomeDashboardScreen extends StatelessWidget {
   // Section 1: 2×2 Overview Stats Grid
   // ---------------------------------------------------------------------------
   Widget _buildStatsGrid(int totalClips, int expiringCount) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cardWidth = (constraints.maxWidth - 12) / 2;
-
-        return Column(
+    return Column(
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                // Card 1: Total Saves
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildMiniCard(
-                    icon: LucideIcons.bookmark,
-                    iconBgColor: const Color(0xFFDCFCE7),
-                    iconColor: const Color(0xFF16A34A),
-                    numberText: '$totalClips',
-                    label: 'Total Saved',
-                    trendText: '+12 this week',
-                    trendColor: const Color(0xFF16A34A),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Card 2: Collections
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildMiniCard(
-                    icon: LucideIcons.folder,
-                    iconBgColor: const Color(0xFFF1F5F9),
-                    iconColor: const Color(0xFF2D6A4F),
-                    numberText: '6',
-                    label: 'Collections',
-                    trendText: 'AI, Engineering...',
-                    trendColor: AppTheme.textMuted,
-                  ),
-                ),
-              ],
+            // Card 1: Total Saves
+            Expanded(
+              child: _buildMiniCard(
+                icon: LucideIcons.bookmark,
+                iconBgColor: const Color(0xFFDCFCE7),
+                iconColor: const Color(0xFF16A34A),
+                numberText: '$totalClips',
+                label: 'Total Saved',
+                trendText: '+12 this week',
+                trendColor: const Color(0xFF16A34A),
+              ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                // Card 3: Expiring soon
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildMiniCard(
-                    icon: LucideIcons.clock,
-                    iconBgColor: expiringCount > 0 ? AppTheme.amberAlertBg : const Color(0xFFF1F5F9),
-                    iconColor: expiringCount > 0 ? AppTheme.amberAlert : AppTheme.textMuted,
-                    numberText: '$expiringCount',
-                    label: expiringCount > 0 ? 'Act Now' : 'Expiring Soon',
-                    trendText: expiringCount > 0 ? 'Review & export' : 'All clear',
-                    trendColor: expiringCount > 0 ? AppTheme.amberAlert : const Color(0xFF16A34A),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Card 4: AI Enriched
-                SizedBox(
-                  width: cardWidth,
-                  child: _buildMiniCard(
-                    icon: LucideIcons.sparkles,
-                    iconBgColor: const Color(0xFFDCFCE7),
-                    iconColor: const Color(0xFF16A34A),
-                    numberText: '98%',
-                    label: 'AI Processed',
-                    trendText: 'Auto-categorized',
-                    trendColor: const Color(0xFF16A34A),
-                  ),
-                ),
-              ],
+            const SizedBox(width: 12),
+            // Card 2: Collections
+            Expanded(
+              child: _buildMiniCard(
+                icon: LucideIcons.folder,
+                iconBgColor: const Color(0xFFF1F5F9),
+                iconColor: const Color(0xFF2D6A4F),
+                numberText: '6',
+                label: 'Collections',
+                trendText: 'AI, Engineering...',
+                trendColor: AppTheme.textMuted,
+              ),
             ),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            // Card 3: Expiring soon
+            Expanded(
+              child: _buildMiniCard(
+                icon: LucideIcons.clock,
+                iconBgColor: expiringCount > 0 ? AppTheme.amberAlertBg : const Color(0xFFF1F5F9),
+                iconColor: expiringCount > 0 ? AppTheme.amberAlert : AppTheme.textMuted,
+                numberText: '$expiringCount',
+                label: expiringCount > 0 ? 'Act Now' : 'Expiring Soon',
+                trendText: expiringCount > 0 ? 'Review & export' : 'All clear',
+                trendColor: expiringCount > 0 ? AppTheme.amberAlert : const Color(0xFF16A34A),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Card 4: AI Enriched
+            Expanded(
+              child: _buildMiniCard(
+                icon: LucideIcons.sparkles,
+                iconBgColor: const Color(0xFFDCFCE7),
+                iconColor: const Color(0xFF16A34A),
+                numberText: '98%',
+                label: 'AI Processed',
+                trendText: 'Auto-categorized',
+                trendColor: const Color(0xFF16A34A),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -507,87 +497,95 @@ class HomeDashboardScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final cardWidth = (constraints.maxWidth - 12) / 2;
-            return Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: collections.map((col) {
-                return SizedBox(
-                  width: cardWidth,
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.02),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: (col['accent'] as Color).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                col['icon'] as IconData,
-                                size: 16,
-                                color: col['accent'] as Color,
-                              ),
-                            ),
-                            Text(
-                              '${col['count']}',
-                              style: GoogleFonts.outfit(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          col['title'] as String,
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          col['recent'] as String,
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF16A34A),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            );
-          },
+        Column(
+          children: [
+            Row(
+              children: [
+                Expanded(child: _buildCollectionCard(collections[0])),
+                const SizedBox(width: 12),
+                Expanded(child: _buildCollectionCard(collections[1])),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _buildCollectionCard(collections[2])),
+                const SizedBox(width: 12),
+                Expanded(child: _buildCollectionCard(collections[3])),
+              ],
+            ),
+          ],
         ),
       ],
+    );
+  }
+
+  Widget _buildCollectionCard(Map<String, dynamic> col) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: (col['accent'] as Color).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  col['icon'] as IconData,
+                  size: 16,
+                  color: col['accent'] as Color,
+                ),
+              ),
+              Text(
+                '${col['count']}',
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            col['title'] as String,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            col['recent'] as String,
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF16A34A),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

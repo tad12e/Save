@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/app_header.dart';
 import '../auth/sign_in_screen.dart';
 import '../auth/sign_up_screen.dart';
+import '../settings/clipper_settings_screen.dart';
 import '../settings/server_settings_modal.dart';
 import 'personal_info_screen.dart';
 import 'security_screen.dart';
@@ -72,11 +73,32 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Section 2: PREFERENCES
-            _buildSectionHeader('PREFERENCES'),
+            // Section 2: PREFERENCES & CLIPPER SYSTEM
+            _buildSectionHeader('PREFERENCES & CLIPPER SYSTEM'),
             const SizedBox(height: 8),
             _buildCardGroup(
               children: [
+                _buildSettingsTile(
+                  icon: LucideIcons.slidersHorizontal,
+                  title: 'Clipper & Destination Settings',
+                  subtitle: 'Save modes, smart routing, Spotify, AI & privacy',
+                  badgeText: 'CONFIG',
+                  badgeColor: const Color(0xFF2D6A4F),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ClipperSettingsScreen()),
+                    );
+                  },
+                ),
+                _buildDivider(),
+                _buildSettingsTile(
+                  icon: LucideIcons.server,
+                  title: 'Backend Server Connection',
+                  subtitle: 'Configure Django API URL',
+                  onTap: () => ServerSettingsModal.show(context),
+                ),
+                _buildDivider(),
                 _buildSettingsTile(
                   icon: LucideIcons.bell,
                   title: 'Notifications',
@@ -98,13 +120,6 @@ class ProfileScreen extends StatelessWidget {
                   subtitle: 'Green & White Light Theme',
                   badgeText: 'LIGHT',
                   onTap: () {},
-                ),
-                _buildDivider(),
-                _buildSettingsTile(
-                  icon: LucideIcons.server,
-                  title: 'Backend Server Connection',
-                  subtitle: 'Configure Django API URL',
-                  onTap: () => ServerSettingsModal.show(context),
                 ),
               ],
             ),

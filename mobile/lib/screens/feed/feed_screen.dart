@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/theme.dart';
 import '../../models/clip_model.dart';
@@ -37,6 +39,29 @@ class _FeedScreenState extends State<FeedScreen> {
   void dispose() {
     _aiChatController.dispose();
     super.dispose();
+  }
+
+  void _openXStyleInAppBrowser(BuildContext context, ClipModel clip) {
+    final isFavorited = _favoritedClipIds.contains(clip.id);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      enableDrag: true,
+      builder: (ctx) => _XStyleInAppBrowserModal(
+        clip: clip,
+        isFavorited: isFavorited,
+        onToggleFavorite: () {
+          setState(() {
+            if (_favoritedClipIds.contains(clip.id)) {
+              _favoritedClipIds.remove(clip.id);
+            } else {
+              _favoritedClipIds.add(clip.id);
+            }
+          });
+        },
+      ),
+    );
   }
 
   void _openAiChatForClip(BuildContext context, ClipModel clip) {
@@ -678,11 +703,81 @@ class _FeedScreenState extends State<FeedScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 10),
+
+          // X-Style Embedded Link Preview Card (Tappable to open In-App Browser)
+          GestureDetector(
+            onTap: () => _openXStyleInAppBrowser(context, clip),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 68,
+                    height: 68,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1E293B),
+                      borderRadius: BorderRadius.horizontal(left: Radius.circular(11)),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        _getSourceIcon(clip.sourcePlatform),
+                        size: 26,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            clip.title,
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            Uri.tryParse(clip.url)?.host.isNotEmpty == true
+                                ? Uri.tryParse(clip.url)!.host
+                                : clip.url,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: AppTheme.textMuted,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(right: 12),
+                    child: Icon(LucideIcons.chevronRight, size: 16, color: AppTheme.inactiveGrey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           const SizedBox(height: 12),
           const Divider(height: 1, color: Color(0xFFF1F5F9)),
           const SizedBox(height: 10),
 
-          // Action Buttons Bar: Ask AI | Note | Bookmark | Open Link
+          // Action Buttons Bar: Ask AI | Note | Bookmark | Open Link (X In-App Browser)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -757,15 +852,10 @@ class _FeedScreenState extends State<FeedScreen> {
                 splashRadius: 18,
               ),
 
-              // Open original link
+              // Open X-Style In-App Browser
               IconButton(
                 icon: const Icon(LucideIcons.externalLink, size: 16, color: Color(0xFF2D6A4F)),
-                onPressed: () async {
-                  final uri = Uri.tryParse(clip.url);
-                  if (uri != null && await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
+                onPressed: () => _openXStyleInAppBrowser(context, clip),
                 splashRadius: 18,
               ),
             ],
@@ -784,6 +874,19 @@ class _FeedScreenState extends State<FeedScreen> {
 
   List<ClipModel> _getDemoFeedClips() {
     return [
+      ClipModel(
+        id: '0',
+        url: 'https://habeshahistory.com/the-dahlak-sultanate',
+        title: 'The Dahlak Sultanate: A Medieval History (8th–16th AD) | Habesha History',
+        summary: 'A naval force sent by Sulayman ibn Abd al-Malik swiftly retaliated, capturing the Dahlak Islands (an event that likely coincided with the sacking of Adulis). Under Umayyad control, the islands were transformed into a remote prison, earning the nickname "Island of Thorns", where dissidents and criminals were exiled throughout the 8th century AD. This practice continued under the Abbasid Caliphate.',
+        contentType: 'Research',
+        tags: ['history', 'medieval', 'dahlak', 'redsea', 'eritrea'],
+        sourcePlatform: 'web',
+        sourceAuthor: 'Habesha History',
+        status: 'done',
+        exportStatus: 'done',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
+      ),
       ClipModel(
         id: '1',
         url: 'https://arxiv.org/abs/2403.09812',
@@ -876,7 +979,6 @@ class _ClipAiChatSheetState extends State<_ClipAiChatSheet> {
     if (query.trim().isEmpty) return;
     setState(() {
       _messages.add({'role': 'user', 'text': query.trim()});
-      // Generate realistic AI answer
       _messages.add({
         'role': 'ai',
         'text': _generateAiResponse(query.trim(), widget.clip),
@@ -888,12 +990,12 @@ class _ClipAiChatSheetState extends State<_ClipAiChatSheet> {
   String _generateAiResponse(String query, ClipModel clip) {
     final lower = query.toLowerCase();
     if (lower.contains('summar') || lower.contains('brief')) {
-      return 'Key Takeaways from ${clip.title}:\n\n1. Core Focus: Efficient execution and memory optimizations.\n2. Implementation: Uses modern Rust/Next.js architectures.\n3. Impact: 3-5x latency improvement under high concurrency.';
+      return 'Key Takeaways from ${clip.title}:\n\n1. Core Focus: Historical maritime trade and territorial sovereignty.\n2. Strategic Importance: Controlled the Red Sea commercial routes between the Horn of Africa, Yemen, and Egypt.\n3. Archeological Impact: Over 300 Kufic and Arabic funerary inscriptions discovered in Dahlak Kebir.';
     }
     if (lower.contains('action') || lower.contains('todo') || lower.contains('step')) {
-      return 'Actionable Next Steps:\n• Review repo documentation at ${clip.url}\n• Test benchmarking scripts locally in a scratch environment\n• Save architectural notes into your vault collection';
+      return 'Actionable Next Steps:\n• Review historical sources at ${clip.url}\n• Tag with #history, #medieval-archaeology, and #redsea in your vault\n• Share key historical points with your study group';
     }
-    return 'Based on "${clip.title}": This resource discusses ${clip.summary}. Would you like me to generate flashcard questions or extract code snippets from this?';
+    return 'Based on "${clip.title}": ${clip.summary}\n\nWould you like me to extract key dates, historical figures, or create a quiz on this topic?';
   }
 
   @override
@@ -1073,3 +1175,613 @@ class _ClipAiChatSheetState extends State<_ClipAiChatSheet> {
     );
   }
 }
+
+// =============================================================================
+// IN-APP BROWSER WITH REAL ARTICLE READER & DOCKED FEED CLIP CARD
+// =============================================================================
+
+class _XStyleInAppBrowserModal extends StatefulWidget {
+  final ClipModel clip;
+  final bool isFavorited;
+  final VoidCallback onToggleFavorite;
+
+  const _XStyleInAppBrowserModal({
+    required this.clip,
+    required this.isFavorited,
+    required this.onToggleFavorite,
+  });
+
+  @override
+  State<_XStyleInAppBrowserModal> createState() => _XStyleInAppBrowserModalState();
+}
+
+class _XStyleInAppBrowserModalState extends State<_XStyleInAppBrowserModal> {
+  late final WebViewController _webViewController;
+  bool _isLoading = true;
+  double _progress = 0.0;
+  bool _isDockedExpanded = true;
+  bool _isRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0xFF0F141C))
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            if (mounted) {
+              setState(() {
+                _progress = progress / 100.0;
+              });
+            }
+          },
+          onPageStarted: (String url) {
+            if (mounted) {
+              setState(() {
+                _isLoading = true;
+              });
+            }
+          },
+          onPageFinished: (String url) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+          },
+        ),
+      );
+
+    final uri = Uri.tryParse(widget.clip.url);
+    if (uri != null) {
+      _webViewController.loadRequest(uri);
+    }
+  }
+
+  String get _domain {
+    final uri = Uri.tryParse(widget.clip.url);
+    if (uri != null && uri.host.isNotEmpty) {
+      return uri.host;
+    }
+    return 'habeshahistory.com';
+  }
+
+  void _handleRefresh() async {
+    setState(() => _isRefreshing = true);
+    _webViewController.reload();
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (mounted) {
+      setState(() => _isRefreshing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Reloaded $_domain'),
+          duration: const Duration(seconds: 1),
+          backgroundColor: const Color(0xFF1E293B),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _showMoreMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(LucideIcons.copy, color: Colors.white, size: 20),
+                title: Text('Copy article link', style: GoogleFonts.inter(color: Colors.white, fontSize: 14)),
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: widget.clip.url));
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Article link copied to clipboard ✓'),
+                      backgroundColor: Color(0xFF16A34A),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(LucideIcons.externalLink, color: Colors.white, size: 20),
+                title: Text('Open live website in external browser', style: GoogleFonts.inter(color: Colors.white, fontSize: 14)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final uri = Uri.tryParse(widget.clip.url);
+                  if (uri != null && await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(LucideIcons.share2, color: Colors.white, size: 20),
+                title: Text('Share clip to vault members...', style: GoogleFonts.inter(color: Colors.white, fontSize: 14)),
+                onTap: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final sheetHeight = mediaQuery.size.height * 0.94;
+
+    return Container(
+      height: sheetHeight,
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F141C), // Obsidian dark theme matching in-app browser
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: Column(
+        children: [
+          // Drag handle pill at top
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 4),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // 1. Top In-App Browser Header (Domain + Breadcrumb)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFF1E293B), width: 1)),
+            ),
+            child: Row(
+              children: [
+                // Favicon / Globe icon
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      widget.clip.sourcePlatform.contains('github')
+                          ? LucideIcons.code
+                          : LucideIcons.globe,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Title and Breadcrumb
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _domain,
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'Home / ${widget.clip.contentType.toLowerCase()}',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                // 3-dots more menu
+                IconButton(
+                  icon: const Icon(LucideIcons.ellipsis, size: 20, color: Colors.white),
+                  onPressed: () => _showMoreMenu(context),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+          ),
+
+          // 2. Real Web Page Main Content Area (Live WebView Widget)
+          Expanded(
+            child: Stack(
+              children: [
+                // Live WebView Engine rendering the real website
+                WebViewWidget(controller: _webViewController),
+
+                // Top Loading progress bar
+                if (_isLoading && _progress < 1.0)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(
+                      value: _progress > 0 ? _progress : null,
+                      backgroundColor: Colors.transparent,
+                      color: const Color(0xFF16A34A),
+                      minHeight: 2.5,
+                    ),
+                  ),
+
+                // 3. Floating Bottom Controls: In-App Browser Pill + Docked Real Feed Box Card
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // In-App Browser Navigation Pill Bar (← | domain.com ⋮ | ↻)
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF000000).withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: const Color(0xFF334155), width: 1),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Back Arrow (Go back in web history if possible, or close)
+                            IconButton(
+                              icon: const Icon(LucideIcons.arrowLeft, color: Colors.white, size: 20),
+                              onPressed: () async {
+                                if (await _webViewController.canGoBack()) {
+                                  await _webViewController.goBack();
+                                } else {
+                                  if (context.mounted) Navigator.pop(context);
+                                }
+                              },
+                              visualDensity: VisualDensity.compact,
+                            ),
+
+                            // Center URL Pill with 3 vertical dots (e.g. habeshahistory.com ⋮)
+                            InkWell(
+                              onTap: () => _showMoreMenu(context),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E293B),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _domain,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Icon(LucideIcons.ellipsisVertical, size: 14, color: Color(0xFF94A3B8)),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // Refresh button ↻
+                            IconButton(
+                              icon: _isRefreshing
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(LucideIcons.rotateCw, color: Colors.white, size: 19),
+                              onPressed: _handleRefresh,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Docked Real Feed Box Card (from our app's Knowledge Feed)
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isDockedExpanded = !_isDockedExpanded;
+                          });
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF000000), // Pure black matching bottom dock
+                            border: Border(
+                              top: BorderSide(color: Color(0xFF262626), width: 1.0),
+                            ),
+                          ),
+                          child: SafeArea(
+                            top: false,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Drag indicator line
+                                Center(
+                                  child: Container(
+                                    width: 32,
+                                    height: 3,
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF525252),
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                ),
+
+                                // Feed Box Header: Source Platform + Source Name + Category Pill + Saved to Vault
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF1E293B),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Center(
+                                            child: Icon(
+                                              widget.clip.sourcePlatform.contains('github')
+                                                  ? LucideIcons.code
+                                                  : LucideIcons.globe,
+                                              size: 13,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          widget.clip.sourceAuthor.isNotEmpty
+                                              ? widget.clip.sourceAuthor
+                                              : _domain,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFDCFCE7),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            widget.clip.contentType.toUpperCase(),
+                                            style: GoogleFonts.inter(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF166534),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF166534).withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFF16A34A), width: 0.8),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(LucideIcons.check, size: 11, color: Color(0xFF4ADE80)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Saved in Vault',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF4ADE80),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+
+                                // Clip Title
+                                Text(
+                                  widget.clip.title,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+
+                                // Summary snippet
+                                Text(
+                                  widget.clip.summary,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11.5,
+                                    color: const Color(0xFFA1A1AA),
+                                    height: 1.35,
+                                  ),
+                                  maxLines: _isDockedExpanded ? 2 : 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 8),
+
+                                // Tags
+                                if (_isDockedExpanded)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Wrap(
+                                      spacing: 6,
+                                      runSpacing: 4,
+                                      children: widget.clip.tags.map((t) {
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF18181B),
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(color: const Color(0xFF27272A)),
+                                          ),
+                                          child: Text(
+                                            '#$t',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 9.5,
+                                              color: const Color(0xFF71717A),
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+
+                                // Action Buttons Row: Ask AI | Add Note | Favorite Toggle | Share
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    // Ask AI
+                                    InkWell(
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                        showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.white,
+                                          shape: const RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                                          ),
+                                          builder: (ctx) => _ClipAiChatSheet(clip: widget.clip),
+                                        );
+                                      },
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFDCFCE7),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(LucideIcons.sparkles, size: 13, color: Color(0xFF16A34A)),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Ask AI',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFF16A34A),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Add Note
+                                    InkWell(
+                                      onTap: () {
+                                        Navigator.pop(context);
+                                      },
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF18181B),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: const Color(0xFF27272A)),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(LucideIcons.pencil, size: 12, color: Color(0xFFA1A1AA)),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Add Note',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: const Color(0xFFA1A1AA),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Bookmark / Vault Favorite
+                                    IconButton(
+                                      icon: Icon(
+                                        widget.isFavorited ? LucideIcons.bookmarkCheck : LucideIcons.bookmark,
+                                        size: 18,
+                                        color: widget.isFavorited ? const Color(0xFF10B981) : const Color(0xFF71717A),
+                                      ),
+                                      onPressed: widget.onToggleFavorite,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+
+                                    // Share
+                                    IconButton(
+                                      icon: const Icon(LucideIcons.share2, size: 16, color: Color(0xFF71717A)),
+                                      onPressed: () => _showMoreMenu(context),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+

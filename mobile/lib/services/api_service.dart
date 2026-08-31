@@ -435,5 +435,40 @@ class ApiService {
     } catch (_) {}
     return null;
   }
+
+  /// Fetches complete multi-dimensional Columnar OLAP Analytics from backend.
+  static Future<Map<String, dynamic>?> fetchFullAnalytics({
+    String period = 'this_week',
+    bool refresh = false,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final headers = await _getHeaders(requireAuth: false);
+      final queryParamPeriod = switch (period) {
+        'This Month' => 'this_month',
+        'Last 30 Days' => 'last_30_days',
+        'All Time' => 'all_time',
+        _ => 'this_week',
+      };
+
+      final uri = Uri.parse('$baseUrl/api/analytics/full/').replace(
+        queryParameters: {
+          'period': queryParamPeriod,
+          if (refresh) 'refresh': 'true',
+        },
+      );
+
+      final response = await http.get(uri, headers: headers).timeout(
+        const Duration(seconds: 8),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      if (kDebugMode) print('ApiService.fetchFullAnalytics error: $e');
+    }
+    return null;
+  }
 }
 
