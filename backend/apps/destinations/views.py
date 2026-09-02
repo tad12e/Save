@@ -43,22 +43,6 @@ class DestinationListCreateView(APIView):
                 is_active=True,
                 config={'target_resource_name': 'Save Clips Vault', 'access_type': 'full'}
             )
-            Destination.objects.create(
-                user=user,
-                provider='google_sheets',
-                name='Google Sheets',
-                is_default=False,
-                is_active=False,
-                config={'target_resource_name': 'Connect a Google Sheet...', 'access_type': 'full'}
-            )
-            Destination.objects.create(
-                user=user,
-                provider='notion',
-                name='Notion Workspace',
-                is_default=False,
-                is_active=False,
-                config={'target_resource_name': 'Connect a Notion Database...', 'access_type': 'full'}
-            )
             destinations = Destination.objects.filter(user=user)
         else:
             defaults = destinations.filter(is_default=True)

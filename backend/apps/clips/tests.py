@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from unittest.mock import patch
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -7,7 +8,7 @@ from rest_framework import status
 from apps.clips.models import Clip
 from apps.clips.services.source_detector import detect_source_platform, extract_external_job_url, detect_embedded_resources
 from apps.clips.services.url import hash_url, normalise_url
-from apps.clips.tasks import check_deadline_reminders
+from apps.clips.tasks import check_deadline_reminders, process_clip
 
 User = get_user_model()
 
@@ -109,5 +110,140 @@ class ClipIngestionTestCase(TestCase):
             'audio': '',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class ClipDeadlineHierarchyAndMetadataTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='deadline_tester@save.app',
+            name='Deadline Tester',
+            password='password123'
+        )
+        self.client.force_authenticate(user=self.user)
+
+    @patch('apps.clips.tasks.extract_clip_metadata')
+    def test_article_without_user_deadline_remains_none(self, mock_extract):
+        """Articles are timeless: even if AI returns a date, it should NOT be set as a deadline."""
+        mock_extract.return_value = {
+            'title': 'The Architecture of Modern Databases',
+            'summary': 'Deep dive into LSM trees and B-Trees.',
+            'content_type': 'article',
+            'tags': ['databases', 'systems'],
+            'deadline_date': '2026-12-31',
+        }
+        clip = Clip.objects.create(
+            user=self.user,
+            url='https://example.com/databases-article',
+            url_hash='hash_art_1',
+            status=Clip.STATUS_PENDING,
+        )
+        process_clip(None, str(clip.id))
+        clip.refresh_from_db()
+        self.assertEqual(clip.content_type, 'article')
+        self.assertIsNone(clip.deadline_date)
+
+    @patch('apps.clips.tasks.extract_clip_metadata')
+    def test_article_with_user_custom_deadline_is_respected(self, mock_extract):
+        """If user explicitly sets a deadline on an article (e.g. read later reminder), keep it."""
+        mock_extract.return_value = {
+            'title': 'AI in 2026',
+            'summary': 'Predictions for artificial intelligence.',
+            'content_type': 'article',
+            'tags': ['ai'],
+        }
+        clip = Clip.objects.create(
+            user=self.user,
+            url='https://example.com/ai-article',
+            url_hash='hash_art_2',
+            deadline_date=date(2026, 9, 20),
+            status=Clip.STATUS_PENDING,
+        )
+        process_clip(None, str(clip.id))
+        clip.refresh_from_db()
+        self.assertEqual(clip.deadline_date, date(2026, 9, 20))
+
+    @patch('apps.clips.tasks.extract_clip_metadata')
+    def test_job_without_user_deadline_extracts_job_deadline(self, mock_extract):
+        """Time-sensitive content (Jobs/Grants) should extract the natural application deadline."""
+        mock_extract.return_value = {
+            'title': 'Staff Software Engineer @ Anthropic',
+            'summary': 'Lead development of next-gen AI safety infrastructure.',
+            'content_type': 'job',
+            'tags': ['python', 'ai', 'careers'],
+            'deadline_date': '2026-10-15',
+        }
+        clip = Clip.objects.create(
+            user=self.user,
+            url='https://jobs.example.com/staff-engineer',
+            url_hash='hash_job_1',
+            status=Clip.STATUS_PENDING,
+        )
+        process_clip(None, str(clip.id))
+        clip.refresh_from_db()
+        self.assertEqual(clip.content_type, 'job')
+        self.assertEqual(clip.deadline_date, date(2026, 10, 15))
+
+    @patch('apps.clips.tasks.extract_clip_metadata')
+    def test_user_custom_deadline_overrides_job_deadline(self, mock_extract):
+        """User's explicit deadline must always override the AI-extracted job deadline."""
+        mock_extract.return_value = {
+            'title': 'NSF AI Fellowship Grant 2026',
+            'summary': 'Full research stipend for graduate researchers.',
+            'content_type': 'grant',
+            'tags': ['research', 'grant'],
+            'deadline_date': '2026-11-30',
+        }
+        clip = Clip.objects.create(
+            user=self.user,
+            url='https://grants.example.com/nsf-ai',
+            url_hash='hash_grant_1',
+            deadline_date=date(2026, 9, 10),
+            status=Clip.STATUS_PENDING,
+        )
+        process_clip(None, str(clip.id))
+        clip.refresh_from_db()
+        self.assertEqual(clip.deadline_date, date(2026, 9, 10))
+
+    @patch('apps.clips.tasks.extract_clip_metadata')
+    def test_user_note_and_tags_preservation_and_merge(self, mock_extract):
+        """User custom notes and tags must be preserved and merged with AI-extracted tags."""
+        mock_extract.return_value = {
+            'title': 'Open Source Distributed Cache',
+            'summary': 'High performance cache built in Rust.',
+            'content_type': 'tool',
+            'tags': ['rust', 'performance'],
+        }
+        clip = Clip.objects.create(
+            user=self.user,
+            url='https://github.com/example/cache',
+            url_hash='hash_tool_1',
+            tags=['my_favorite', 'must_try'],
+            extra_metadata={'user_note': 'Check if this supports Redis wire protocol.'},
+            status=Clip.STATUS_PENDING,
+        )
+        process_clip(None, str(clip.id))
+        clip.refresh_from_db()
+        self.assertIn('my_favorite', clip.tags)
+        self.assertIn('must_try', clip.tags)
+        self.assertIn('rust', clip.tags)
+        self.assertEqual(clip.extra_metadata.get('user_note'), 'Check if this supports Redis wire protocol.')
+
+    def test_clip_api_ingests_note_tags_and_deadline(self):
+        """The /api/clips/ endpoint correctly ingests note, tags, and deadline from client request."""
+        response = self.client.post('/api/clips/', {
+            'url': 'https://example.com/research-fellowship',
+            'selected_text': 'Research immersion in Singapore',
+            'note': 'Discuss with academic advisor',
+            'tags': ['fellowship', 'singapore', '2026'],
+            'deadline': '2026-10-31',
+            'table_name': 'My Clips',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created_clip = Clip.objects.get(url_hash=response.data['url_hash'])
+        self.assertEqual(str(created_clip.deadline_date), '2026-10-31')
+        self.assertIn('fellowship', created_clip.tags)
+        self.assertEqual(created_clip.extra_metadata.get('user_note'), 'Discuss with academic advisor')
+        self.assertEqual(created_clip.extra_metadata.get('target_table_name'), 'My Clips')
 
 

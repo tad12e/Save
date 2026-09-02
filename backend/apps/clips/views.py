@@ -102,6 +102,22 @@ class ClipCreateView(APIView):
             from apps.destinations.services import get_user_destination
             destination = get_user_destination(user)
 
+        # Extract user custom metadata (note, tags, custom deadline, chosen table)
+        user_tags = request.data.get('tags') or []
+        if isinstance(user_tags, str):
+            user_tags = [t.strip().replace('#', '') for t in user_tags.split(',') if t.strip()]
+
+        user_note = (request.data.get('note') or '').strip()
+        custom_deadline = request.data.get('deadline') or request.data.get('deadline_date')
+
+        extra_meta = {}
+        if user_note:
+            extra_meta['user_note'] = user_note
+        if request.data.get('table_id'):
+            extra_meta['target_table_id'] = request.data.get('table_id')
+        if request.data.get('table_name') or request.data.get('tableName'):
+            extra_meta['target_table_name'] = request.data.get('table_name') or request.data.get('tableName')
+
         clip = Clip.objects.create(
             user=user,
             url=url_val,
@@ -109,17 +125,29 @@ class ClipCreateView(APIView):
             selected_text=request.data.get('selected_text', ''),
             status=Clip.STATUS_PENDING,
             destination=destination,
+            tags=user_tags,
+            extra_metadata=extra_meta,
         )
+
+        if custom_deadline:
+            try:
+                from datetime import datetime
+                clip.deadline_date = datetime.strptime(str(custom_deadline)[:10], '%Y-%m-%d').date()
+                clip.save(update_fields=['deadline_date'])
+            except Exception:
+                pass
+
         clip.duplicate = False
 
         try:
             from .tasks import process_clip
             process_clip.delay(str(clip.id))
         except Exception:
-            # Fallback if Celery/Redis is down: run synchronously in-process
+            # Run in daemon background thread so HTTP request returns in <50ms without blocking user UI
             try:
+                import threading
                 from .tasks import process_clip
-                process_clip(str(clip.id))
+                threading.Thread(target=lambda: process_clip(None, str(clip.id)), daemon=True).start()
             except Exception:
                 pass
 

@@ -97,7 +97,7 @@ _GEMINI_RESPONSE_SCHEMA = {
         },
         "deadline_date": {
             "type": "STRING",
-            "description": "YYYY-MM-DD or empty string"
+            "description": "YYYY-MM-DD format. ONLY extract if this is a real-world time-sensitive opportunity with an application or registration deadline (e.g. Job, Grant, Scholarship, Hackathon, Event). For articles, essays, blogs, tools, code repositories, or generic text, ALWAYS leave deadline_date as empty string ''."
         },
         "music_embed_url": {
             "type": "STRING",

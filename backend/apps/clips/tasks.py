@@ -166,7 +166,10 @@ def process_clip(self, clip_id: str):
         clip.title = metadata.get('title') or clip.url
         clip.summary = metadata.get('summary') or ''
         clip.content_type = metadata.get('content_type') or 'webpage'
-        clip.tags = metadata.get('tags') or []
+        # Preserve and merge user tags with AI extracted tags
+        user_tags = clip.tags or []
+        ai_tags = metadata.get('tags') or []
+        clip.tags = list(dict.fromkeys(user_tags + ai_tags))
 
         # Source platform origin attribution
         clip.source_platform = metadata.get('source_platform') or getattr(clip, 'source_platform', 'web') or 'web'
@@ -177,8 +180,9 @@ def process_clip(self, clip_id: str):
         clip.is_resource_hub = metadata.get('is_resource_hub', False)
         clip.extracted_resource_url = metadata.get('extracted_resource_url', '')
 
-        # Category-specific structured fields & dynamic schema
-        extra = metadata.get('category_fields') or {}
+        # Category-specific structured fields while preserving user custom notes and target tab
+        extra = clip.extra_metadata or {}
+        extra.update(metadata.get('category_fields') or {})
         if metadata.get('category_name'):
             extra['category_name'] = metadata['category_name']
         if metadata.get('dynamic_headers'):
@@ -201,15 +205,33 @@ def process_clip(self, clip_id: str):
             'extracted_resource_url',
             'extra_metadata',
         ]
-        deadline_str = metadata.get('deadline_date')
-        if deadline_str:
-            try:
-                from datetime import date as date_type
-                parts = deadline_str.split('-')
-                clip.deadline_date = date_type(int(parts[0]), int(parts[1]), int(parts[2]))
-                update_fields.append('deadline_date')
-            except (ValueError, IndexError):
-                pass
+
+        # Deadline resolution hierarchy:
+        # 1. User Custom Deadline: Always respected if explicitly set by the user.
+        # 2. Time-Sensitive Content (Jobs, Grants, Scholarships, Events): Extract real-world application deadline.
+        # 3. Timeless Content (Articles, Essays, Blogs, Tools, Code Repos): Left blank (None).
+        TIME_SENSITIVE_CONTENT_TYPES = {
+            'job',
+            'scholarship',
+            'grant',
+            'event',
+            'hackathon',
+            'opportunity',
+            'fellowship',
+            'bounty',
+            'competition',
+        }
+
+        if not clip.deadline_date and clip.content_type in TIME_SENSITIVE_CONTENT_TYPES:
+            deadline_str = metadata.get('deadline_date')
+            if deadline_str:
+                try:
+                    from datetime import date as date_type
+                    parts = deadline_str.split('-')
+                    clip.deadline_date = date_type(int(parts[0]), int(parts[1]), int(parts[2]))
+                    update_fields.append('deadline_date')
+                except (ValueError, IndexError):
+                    pass
 
         music_url = metadata.get('music_embed_url')
         if music_url:

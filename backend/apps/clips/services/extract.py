@@ -24,9 +24,9 @@ def _fetch_page_text(url: str) -> tuple[str, str]:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=15) as response:
+        with urllib.request.urlopen(request, timeout=6) as response:
             raw_html = response.read().decode('utf-8', errors='replace')
-    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, Exception):
         return '', ''
 
     title_match = re.search(r'<title[^>]*>(.*?)</title>', raw_html, re.IGNORECASE | re.DOTALL)
