@@ -17,21 +17,43 @@ function FloatingButtonOverlay() {
   const [isSaved, setIsSaved] = useState(false);
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dismissedTextRef = useRef<string>('');
 
-  // Text selection listener with fast 150ms response
+  // Text selection listener with debouncing & dismissal tracking
   useEffect(() => {
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      // Ignore mouseup events originating inside the Clipper UI
+      const path = (e as any).composedPath ? (e as any).composedPath() : [];
+      const isInsideClipper = path.some(
+        (el: any) =>
+          el?.id === 'clipper-floating-root' ||
+          el?.id === 'clipper-feed-panel-root' ||
+          el?.hasAttribute?.('data-clipper-panel')
+      );
+      if (isInsideClipper) return;
+
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 
       debounceTimerRef.current = setTimeout(() => {
         const selection = window.getSelection();
         const text = selection?.toString().trim() || '';
 
+        // If user deselected all text, clear the dismissed history
+        if (!text) {
+          dismissedTextRef.current = '';
+          return;
+        }
+
+        // If user explicitly dismissed/closed this exact selection, do not reopen
+        if (text === dismissedTextRef.current) {
+          return;
+        }
+
         if (text.length > 0 && selection && selection.rangeCount > 0) {
           const range = selection.getRangeAt(0);
           const rect = range.getBoundingClientRect();
           if (rect.width > 0 && rect.height > 0) {
-            const pos = getPanelPosition(rect, 240, 260);
+            const pos = getPanelPosition(rect, 270, 300);
             setPanelText(text);
             setPanelPos(pos);
             setPanelOpen(true);
@@ -47,7 +69,7 @@ function FloatingButtonOverlay() {
     };
   }, []);
 
-  // Quick save current page (CASE A)
+  // Quick save current page in 1 click
   const handleSavePage = () => {
     if (isSaved) return;
     setIsSaved(true);
@@ -56,13 +78,17 @@ function FloatingButtonOverlay() {
       type: 'SAVE_CLIP',
       data: {
         url: window.location.href,
-        title: document.title || '',
+        title: document.title || window.location.href,
         source: 'floating_button',
       },
     };
 
     if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-      chrome.runtime.sendMessage(messageData);
+      chrome.runtime.sendMessage(messageData, (response: any) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[Clipper] Save failed:', chrome.runtime.lastError.message);
+        }
+      });
     }
 
     setTimeout(() => {
@@ -70,33 +96,19 @@ function FloatingButtonOverlay() {
     }, 1500);
   };
 
-  // Open panel on floating button click
-  const handleOpenPanel = () => {
-    const isSocialMedia = /instagram\.com|tiktok\.com|youtube\.com|linkedin\.com|twitter\.com|x\.com/i.test(window.location.hostname);
-    const selection = window.getSelection();
-    const text = selection?.toString().trim() || '';
-    let pos = {
-      left: Math.max(20, Math.min(window.innerWidth - 300, window.innerWidth - 320)),
-      top: Math.max(20, Math.min(window.innerHeight - 380, 70)),
-    };
-
-    if (selection && selection.rangeCount > 0) {
-      const rect = selection.getRangeAt(0).getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        pos = getPanelPosition(rect, 270, 320);
-      }
-    }
-
-    setPanelText(text || document.title || 'Web Clip');
-    setPanelPos(pos);
-    setPanelOpen(true);
+  // Close panel and deselect text to avoid instant re-popups
+  const handleClosePanel = () => {
+    dismissedTextRef.current = panelText;
+    setPanelOpen(false);
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch (_) {}
   };
 
   return (
     <>
       <FloatingButton
         onSavePage={handleSavePage}
-        onOpenPanel={handleOpenPanel}
         isSaved={isSaved}
       />
 
@@ -105,9 +117,9 @@ function FloatingButtonOverlay() {
           text={panelText}
           url={window.location.href}
           position={panelPos}
-          contentType="music"
-          source="floating_button"
-          onClose={() => setPanelOpen(false)}
+          contentType="text"
+          source="text_selection"
+          onClose={handleClosePanel}
         />
       )}
     </>

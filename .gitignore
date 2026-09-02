@@ -23,6 +23,11 @@ extension/.wxt/
 # Log files
 *.log
 
+# Celery and test caches
+celerybeat-schedule*
+.pytest_cache/
+**/.pytest_cache/
+
 # Temporary local scripts
 *.bat
 *.ps1
