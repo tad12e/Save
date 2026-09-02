@@ -59,6 +59,8 @@ async function handleSaveClip(data: any): Promise<any> {
     content_type: data.contentType || data.content_type || null,
     destination: data.destination || null,
     table_id: data.tableId || data.table_id || null,
+    note: data.note || null,
+    tags: data.tags || [],
     source: data.source || 'extension',
   };
 
@@ -131,9 +133,60 @@ async function handleSpotifyAddTrack(data: any): Promise<any> {
   return await response.json();
 }
 
+async function syncDestinationsFromBackend(): Promise<any> {
+  try {
+    const storage = await new Promise<any>((resolve) => {
+      chrome.storage.local.get(['jwt', 'clipper_access_token', 'clipper_api_url'], (res: any) => resolve(res || {}));
+    });
+    const token = storage.jwt || storage.clipper_access_token;
+    const apiUrl = storage.clipper_api_url || getApiUrl();
+    if (!token) return [];
+
+    const resp = await fetch(`${apiUrl}/api/destinations/`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (resp.ok) {
+      const list = await resp.json();
+      if (Array.isArray(list)) {
+        const activeDestinations = list
+          .filter((d: any) => d.is_active === true)
+          .map((d: any) => ({
+            type: d.provider || d.type,
+            name: d.name || d.provider,
+            tableId: d.config?.table_id || d.config?.spreadsheet_id || d.config?.database_id || 'default',
+            tableName: d.config?.target_resource_name || d.config?.sheet_name || d.tableName || d.name || '',
+            icon: d.provider === 'google_sheets' ? '📊' : d.provider === 'notion' ? '📝' : d.provider === 'airtable' ? '🗂️' : d.provider === 'spotify' ? '🎵' : '📁',
+          }));
+
+        if (activeDestinations.length > 0) {
+          await chrome.storage.local.set({ connected_destinations: activeDestinations });
+          return activeDestinations;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Clipper] Background destinations sync error:', err);
+  }
+  return [];
+}
+
 export default defineBackground(() => {
+  // Sync active destinations on background startup
+  syncDestinationsFromBackend();
+
   chrome.runtime.onMessage.addListener((message: any, _sender: any, sendResponse: any) => {
     if (!message?.type) return false;
+
+    if (message.type === 'SYNC_DESTINATIONS') {
+      syncDestinationsFromBackend()
+        .then((resData) => sendResponse({ ok: true, data: resData }))
+        .catch((err: Error) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
 
     if (message.type === 'OPEN_POPUP') {
       try {
@@ -176,6 +229,21 @@ export default defineBackground(() => {
 
     return false;
   });
+
+  // Automatically sync destinations when an OAuth flow or settings page finishes loading
+  if (chrome.tabs?.onUpdated) {
+    chrome.tabs.onUpdated.addListener((_tabId: number, changeInfo: any, tab: any) => {
+      if (changeInfo.status === 'complete' && tab?.url) {
+        if (
+          tab.url.includes('/api/destinations/oauth/callback') ||
+          tab.url.includes('/destinations') ||
+          tab.url.includes('/settings')
+        ) {
+          syncDestinationsFromBackend();
+        }
+      }
+    });
+  }
 
   // ─── Setup Context Menus ───
   if (chrome.runtime?.onInstalled) {

@@ -118,6 +118,18 @@ function App() {
       }
       const items = await api.getDestinations();
       setDestinations(items);
+      const activeDestinations = items
+        .filter((item: any) => item.is_active === true)
+        .map((d: any) => ({
+          type: d.provider || d.type,
+          name: d.name || d.provider,
+          tableId: d.config?.table_id || d.config?.spreadsheet_id || d.config?.database_id || 'default',
+          tableName: d.config?.target_resource_name || d.config?.sheet_name || d.tableName || d.name || '',
+          icon: d.provider === 'google_sheets' ? '📊' : d.provider === 'notion' ? '📝' : d.provider === 'airtable' ? '🗂️' : d.provider === 'spotify' ? '🎵' : '📁',
+        }));
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        chrome.storage.local.set({ connected_destinations: activeDestinations });
+      }
       const defaultDestination = items.find((item) => item.is_default);
       const storedId = localStorage.getItem('clipper_last_destination_id');
       const storedMatch = items.find((item) => item.id === storedId);
@@ -933,7 +945,7 @@ function App() {
                   ) : (
                     destinations.map((destination) => (
                       <option key={destination.id} value={destination.id}>
-                        {destination.is_default ? '★ Default: ' : ''}{destination.name} ({destination.provider === 'notion' ? 'Notion' : destination.provider === 'google_sheets' ? 'Google Sheets' : 'Internal DB'})
+                        {destination.is_default ? '★ Default: ' : ''}{destination.name} ({destination.provider === 'notion' ? 'Notion' : destination.provider === 'google_sheets' ? 'Google Sheets' : destination.provider === 'airtable' ? 'Airtable' : destination.provider === 'spotify' ? 'Spotify' : 'Save Vault'})
                       </option>
                     ))
                   )}

@@ -105,7 +105,50 @@ export const PLATFORM_SELECTORS: Record<string, PlatformConfig> = {
   },
 };
 
-// ─── Provider icons (simple emoji stand-ins) ───
+// ─── Official Brand SVG Vectors (Iconify) ───
+export const GOOGLE_SHEETS_SVG_16 = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" fill="#0F9D58"/>
+  <path d="M14 2v6h6L14 2z" fill="#87CEAC"/>
+  <rect x="7" y="11" width="10" height="8" rx="0.75" fill="#FFFFFF"/>
+  <path d="M7 13.5h10M7 16h10M10.5 11v8" stroke="#0F9D58" stroke-width="1.1" stroke-linecap="round"/>
+</svg>`;
+
+export const NOTION_SVG_16 = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M4.16 3.28c.44.38 1.1.38 1.87.38h11.94c.77 0 1.43 0 1.87-.38.46-.4.65-1.04.65-2.06H3.51c0 1.02.18 1.66.65 2.06zm-1.85 4.54v13.31c0 1 .81 1.82 1.81 1.82h15.76c1 0 1.82-.81 1.82-1.82V7.82H2.31zm6.81 3.52h2.25l3.75 5.9v-5.9h2.15v8.03h-2.25L11.26 13.47v5.9H9.12v-8.03z" fill="#FFFFFF"/>
+</svg>`;
+
+export const AIRTABLE_SVG_16 = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M11.36 2.52a.85.85 0 0 1 .78 0l9.36 4.68a.85.85 0 0 1 0 1.52l-9.36 4.68a.85.85 0 0 1-.78 0L2 8.72a.85.85 0 0 1 0-1.52l9.36-4.68z" fill="#18BFFF"/>
+  <path d="M11.5 13.85v7.65a.5.5 0 0 1-.72.45L2.28 17.7a.5.5 0 0 1-.28-.45v-7.65l9.5 4.25z" fill="#F82B60"/>
+  <path d="M12.5 13.85l9.5-4.25v7.65a.5.5 0 0 1-.28.45l-8.5 4.25a.5.5 0 0 1-.72-.45v-7.65z" fill="#FCB400"/>
+</svg>`;
+
+export const SPOTIFY_SVG_16 = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="12" cy="12" r="11" fill="#1DB954"/>
+  <path d="M16.5 16.2c-.2.3-.5.4-.8.2-2.2-1.3-4.9-1.6-8.2-.9-.3.1-.7-.1-.8-.4-.1-.3.1-.7.4-.8 3.5-.8 6.5-.4 9 1.1.4.2.5.6.4.8zm1.2-2.7c-.2.4-.7.5-1.1.2-2.5-1.5-6.3-2-9.3-1-.4.1-.9-.1-1-.5-.1-.4.1-.9.5-1 3.4-1 7.6-.5 10.6 1.3.4.2.5.7.3 1zm.1-2.8c-3-1.8-8-2-10.9-1.1-.5.1-1-.1-1.1-.6-.1-.5.1-1 .6-1.1 3.3-1 8.8-.8 12.3 1.3.4.3.6.8.3 1.2-.2.5-.8.6-1.2.3z" fill="#000000"/>
+</svg>`;
+
+export const YOUTUBE_MUSIC_SVG_16 = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="12" cy="12" r="11" fill="#FF0000"/>
+  <circle cx="12" cy="12" r="6" stroke="#FFFFFF" stroke-width="1.8"/>
+  <polygon points="10.5,9.5 15,12 10.5,14.5" fill="#FFFFFF"/>
+</svg>`;
+
+export const SAVE_VAULT_SVG_16 = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" fill="#7c3aed" stroke="#c084fc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+export const PROVIDER_SVGS: Record<string, string> = {
+  google_sheets: GOOGLE_SHEETS_SVG_16,
+  sheets: GOOGLE_SHEETS_SVG_16,
+  notion: NOTION_SVG_16,
+  airtable: AIRTABLE_SVG_16,
+  spotify: SPOTIFY_SVG_16,
+  youtube_music: YOUTUBE_MUSIC_SVG_16,
+  custom_db: SAVE_VAULT_SVG_16,
+};
+
+// ─── Provider icons fallback map ───
 export const PROVIDER_ICONS: Record<string, string> = {
   google_sheets: '📊',
   notion: '📝',
