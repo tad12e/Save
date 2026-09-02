@@ -16,6 +16,7 @@ import {
   Check, 
   X 
 } from 'lucide-react';
+import { BrandIcon } from './BrandIcons';
 
 export type IntegrationCategory = 'spreadsheets' | 'databases' | 'crms' | 'productivity' | 'automation';
 
@@ -209,24 +210,7 @@ export const ExploreIntegrationsSection: React.FC<ExploreIntegrationsProps> = ({
   });
 
   const renderIcon = (type: string, className = 'w-5 h-5') => {
-    switch (type) {
-      case 'sheets':
-        return <FileSpreadsheet className={`${className} text-emerald-400`} />;
-      case 'notion':
-        return <FileText className={`${className} text-stone-200`} />;
-      case 'airtable':
-        return <Table className={`${className} text-cyan-400`} />;
-      case 'webhook':
-        return <Zap className={`${className} text-indigo-400`} />;
-      case 'db':
-        return <HardDrive className={`${className} text-blue-400`} />;
-      case 'crm':
-        return <Layers className={`${className} text-amber-500`} />;
-      case 'productivity':
-        return <Cpu className={`${className} text-violet-400`} />;
-      default:
-        return <Database className={`${className} text-violet-400`} />;
-    }
+    return <BrandIcon name={type} className={className} />;
   };
 
   return (
@@ -331,7 +315,7 @@ export const ExploreIntegrationsSection: React.FC<ExploreIntegrationsProps> = ({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="w-9 h-9 rounded-sm bg-[#080808] border border-white/10 flex items-center justify-center p-1.5">
-                    {renderIcon(item.iconType, 'w-5 h-5')}
+                    {renderIcon(item.id || item.name || item.type, 'w-5 h-5')}
                   </div>
                   <div className="flex items-center gap-1.5">
                     {item.popular && (

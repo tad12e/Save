@@ -25,6 +25,7 @@ import {
   Globe,
   Filter
 } from 'lucide-react';
+import { BrandIcon } from '../BrandIcons';
 
 interface ClipsPageProps {
   clips: ClipItem[];
@@ -349,14 +350,17 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
 
                       {/* Source Platform Badge */}
                       {clip.sourcePlatform && clip.sourcePlatform !== 'web' && (
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono border flex items-center gap-1 font-semibold ${
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono border flex items-center gap-1.5 font-semibold ${
                           clip.sourcePlatform === 'x_twitter' ? 'bg-black text-white border-white/20' :
                           clip.sourcePlatform === 'linkedin' ? 'bg-blue-600/20 text-blue-400 border-blue-500/30' :
                           clip.sourcePlatform === 'reddit' ? 'bg-orange-600/20 text-orange-400 border-orange-500/30' :
                           clip.sourcePlatform === 'youtube' ? 'bg-red-600/20 text-red-400 border-red-500/30' :
+                          clip.sourcePlatform === 'tiktok' ? 'bg-stone-900 text-white border-white/20' :
+                          clip.sourcePlatform === 'instagram' ? 'bg-pink-600/20 text-pink-400 border-pink-500/30' :
                           'bg-stone-800 text-stone-300 border-white/10'
                         }`}>
-                          <span>{clip.sourcePlatform === 'x_twitter' ? '𝕏 X' : clip.sourcePlatform === 'linkedin' ? 'in LinkedIn' : clip.sourcePlatform}</span>
+                          <BrandIcon name={clip.sourcePlatform} className="w-3 h-3" />
+                          <span>{clip.sourcePlatform === 'x_twitter' ? 'X' : clip.sourcePlatform === 'linkedin' ? 'LinkedIn' : clip.sourcePlatform}</span>
                           {clip.sourceAuthor && <span className="text-amber-400 font-normal">{clip.sourceAuthor}</span>}
                         </span>
                       )}

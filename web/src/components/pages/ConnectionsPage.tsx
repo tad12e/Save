@@ -47,6 +47,7 @@ import {
   Globe,
   Cpu
 } from 'lucide-react';
+import { BrandIcon } from '../BrandIcons';
 
 interface ConnectionsPageProps {
   destinations: DestinationConfig[];
@@ -518,28 +519,9 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     }
   };
 
-  // Icon Helper
+  // Icon Helper (Official Brand SVGs)
   const renderDestIcon = (type: string, className = 'w-6 h-6') => {
-    switch (type) {
-      case 'google_sheets':
-      case 'sheets':
-        return <FileSpreadsheet className={`${className} text-emerald-400`} />;
-      case 'notion':
-        return <FileText className={`${className} text-stone-200`} />;
-      case 'airtable':
-        return <Table className={`${className} text-cyan-400`} />;
-      case 'webhook':
-        return <Zap className={`${className} text-indigo-400`} />;
-      case 'custom_db':
-      case 'db':
-        return <HardDrive className={`${className} text-blue-400`} />;
-      case 'crm':
-        return <Layers className={`${className} text-amber-500`} />;
-      case 'productivity':
-        return <Cpu className={`${className} text-violet-400`} />;
-      default:
-        return <Database className={`${className} text-violet-400`} />;
-    }
+    return <BrandIcon name={type} className={className} />;
   };
 
   const filteredDestinations = destinations.filter(d => {
@@ -649,7 +631,7 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-sm bg-[#050505] border border-white/10 flex items-center justify-center p-2">
-                        {renderDestIcon(dest.type, 'w-5 h-5')}
+                        {renderDestIcon(dest.name || dest.type, 'w-5 h-5')}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -932,7 +914,7 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                   {/* Top Bar inside Card */}
                   <div className="flex items-center justify-between">
                     <div className="w-9 h-9 rounded-sm bg-[#080808] border border-white/10 flex items-center justify-center p-1.5">
-                      {renderDestIcon(item.iconType, 'w-5 h-5')}
+                      {renderDestIcon(item.id || item.name || item.type, 'w-5 h-5')}
                     </div>
                     <div className="flex items-center gap-1.5">
                       {item.popular && (
@@ -1221,7 +1203,7 @@ const DestinationConfigModal: React.FC<ModalProps> = ({
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-[#050505]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-sm bg-[#080808] border border-white/10 flex items-center justify-center p-2">
-              <Database className="w-5 h-5 text-amber-500" />
+              {renderDestIcon(formData.name || formData.type, 'w-5 h-5')}
             </div>
             <div>
               <h2 className="text-xl font-serif text-white flex items-center gap-2">
@@ -1795,7 +1777,7 @@ const OAuthConnectModal: React.FC<OAuthModalProps> = ({ dest, onClose, onGrant }
         <div className="p-6 border-b border-white/5 bg-[#050505] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-sm bg-[#080808] border border-amber-500/30 flex items-center justify-center p-2 text-amber-400">
-              <Database className="w-6 h-6" />
+              {renderDestIcon(dest.name || dest.type, 'w-6 h-6')}
             </div>
             <div>
               <div className="flex items-center gap-2">

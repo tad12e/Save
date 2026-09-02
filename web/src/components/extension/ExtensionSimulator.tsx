@@ -12,6 +12,7 @@ import {
   Sparkles,
   Info
 } from 'lucide-react';
+import { BrandIcon } from '../BrandIcons';
 
 interface ExtensionSimulatorProps {
   isOpen: boolean;
@@ -169,9 +170,10 @@ export const ExtensionSimulator: React.FC<ExtensionSimulatorProps> = ({
               {/* Destination Row */}
               <div className="p-2 rounded-sm bg-[#050505] border border-amber-500/20 flex items-center justify-between text-[11px] font-mono">
                 <span className="text-stone-500">TARGET:</span>
-                <span className="font-bold text-amber-400 truncate max-w-[110px]">
-                  {defaultDest?.name || 'Google Sheets'}
-                </span>
+                <div className="flex items-center gap-1.5 font-bold text-amber-400 truncate max-w-[130px]">
+                  <BrandIcon name={defaultDest?.type || 'google_sheets'} className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{defaultDest?.name || 'Google Sheets'}</span>
+                </div>
               </div>
 
               {/* Save Now CTA Button */}
@@ -227,6 +229,7 @@ export const ExtensionSimulator: React.FC<ExtensionSimulatorProps> = ({
                       onChange={() => setChosenDestId(dest.id)}
                       className="w-3 h-3 text-amber-500 accent-amber-500"
                     />
+                    <BrandIcon name={dest.type} className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">{dest.name}</span>
                   </label>
                 ))}

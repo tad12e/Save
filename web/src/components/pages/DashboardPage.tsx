@@ -39,6 +39,7 @@ import {
   BarChart2,
   Terminal
 } from 'lucide-react';
+import { BrandIcon } from '../BrandIcons';
 
 interface DashboardPageProps {
   clips: ClipItem[];
@@ -155,21 +156,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }, 1000);
   };
 
+  // Icon Helper (Official Brand SVGs)
   const renderDestIcon = (type: string, className = 'w-4 h-4') => {
-    switch (type) {
-      case 'google_sheets':
-        return <FileSpreadsheet className={`${className} text-emerald-400`} />;
-      case 'notion':
-        return <FileText className={`${className} ${isLight ? 'text-slate-700' : 'text-stone-200'}`} />;
-      case 'airtable':
-        return <Table className={`${className} text-cyan-400`} />;
-      case 'webhook':
-        return <Zap className={`${className} text-indigo-400`} />;
-      case 'custom_db':
-        return <HardDrive className={`${className} text-blue-400`} />;
-      default:
-        return <Radio className={`${className} text-amber-500`} />;
-    }
+    return <BrandIcon name={type} className={className} />;
   };
 
   return (
