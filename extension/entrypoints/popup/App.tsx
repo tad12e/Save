@@ -13,6 +13,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { api, User, Clip, Destination } from '../../utils/api';
+import { getFeedButtonSettings, setFeedButtonSettings, PlatformFeedSettings, DEFAULT_FEED_SETTINGS } from '../../lib/storage';
 import './App.css';
 
 declare const chrome: any;
@@ -103,9 +104,11 @@ function App() {
   const [categoryRules, setCategoryRules] = useState<Record<string, string>>({});
   const [selectedMusicProvider, setSelectedMusicProvider] = useState<'spotify' | 'youtube_music'>('spotify');
   const [selectedMusicPlaylist, setSelectedMusicPlaylist] = useState<string>('default');
+  const [feedSettings, setFeedSettings] = useState<PlatformFeedSettings>(DEFAULT_FEED_SETTINGS);
 
   const loadDestinations = async () => {
     try {
+      getFeedButtonSettings().then(setFeedSettings);
       if (typeof chrome !== 'undefined' && chrome.storage?.local) {
         chrome.storage.local.get(
           ['category_rules', 'music_default_provider', 'music_default_playlist'],
@@ -1382,6 +1385,75 @@ function App() {
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* Feed & Video Floating Buttons Settings Card */}
+              <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                      <span>🎬</span> Feed & Video Overlay Buttons
+                    </h4>
+                    <p className="text-[11px] text-gray-500">
+                      Show floating save buttons on video thumbnails and feed cards.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={feedSettings.enabled}
+                      onChange={(e) => {
+                        const updated = { ...feedSettings, enabled: e.target.checked };
+                        setFeedSettings(updated);
+                        setFeedButtonSettings(updated);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-600"></div>
+                  </label>
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 mb-3 text-[10px] text-amber-700 leading-relaxed">
+                  💡 <strong>Always Active:</strong> Even when overlay buttons are turned off, you can always save any video or post via the native <strong>Share</strong> button or <strong>right-click</strong> (context menu).
+                </div>
+
+                {feedSettings.enabled && (
+                  <div className="pt-2 border-t border-gray-100 space-y-2">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Enabled Platforms</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
+                      {[
+                        { key: 'youtube', label: 'YouTube (Videos & Shorts)', icon: '▶️' },
+                        { key: 'tiktok', label: 'TikTok', icon: '🎵' },
+                        { key: 'instagram', label: 'Instagram (Reels)', icon: '📸' },
+                        { key: 'linkedin', label: 'LinkedIn', icon: '💼' },
+                        { key: 'x_twitter', label: 'X (Twitter)', icon: '𝕏' },
+                        { key: 'reddit', label: 'Reddit', icon: '🤖' },
+                      ].map(({ key, label, icon }) => (
+                        <label key={key} className="flex items-center gap-2 p-1.5 rounded-lg border border-gray-100 hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={feedSettings.platforms[key as keyof typeof feedSettings.platforms] ?? true}
+                            onChange={(e) => {
+                              const updated = {
+                                ...feedSettings,
+                                platforms: {
+                                  ...feedSettings.platforms,
+                                  [key]: e.target.checked,
+                                },
+                              };
+                              setFeedSettings(updated);
+                              setFeedButtonSettings(updated);
+                            }}
+                            className="w-3.5 h-3.5 text-violet-600 rounded border-gray-300 accent-violet-600"
+                          />
+                          <span className="text-[11px] font-medium flex items-center gap-1">
+                            <span>{icon}</span> {label}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Version details */}

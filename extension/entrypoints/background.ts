@@ -12,12 +12,16 @@ function getApiUrl(): string {
 
 function showNotification(title: string, message: string): void {
   try {
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icon/48.png',
-      title,
-      message,
-    });
+    const api = typeof chrome !== 'undefined' ? chrome : (typeof browser !== 'undefined' ? browser : null);
+    if (api?.notifications?.create) {
+      const iconUrl = api.runtime?.getURL ? api.runtime.getURL('icon/48.png') : 'icon/48.png';
+      api.notifications.create({
+        type: 'basic',
+        iconUrl,
+        title,
+        message,
+      });
+    }
   } catch {
     // Ignore notification errors if context unavailable
   }
@@ -249,21 +253,22 @@ export default defineBackground(() => {
   if (chrome.runtime?.onInstalled) {
     chrome.runtime.onInstalled.addListener(() => {
       if (chrome.contextMenus) {
-        chrome.contextMenus.create({
-          id: 'save_page',
-          title: '📌 Save Page to Clipper',
-          contexts: ['page'],
-        });
-        chrome.contextMenus.create({
-          id: 'save_link',
-          title: '📌 Save Link to Clipper',
-          contexts: ['link'],
-        });
-        chrome.contextMenus.create({
-          id: 'save_selection',
-          title: '📌 Save Selected Text to Clipper',
-          contexts: ['selection'],
-        });
+        try {
+          chrome.contextMenus.removeAll(() => {
+            chrome.contextMenus.create({
+              id: 'open_clipper_panel',
+              title: '✨ Save & Tag with Clipper…',
+              contexts: ['page', 'selection', 'link', 'video', 'audio', 'image'],
+            });
+            chrome.contextMenus.create({
+              id: 'quick_save_clipper',
+              title: '📌 Quick Save to Default Destination',
+              contexts: ['page', 'selection', 'link', 'video', 'audio', 'image'],
+            });
+          });
+        } catch (err) {
+          console.warn('[Clipper] Context menu init error:', err);
+        }
       }
     });
   }
@@ -271,21 +276,43 @@ export default defineBackground(() => {
   // Handle Context Menu clicks
   if (chrome.contextMenus?.onClicked) {
     chrome.contextMenus.onClicked.addListener((info: any, tab: any) => {
-      let targetUrl = tab?.url || info.pageUrl || '';
-      let selectedText = '';
+      const targetUrl = info.linkUrl || info.srcUrl || tab?.url || info.pageUrl || '';
+      const selectedText = info.selectionText || tab?.title || '';
+      const isVideo = info.mediaType === 'video' || (targetUrl && (targetUrl.includes('youtube.com') || targetUrl.includes('tiktok.com')));
+      const contentType = isVideo ? 'video' : info.mediaType === 'audio' ? 'music' : 'webpage';
 
-      if (info.menuItemId === 'save_link' && info.linkUrl) {
-        targetUrl = info.linkUrl;
-      } else if (info.menuItemId === 'save_selection') {
-        selectedText = info.selectionText || '';
+      if (info.menuItemId === 'open_clipper_panel' && tab?.id) {
+        chrome.tabs.sendMessage(tab.id, {
+          type: 'OPEN_SELECTION_PANEL',
+          data: {
+            url: targetUrl,
+            text: selectedText,
+            contentType,
+            source: 'context_menu',
+          },
+        }, (res: any) => {
+          if (chrome.runtime.lastError) {
+            // Fallback to quick save if content script is not yet injected
+            handleSaveClip({
+              url: targetUrl,
+              title: selectedText,
+              selectedText: info.selectionText || '',
+              source: 'context_menu_fallback',
+            })
+              .then(() => showNotification('Clipper', 'Saved ✓'))
+              .catch((err: Error) => showNotification('Clipper — Error', err.message));
+          }
+        });
+        return;
       }
 
       if (!targetUrl) return;
 
       handleSaveClip({
         url: targetUrl,
-        selectedText,
-        source: 'context_menu',
+        title: selectedText,
+        selectedText: info.selectionText || '',
+        source: 'context_menu_quick',
       })
         .then(() => showNotification('Clipper', 'Saved ✓'))
         .catch((err: Error) => showNotification('Clipper — Error', err.message));
@@ -304,8 +331,32 @@ export default defineBackground(() => {
               title: activeTab.title || '',
               source: 'keyboard_shortcut',
             })
-              .then(() => showNotification('Clipper', 'Saved ✓'))
-              .catch((err: Error) => showNotification('Clipper — Error', err.message));
+              .then(() => {
+                showNotification('Clipper', 'Saved ✓');
+                if (activeTab.id) {
+                  chrome.tabs.sendMessage(activeTab.id, {
+                    type: 'SHOW_CLIPPER_TOAST',
+                    data: {
+                      title: 'Saved to Clipper ✓',
+                      subtitle: activeTab.title || activeTab.url,
+                      status: 'saved',
+                    },
+                  }).catch(() => {});
+                }
+              })
+              .catch((err: Error) => {
+                showNotification('Clipper — Error', err.message);
+                if (activeTab.id) {
+                  chrome.tabs.sendMessage(activeTab.id, {
+                    type: 'SHOW_CLIPPER_TOAST',
+                    data: {
+                      title: 'Save Failed',
+                      subtitle: err.message,
+                      status: 'error',
+                    },
+                  }).catch(() => {});
+                }
+              });
           }
         });
       }

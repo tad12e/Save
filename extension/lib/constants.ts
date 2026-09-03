@@ -94,8 +94,8 @@ export const PLATFORM_SELECTORS: Record<string, PlatformConfig> = {
     urlSelector: 'a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"]'
   },
   'youtube.com': {
-    postSelector: 'ytd-reel-video-renderer, ytd-rich-item-renderer, ytd-video-renderer, #shorts-player, ytd-shorts',
-    textSelector: '#video-title, #title, yt-formatted-string, h2.ytd-reel-player-header-renderer',
+    postSelector: 'ytd-reel-video-renderer, ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer',
+    textSelector: '#video-title, #title, yt-formatted-string, h2.ytd-reel-player-header-renderer, .title.ytd-reel-player-header-renderer',
     urlSelector: 'a#thumbnail, a[href*="/shorts/"], a[href*="/watch"]'
   },
   'reddit.com': {

@@ -280,3 +280,50 @@ export async function getAirtableTables(): Promise<AirtableTable[]> {
     { baseId: 'base_main', baseName: 'Main Base', tableId: 'airtable_pipeline', tableName: 'Pipeline & Opportunities' },
   ];
 }
+
+// ─── Feed & Video Floating Buttons Settings ───
+
+export interface PlatformFeedSettings {
+  enabled: boolean;
+  platforms: {
+    youtube: boolean;
+    tiktok: boolean;
+    instagram: boolean;
+    linkedin: boolean;
+    x_twitter: boolean;
+    reddit: boolean;
+  };
+}
+
+export const DEFAULT_FEED_SETTINGS: PlatformFeedSettings = {
+  enabled: true,
+  platforms: {
+    youtube: true,
+    tiktok: true,
+    instagram: true,
+    linkedin: true,
+    x_twitter: true,
+    reddit: true,
+  },
+};
+
+export async function getFeedButtonSettings(): Promise<PlatformFeedSettings> {
+  const storage = getUniversalStorage();
+  const res = await storage.get(['feed_button_settings']);
+  if (res.feed_button_settings) {
+    return {
+      ...DEFAULT_FEED_SETTINGS,
+      ...res.feed_button_settings,
+      platforms: {
+        ...DEFAULT_FEED_SETTINGS.platforms,
+        ...(res.feed_button_settings.platforms || {}),
+      },
+    };
+  }
+  return DEFAULT_FEED_SETTINGS;
+}
+
+export async function setFeedButtonSettings(settings: PlatformFeedSettings): Promise<void> {
+  const storage = getUniversalStorage();
+  await storage.set({ feed_button_settings: settings });
+}

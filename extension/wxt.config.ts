@@ -26,6 +26,8 @@ export default defineConfig({
   },
   modules: ['@wxt-dev/module-react'],
   manifest: {
+    name: 'Clipper - Universal Web Saver',
+    description: 'Save articles, videos, songs, and notes with one click or Alt+S shortcut.',
     host_permissions: ['<all_urls>'],
     permissions: ['storage', 'activeTab', 'scripting', 'identity', 'notifications', 'contextMenus'],
     commands: {
@@ -39,6 +41,12 @@ export default defineConfig({
     },
     omnibox: {
       keyword: 'save',
+    },
+    browser_specific_settings: {
+      gecko: {
+        id: 'clipper@save.app',
+        strict_min_version: '109.0',
+      },
     },
     ...(googleClientId
       ? {

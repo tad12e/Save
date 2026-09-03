@@ -405,7 +405,8 @@ export function SelectionPanel({
       const isInside = path.some(
         (el: any) =>
           (el.getAttribute && (el.getAttribute('data-clipper-panel') !== null || el.getAttribute('data-clipper-injected') !== null)) ||
-          (el.className && typeof el.className === 'string' && (el.className.includes('clipper-tweet-save-btn') || el.className.includes('clipper-reel-btn') || el.className.includes('clipper-feed-panel')))
+          (el.id && typeof el.id === 'string' && el.id.includes('clipper')) ||
+          (el.className && typeof el.className === 'string' && el.className.includes('clipper'))
       );
       if (!isInside) {
         if (audioPreviewRef.current) {
@@ -520,6 +521,52 @@ export function SelectionPanel({
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
 
+  // Extract sound/music badges natively from YouTube Shorts ("Contains ..."), Reels, or TikTok
+  const detectPageAudioHint = (): string => {
+    try {
+      const href = window.location.href;
+
+      // 1. YouTube Shorts: Look for "Contains [Song Name]" or sound metadata badge
+      if (href.includes('youtube.com/shorts') || href.includes('youtube.com')) {
+        const activeShort = document.querySelector('ytd-reel-video-renderer[is-active]') || document;
+
+        // Search text nodes inside the active short for "Contains ..."
+        const textElements = Array.from(activeShort.querySelectorAll('span, yt-formatted-string, a, div'));
+        for (const el of textElements) {
+          const text = (el.textContent || '').trim();
+          if (/^Contains\s+/i.test(text) && text.length > 9 && text.length < 100) {
+            return text.replace(/^Contains\s+/i, '').trim();
+          }
+        }
+
+        const metadataModel = activeShort.querySelector('.yt-shorts-sound-metadata-view-model, a[href*="/sound/"]');
+        if (metadataModel && metadataModel.textContent?.trim()) {
+          return metadataModel.textContent.trim().replace(/^Contains\s+/i, '');
+        }
+      }
+
+      // 2. Instagram Reels: Look for audio track tag
+      if (href.includes('instagram.com')) {
+        const audioLink = document.querySelector('a[href*="/audio/"], [aria-label*="Audio"]');
+        if (audioLink && audioLink.textContent?.trim()) {
+          return audioLink.textContent.trim();
+        }
+      }
+
+      // 3. TikTok: Look for music ticker
+      if (href.includes('tiktok.com')) {
+        const musicEl = document.querySelector('[data-e2e="video-music"], a[href*="/music/"], [class*="MusicText"]');
+        if (musicEl && musicEl.textContent?.trim()) {
+          return musicEl.textContent.trim();
+        }
+      }
+    } catch (e) {
+      console.warn('Could not extract page audio hint:', e);
+    }
+
+    return document.title || '';
+  };
+
   // ─── Music Recognition ───
   const handleIdentifyMusic = async () => {
     setIsListening(true);
@@ -539,18 +586,47 @@ export function SelectionPanel({
       const audioResult = await captureMediaElementAudio(5);
       clearInterval(interval);
 
-      const resp = await fetch('http://localhost:8000/api/clips/recognize-audio/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audio: audioResult.base64,
-          format: audioResult.format,
-          title_hint: document.title || '',
-        }),
+      const targetTitleHint = detectPageAudioHint();
+
+      // Route through background service worker to prevent HTTPS Mixed-Content / CORS blocking on YouTube
+      const resp: any = await new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+          chrome.runtime.sendMessage(
+            {
+              type: 'RECOGNIZE_AUDIO',
+              payload: {
+                audio: audioResult.base64,
+                format: audioResult.format,
+                title_hint: targetTitleHint,
+              },
+            },
+            (response: any) => {
+              if (chrome.runtime.lastError) {
+                resolve({ ok: false, error: chrome.runtime.lastError.message });
+              } else {
+                resolve(response);
+              }
+            }
+          );
+        } else {
+          // Fallback for local web simulator
+          fetch('http://localhost:8000/api/clips/recognize-audio/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              audio: audioResult.base64,
+              format: audioResult.format,
+              title_hint: targetTitleHint,
+            }),
+          })
+            .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => null) }))
+            .catch((e) => ({ ok: false, error: e.message }))
+            .then(resolve);
+        }
       });
 
-      if (resp.ok) {
-        const data = await resp.json();
+      if (resp?.ok && resp.data) {
+        const data = resp.data;
         setIdentifiedTrack({
           title: data.title,
           artist: data.artist,
@@ -566,7 +642,7 @@ export function SelectionPanel({
           is_simulated: data.is_simulated,
         });
       } else {
-        setRecognizeError('No song recognized in this audio snippet.');
+        setRecognizeError(resp?.error || 'No song recognized in this audio snippet.');
       }
     } catch (err) {
       console.warn('Audio recognition error:', err);
@@ -581,16 +657,41 @@ export function SelectionPanel({
     if (!identifiedTrack) return;
     setAddingToPlaylist(true);
     try {
-      const resp = await fetch('http://localhost:8000/api/destinations/spotify/add-track/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playlist_id: selectedPlaylist,
-          track_id: identifiedTrack.spotify_id,
-          track_uri: identifiedTrack.spotify_uri,
-        }),
+      const resp: any = await new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+          chrome.runtime.sendMessage(
+            {
+              type: 'SPOTIFY_ADD_TRACK',
+              payload: {
+                playlist_id: selectedPlaylist,
+                track_id: identifiedTrack.spotify_id,
+                track_uri: identifiedTrack.spotify_uri,
+              },
+            },
+            (response: any) => {
+              if (chrome.runtime.lastError) {
+                resolve({ ok: false, error: chrome.runtime.lastError.message });
+              } else {
+                resolve(response);
+              }
+            }
+          );
+        } else {
+          fetch('http://localhost:8000/api/destinations/spotify/add-track/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              playlist_id: selectedPlaylist,
+              track_id: identifiedTrack.spotify_id,
+              track_uri: identifiedTrack.spotify_uri,
+            }),
+          })
+            .then((r) => resolve({ ok: r.ok }))
+            .catch(() => resolve({ ok: false }));
+        }
       });
-      if (resp.ok) {
+
+      if (resp?.ok) {
         setAddedSuccess(true);
         setTimeout(() => {
           onClose();
