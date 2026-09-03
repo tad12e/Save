@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from apps.clips.models import Clip
+from apps.clips.services.audio_recognizer import AudioRecognizer
 from apps.clips.services.source_detector import detect_source_platform, extract_external_job_url, detect_embedded_resources
 from apps.clips.services.url import hash_url, normalise_url
 from apps.clips.tasks import check_deadline_reminders, process_clip
@@ -82,8 +83,14 @@ class ClipIngestionTestCase(TestCase):
         reminders_sent = check_deadline_reminders()
         self.assertGreaterEqual(reminders_sent, 1)
 
-    def test_audio_recognizer_service(self):
-        from apps.clips.services.audio_recognizer import AudioRecognizer
+    @patch.object(AudioRecognizer, 'recognize_audio')
+    def test_audio_recognizer_service(self, mock_recognize):
+        mock_recognize.return_value = {
+            'success': True,
+            'title': 'Blinding Lights',
+            'artist': 'The Weeknd',
+            'spotify_uri': 'spotify:track:0VjIjW4GlUZAMYd2vXMi3b',
+        }
         result = AudioRecognizer.recognize_audio(
             audio_base64='dGVzdGF1ZGlvZGF0YQ==',
             audio_format='webm',
@@ -138,7 +145,7 @@ class ClipDeadlineHierarchyAndMetadataTestCase(TestCase):
             url_hash='hash_art_1',
             status=Clip.STATUS_PENDING,
         )
-        process_clip(None, str(clip.id))
+        process_clip(str(clip.id))
         clip.refresh_from_db()
         self.assertEqual(clip.content_type, 'article')
         self.assertIsNone(clip.deadline_date)
@@ -159,7 +166,7 @@ class ClipDeadlineHierarchyAndMetadataTestCase(TestCase):
             deadline_date=date(2026, 9, 20),
             status=Clip.STATUS_PENDING,
         )
-        process_clip(None, str(clip.id))
+        process_clip(str(clip.id))
         clip.refresh_from_db()
         self.assertEqual(clip.deadline_date, date(2026, 9, 20))
 
@@ -179,7 +186,7 @@ class ClipDeadlineHierarchyAndMetadataTestCase(TestCase):
             url_hash='hash_job_1',
             status=Clip.STATUS_PENDING,
         )
-        process_clip(None, str(clip.id))
+        process_clip(str(clip.id))
         clip.refresh_from_db()
         self.assertEqual(clip.content_type, 'job')
         self.assertEqual(clip.deadline_date, date(2026, 10, 15))
@@ -201,7 +208,7 @@ class ClipDeadlineHierarchyAndMetadataTestCase(TestCase):
             deadline_date=date(2026, 9, 10),
             status=Clip.STATUS_PENDING,
         )
-        process_clip(None, str(clip.id))
+        process_clip(str(clip.id))
         clip.refresh_from_db()
         self.assertEqual(clip.deadline_date, date(2026, 9, 10))
 
@@ -216,13 +223,13 @@ class ClipDeadlineHierarchyAndMetadataTestCase(TestCase):
         }
         clip = Clip.objects.create(
             user=self.user,
-            url='https://github.com/example/cache',
+            url='https://example.com/cache-tool',
             url_hash='hash_tool_1',
             tags=['my_favorite', 'must_try'],
             extra_metadata={'user_note': 'Check if this supports Redis wire protocol.'},
             status=Clip.STATUS_PENDING,
         )
-        process_clip(None, str(clip.id))
+        process_clip(str(clip.id))
         clip.refresh_from_db()
         self.assertIn('my_favorite', clip.tags)
         self.assertIn('must_try', clip.tags)
@@ -240,7 +247,7 @@ class ClipDeadlineHierarchyAndMetadataTestCase(TestCase):
             'table_name': 'My Clips',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        created_clip = Clip.objects.get(url_hash=response.data['url_hash'])
+        created_clip = Clip.objects.get(id=response.data['id'])
         self.assertEqual(str(created_clip.deadline_date), '2026-10-31')
         self.assertIn('fellowship', created_clip.tags)
         self.assertEqual(created_clip.extra_metadata.get('user_note'), 'Discuss with academic advisor')

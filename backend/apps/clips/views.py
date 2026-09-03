@@ -147,7 +147,7 @@ class ClipCreateView(APIView):
             try:
                 import threading
                 from .tasks import process_clip
-                threading.Thread(target=lambda: process_clip(None, str(clip.id)), daemon=True).start()
+                threading.Thread(target=lambda: process_clip(str(clip.id)), daemon=True).start()
             except Exception:
                 pass
 

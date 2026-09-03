@@ -7,6 +7,8 @@ from datetime import timedelta
 
 from celery import shared_task
 
+from apps.clips.services.extract import extract_clip_metadata
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,7 +79,6 @@ def process_clip(self, clip_id: str):
     from apps.clips.github_detector import get_repo_info, is_github_list_repo
     from apps.clips.github_parser import fetch_repo_metadata
     from apps.clips.models import Clip
-    from apps.clips.services.extract import extract_clip_metadata
     from apps.destinations.services import export_clip_to_destination, get_user_destination
 
     try:
@@ -116,13 +117,16 @@ def process_clip(self, clip_id: str):
         clip.source_platform = Clip.PLATFORM_GITHUB
         clip.source_author = repo_info['owner']
         clip.source_post_url = clip.url
-        clip.tags = [
+        user_tags = clip.tags or []
+        repo_tags = [
             'repo',
             'github',
             repo_meta.get('language', 'Code').lower(),
         ] + [str(t).lower() for t in repo_meta.get('topics', [])[:4]]
+        clip.tags = list(dict.fromkeys(user_tags + repo_tags))
 
-        clip.extra_metadata = {
+        extra = clip.extra_metadata or {}
+        extra.update({
             'repo_name': repo_meta.get('name'),
             'stars': repo_meta.get('stars', 0),
             'language': repo_meta.get('language', 'Code'),
@@ -130,7 +134,8 @@ def process_clip(self, clip_id: str):
             'forks': repo_meta.get('forks', 0),
             'topics': repo_meta.get('topics', []),
             'source_type': 'github_repo',
-        }
+        })
+        clip.extra_metadata = extra
         clip.status = Clip.STATUS_DONE
         clip.save(update_fields=[
             'title',

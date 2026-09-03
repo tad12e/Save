@@ -1,7 +1,9 @@
+from django.conf import settings
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .serializers import (
     GoogleAuthSerializer,
@@ -15,14 +17,57 @@ from .services.otp import OTPEmailDeliveryError
 from .tokens import get_tokens_for_user
 
 
-def auth_response(user, response_status=status.HTTP_200_OK):
-    return Response(
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str | None = None) -> Response:
+    """Sets HttpOnly, Secure, SameSite cookies to protect tokens against XSS."""
+    is_secure = not getattr(settings, 'DEBUG', True)
+
+    response.set_cookie(
+        key='access_token',
+        value=access_token,
+        max_age=90 * 24 * 60 * 60,
+        httponly=True,
+        secure=is_secure,
+        samesite='Lax',
+        path='/',
+    )
+    if refresh_token:
+        response.set_cookie(
+            key='refresh_token',
+            value=refresh_token,
+            max_age=365 * 24 * 60 * 60,
+            httponly=True,
+            secure=is_secure,
+            samesite='Lax',
+            path='/',
+        )
+    return response
+
+
+def clear_auth_cookies(response: Response) -> Response:
+    """Clears authentication cookies upon signout."""
+    response.delete_cookie('access_token', path='/')
+    response.delete_cookie('refresh_token', path='/')
+    return response
+
+
+def auth_response(user, response_status=status.HTTP_200_OK) -> Response:
+    """Returns user profile and tokens in JSON while also setting HttpOnly cookies."""
+    tokens = get_tokens_for_user(user)
+    access_token = tokens.get('access') or tokens.get('access_token')
+    refresh_token = tokens.get('refresh') or tokens.get('refresh_token')
+
+    response = Response(
         {
-            **get_tokens_for_user(user),
+            **tokens,
+            'access': access_token,
+            'refresh': refresh_token,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
             'user': UserSerializer(user).data,
         },
         status=response_status,
     )
+    return set_auth_cookies(response, access_token, refresh_token)
 
 
 class SignupView(APIView):
@@ -125,3 +170,19 @@ class UserMeView(APIView):
 
     def get(self, request):
         return Response(UserSerializer(request.user).data)
+
+
+class LogoutView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            except Exception:
+                pass
+
+        response = Response({'message': 'Logged out successfully.'}, status=status.HTTP_200_OK)
+        return clear_auth_cookies(response)
