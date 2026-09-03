@@ -21,7 +21,7 @@ export interface AuthorizeResponse {
 const BASE_URL = 'http://localhost:8000';
 
 function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
-  const token = localStorage.getItem('clipper_access_token');
+  const token = typeof window !== 'undefined' ? localStorage.getItem('clipper_access_token') : null;
   const headers: Record<string, string> = { ...extraHeaders };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -33,6 +33,7 @@ export async function authorizeDestinationBackend(params: AuthorizeParams): Prom
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/authorize/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         provider: params.provider,
@@ -73,6 +74,7 @@ export async function createClipBackend(clipData: { url: string; selected_text?:
   try {
     const response = await fetch(`${BASE_URL}/api/clips/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({
         'Content-Type': 'application/json',
         'X-Privacy-Mode': clipData.is_privacy_mode ? 'true' : 'false',
@@ -95,6 +97,7 @@ export async function createClipBackend(clipData: { url: string; selected_text?:
 export async function fetchDestinationsBackend() {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/`, {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (!response.ok) return null;
@@ -109,6 +112,7 @@ export async function setDefaultDestinationBackend(destinationId: string) {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/set-default/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (!response.ok) return null;
@@ -123,6 +127,7 @@ export async function testDestinationBackend(destinationId: string) {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/test/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (!response.ok) return null;
@@ -137,6 +142,7 @@ export async function beautifySheetBackend(destinationId: string) {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/beautify/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({}),
     });
@@ -148,11 +154,11 @@ export async function beautifySheetBackend(destinationId: string) {
   }
 }
 
-
 export async function updateDestinationBackend(destinationId: string, data: any) {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/`, {
       method: 'PATCH',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data),
     });
@@ -168,6 +174,7 @@ export async function deleteDestinationBackend(destinationId: string) {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/`, {
       method: 'DELETE',
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     return response.ok;
@@ -201,6 +208,7 @@ async function parseJsonResponse(response: Response, defaultErrMsg: string) {
 export async function signupBackend(data: { email: string; password: string; name: string }) {
   const response = await fetch(`${BASE_URL}/api/auth/signup/`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
@@ -210,6 +218,7 @@ export async function signupBackend(data: { email: string; password: string; nam
 export async function signinBackend(data: { email: string; password: string }) {
   const response = await fetch(`${BASE_URL}/api/auth/signin/`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
@@ -219,6 +228,7 @@ export async function signinBackend(data: { email: string; password: string }) {
 export async function verifyOTPBackend(data: { email: string; otp: string }) {
   const response = await fetch(`${BASE_URL}/api/auth/verify-otp/`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
@@ -228,6 +238,7 @@ export async function verifyOTPBackend(data: { email: string; otp: string }) {
 export async function resendOTPBackend(email: string) {
   const response = await fetch(`${BASE_URL}/api/auth/resend-otp/`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
@@ -237,10 +248,25 @@ export async function resendOTPBackend(email: string) {
 export async function googleAuthBackend(idToken: string) {
   const response = await fetch(`${BASE_URL}/api/auth/social/google/`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id_token: idToken }),
   });
   return await parseJsonResponse(response, 'Google Auth failed');
+}
+
+export async function logoutBackend(refreshToken?: string) {
+  try {
+    const response = await fetch(`${BASE_URL}/api/auth/logout/`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ refresh_token: refreshToken || '' }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -259,48 +285,60 @@ export interface SpotifyPlaylist {
 
 export interface SpotifyTrack {
   id: string;
-  name: string;
-  artists: string;
+  title?: string;
+  name?: string;
+  artist?: string;
+  artists?: string;
   album: string;
-  album_art: string;
-  uri: string;
-  external_url: string;
-  preview_url: string;
-  duration_ms: number;
+  album_art?: string;
+  uri?: string;
+  external_url?: string;
+  spotify_url?: string;
+  preview_url?: string;
+  duration_ms?: number;
+  isrc?: string;
 }
 
-export async function fetchSpotifyPlaylists(): Promise<SpotifyPlaylist[]> {
+export async function fetchSpotifyPlaylistsBackend(): Promise<SpotifyPlaylist[]> {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/spotify/playlists/`, {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (!response.ok) return [];
     const data = await response.json();
     return data.playlists || [];
   } catch (error) {
-    console.warn('Could not fetch Spotify playlists from backend:', error);
+    console.warn('Could not fetch Spotify playlists:', error);
     return [];
   }
 }
 
-export async function createSpotifyPlaylist(name: string, description: string = '', isPublic: boolean = false): Promise<SpotifyPlaylist | null> {
+export const fetchSpotifyPlaylists = fetchSpotifyPlaylistsBackend;
+
+export async function createSpotifyPlaylistBackend(name: string, description: string = '', isPublic: boolean = false): Promise<SpotifyPlaylist | null> {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/spotify/playlists/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ name, description, is_public: isPublic }),
     });
     if (!response.ok) return null;
-    return await response.json();
+    const data = await response.json();
+    return data.playlist || data || null;
   } catch (error) {
     console.warn('Could not create Spotify playlist:', error);
     return null;
   }
 }
 
+export const createSpotifyPlaylist = createSpotifyPlaylistBackend;
+
 export async function searchSpotifyTracks(query: string, limit: number = 5): Promise<SpotifyTrack[]> {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/spotify/search/?q=${encodeURIComponent(query)}&limit=${limit}`, {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (!response.ok) return [];
@@ -321,6 +359,7 @@ export async function addTrackToSpotifyPlaylist(params: {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/spotify/add-track/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
@@ -332,10 +371,39 @@ export async function addTrackToSpotifyPlaylist(params: {
   }
 }
 
+export async function saveSpotifyTrackBackend(
+  track: SpotifyTrack,
+  playlistId: string = 'default'
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/destinations/spotify/save-track/`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        track_id: track.id,
+        track_title: track.title || track.name,
+        track_artist: track.artist || track.artists,
+        track_album: track.album,
+        spotify_url: track.spotify_url || track.external_url || '',
+        playlist_id: playlistId,
+      }),
+    });
+    const data = await response.json();
+    return {
+      success: response.ok,
+      message: data.message || (response.ok ? 'Track saved to Spotify ✓' : 'Failed to save track to Spotify'),
+    };
+  } catch (error: any) {
+    return { success: false, message: error.message || 'Network error saving to Spotify' };
+  }
+}
+
 export async function setMusicProviderBackend(provider: 'spotify' | 'youtube_music') {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/set-music-provider/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ provider }),
     });
@@ -350,6 +418,7 @@ export async function setMusicProviderBackend(provider: 'spotify' | 'youtube_mus
 export async function fetchCategoryRoutingRules(): Promise<Record<string, string> | null> {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/category-rules/`, {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (!response.ok) return null;
@@ -365,6 +434,7 @@ export async function saveCategoryRoutingRules(rules: Record<string, string>) {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/category-rules/`, {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ rules }),
     });
@@ -375,7 +445,4 @@ export async function saveCategoryRoutingRules(rules: Record<string, string>) {
     return null;
   }
 }
-
-
-
 

@@ -49,6 +49,11 @@ import {
 } from 'lucide-react';
 import { BrandIcon } from '../BrandIcons';
 
+// Module-level Brand Icon helper accessible by all modals and subcomponents
+const renderDestIcon = (type: string, className = 'w-6 h-6') => {
+  return <BrandIcon name={type} className={className} />;
+};
+
 interface ConnectionsPageProps {
   destinations: DestinationConfig[];
   setDestinations: React.Dispatch<React.SetStateAction<DestinationConfig[]>>;
@@ -278,13 +283,17 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
 
     setDestinations(previous => {
       const updated = previous.map(dest => {
-        if (dest.type === oauthSuccess || dest.id.includes(oauthSuccess) || dest.name.toLowerCase().includes(oauthSuccess.replace('_', ' '))) {
+        const matchesType = dest.type === oauthSuccess;
+        const matchesId = Boolean(dest.id && dest.id.includes(oauthSuccess));
+        const matchesName = Boolean(dest.name && dest.name.toLowerCase().includes(oauthSuccess.replace('_', ' ')));
+        if (matchesType || matchesId || matchesName) {
+          const currentResource = dest.targetResourceName || '';
           return {
             ...dest,
             connected: true,
             status: 'active' as const,
             lastSync: 'Just now',
-            targetResourceName: dest.targetResourceName.includes('Connect') ? 'Connected Workspace Sheet' : dest.targetResourceName
+            targetResourceName: currentResource.includes('Connect') ? 'Connected Workspace Sheet' : (dest.targetResourceName || 'Connected Workspace Sheet')
           };
         }
         return dest;
@@ -517,11 +526,6 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
       setDestinations(prev => [...prev, newDest]);
       setOauthModalDest(newDest);
     }
-  };
-
-  // Icon Helper (Official Brand SVGs)
-  const renderDestIcon = (type: string, className = 'w-6 h-6') => {
-    return <BrandIcon name={type} className={className} />;
   };
 
   const filteredDestinations = destinations.filter(d => {
