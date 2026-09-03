@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -43,24 +45,19 @@ class _FeedScreenState extends State<FeedScreen> {
 
   void _openXStyleInAppBrowser(BuildContext context, ClipModel clip) {
     final isFavorited = _favoritedClipIds.contains(clip.id);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      enableDrag: true,
-      builder: (ctx) => _XStyleInAppBrowserModal(
-        clip: clip,
-        isFavorited: isFavorited,
-        onToggleFavorite: () {
-          setState(() {
-            if (_favoritedClipIds.contains(clip.id)) {
-              _favoritedClipIds.remove(clip.id);
-            } else {
-              _favoritedClipIds.add(clip.id);
-            }
-          });
-        },
-      ),
+    XStyleInAppBrowserModal.show(
+      context,
+      clip,
+      isFavorited: isFavorited,
+      onToggleFavorite: () {
+        setState(() {
+          if (_favoritedClipIds.contains(clip.id)) {
+            _favoritedClipIds.remove(clip.id);
+          } else {
+            _favoritedClipIds.add(clip.id);
+          }
+        });
+      },
     );
   }
 
@@ -1180,31 +1177,53 @@ class _ClipAiChatSheetState extends State<_ClipAiChatSheet> {
 // IN-APP BROWSER WITH REAL ARTICLE READER & DOCKED FEED CLIP CARD
 // =============================================================================
 
-class _XStyleInAppBrowserModal extends StatefulWidget {
+class XStyleInAppBrowserModal extends StatefulWidget {
   final ClipModel clip;
   final bool isFavorited;
-  final VoidCallback onToggleFavorite;
+  final VoidCallback? onToggleFavorite;
 
-  const _XStyleInAppBrowserModal({
+  const XStyleInAppBrowserModal({
+    super.key,
     required this.clip,
-    required this.isFavorited,
-    required this.onToggleFavorite,
+    this.isFavorited = false,
+    this.onToggleFavorite,
   });
 
+  static void show(
+    BuildContext context,
+    ClipModel clip, {
+    bool isFavorited = false,
+    VoidCallback? onToggleFavorite,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      enableDrag: false,
+      builder: (ctx) => XStyleInAppBrowserModal(
+        clip: clip,
+        isFavorited: isFavorited,
+        onToggleFavorite: onToggleFavorite,
+      ),
+    );
+  }
+
   @override
-  State<_XStyleInAppBrowserModal> createState() => _XStyleInAppBrowserModalState();
+  State<XStyleInAppBrowserModal> createState() => _XStyleInAppBrowserModalState();
 }
 
-class _XStyleInAppBrowserModalState extends State<_XStyleInAppBrowserModal> {
+class _XStyleInAppBrowserModalState extends State<XStyleInAppBrowserModal> {
   late final WebViewController _webViewController;
   bool _isLoading = true;
   double _progress = 0.0;
   bool _isDockedExpanded = true;
   bool _isRefreshing = false;
+  late bool _isFavorited;
 
   @override
   void initState() {
     super.initState();
+    _isFavorited = widget.isFavorited;
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFF0F141C))
@@ -1329,18 +1348,30 @@ class _XStyleInAppBrowserModalState extends State<_XStyleInAppBrowserModal> {
       ),
       child: Column(
         children: [
-          // Drag handle pill at top
-          Container(
-            margin: const EdgeInsets.only(top: 8, bottom: 4),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.25),
-              borderRadius: BorderRadius.circular(2),
+          // Drag handle pill at top (swipe down to dismiss)
+          GestureDetector(
+            onVerticalDragEnd: (details) {
+              if (details.primaryVelocity != null && details.primaryVelocity! > 200) {
+                Navigator.pop(context);
+              }
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              width: double.infinity,
+              alignment: Alignment.center,
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
             ),
           ),
 
-          // 1. Top In-App Browser Header (Domain + Breadcrumb)
+          // 1. Top In-App Browser Header (Domain + Breadcrumb + Controls)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: const BoxDecoration(
@@ -1400,6 +1431,12 @@ class _XStyleInAppBrowserModalState extends State<_XStyleInAppBrowserModal> {
                   onPressed: () => _showMoreMenu(context),
                   visualDensity: VisualDensity.compact,
                 ),
+                // X (Close) button
+                IconButton(
+                  icon: const Icon(LucideIcons.x, size: 20, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                  visualDensity: VisualDensity.compact,
+                ),
               ],
             ),
           ),
@@ -1408,8 +1445,15 @@ class _XStyleInAppBrowserModalState extends State<_XStyleInAppBrowserModal> {
           Expanded(
             child: Stack(
               children: [
-                // Live WebView Engine rendering the real website
-                WebViewWidget(controller: _webViewController),
+                // Live WebView Engine rendering the real website with full scroll support
+                WebViewWidget(
+                  controller: _webViewController,
+                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                    Factory<OneSequenceGestureRecognizer>(
+                      () => EagerGestureRecognizer(),
+                    ),
+                  },
+                ),
 
                 // Top Loading progress bar
                 if (_isLoading && _progress < 1.0)
@@ -1751,11 +1795,16 @@ class _XStyleInAppBrowserModalState extends State<_XStyleInAppBrowserModal> {
                                     // Bookmark / Vault Favorite
                                     IconButton(
                                       icon: Icon(
-                                        widget.isFavorited ? LucideIcons.bookmarkCheck : LucideIcons.bookmark,
+                                        _isFavorited ? LucideIcons.bookmarkCheck : LucideIcons.bookmark,
                                         size: 18,
-                                        color: widget.isFavorited ? const Color(0xFF10B981) : const Color(0xFF71717A),
+                                        color: _isFavorited ? const Color(0xFF10B981) : const Color(0xFF71717A),
                                       ),
-                                      onPressed: widget.onToggleFavorite,
+                                      onPressed: () {
+                                        setState(() {
+                                          _isFavorited = !_isFavorited;
+                                        });
+                                        widget.onToggleFavorite?.call();
+                                      },
                                       visualDensity: VisualDensity.compact,
                                     ),
 

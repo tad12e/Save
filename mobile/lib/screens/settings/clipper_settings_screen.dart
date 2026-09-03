@@ -154,6 +154,11 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     text: "Extract job title, company name, salary range, application deadline, and key responsibilities into JSON.",
   );
 
+  // 7. Mobile Capture & Music Detection Modes
+  bool _enableShareSheet = true;
+  bool _enableQuickSettingsTile = false;
+  bool _enableFloatingBubble = false;
+
   @override
   void initState() {
     super.initState();
@@ -218,6 +223,11 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     if (_musicProvider == 'spotify') {
       _loadSpotifyPlaylists();
     }
+
+    // Capture & Music Detection Modes
+    _enableShareSheet = prefs.getBool('clipper_enable_sharesheet') ?? true;
+    _enableQuickSettingsTile = prefs.getBool('clipper_enable_qstile') ?? false;
+    _enableFloatingBubble = prefs.getBool('clipper_enable_bubble') ?? false;
 
     if (mounted) {
       setState(() => _isLoading = false);
@@ -844,6 +854,11 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     // 6. AI Prompt
     await prefs.setString('clipper_ai_extraction_prompt', _aiPromptController.text.trim());
 
+    // 7. Mobile Capture & Music Detection Modes
+    await prefs.setBool('clipper_enable_sharesheet', _enableShareSheet);
+    await prefs.setBool('clipper_enable_qstile', _enableQuickSettingsTile);
+    await prefs.setBool('clipper_enable_bubble', _enableFloatingBubble);
+
     // Sync to backend APIs in background
     final baseUrl = await ApiService.getBaseUrl();
     final token = await ApiService.getAccessToken();
@@ -971,6 +986,10 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                         const SizedBox(height: 16),
                       ],
 
+                      // 0. Mobile Capture & Music Detection Modes
+                      _buildCaptureModesSection(),
+                      const SizedBox(height: 18),
+
                       // 1. Clipper Save Confirmation Modes
                       _buildConfirmationModeSection(),
                       const SizedBox(height: 18),
@@ -1076,6 +1095,141 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  // ===========================================================================
+  // SECTION 0: CAPTURE & MUSIC DETECTION MODES
+  // ===========================================================================
+  Widget _buildCaptureModesSection() {
+    return _buildCardWrapper(
+      icon: LucideIcons.smartphone,
+      iconColor: const Color(0xFF7C3AED),
+      iconBg: const Color(0xFFEDE9FE),
+      title: 'Mobile Capture & Music Detection Modes',
+      tag: '3-IN-1 CAPTURE',
+      description: 'Configure how you capture links, TikToks, and identify background music without leaving your current app:',
+      child: Column(
+        children: [
+          // 1. Share Sheet
+          _buildCaptureModeTile(
+            icon: LucideIcons.share2,
+            iconColor: const Color(0xFF7C3AED),
+            title: '1-Tap Share Sheet Integration',
+            badgeText: 'DEFAULT ON',
+            badgeColor: const Color(0xFF7C3AED),
+            description: 'Appears in Spotify, TikTok, LinkedIn, and Instagram share menus with instant [Music Sync / Full Clip] mode switch.',
+            value: _enableShareSheet,
+            onChanged: (val) => setState(() => _enableShareSheet = val),
+          ),
+          const SizedBox(height: 10),
+
+          // 2. Quick Settings Tile
+          _buildCaptureModeTile(
+            icon: LucideIcons.slidersHorizontal,
+            iconColor: const Color(0xFF2563EB),
+            title: 'Android Quick Settings Tile',
+            badgeText: 'SWIPE DOWN',
+            badgeColor: const Color(0xFF2563EB),
+            description: 'Swipe down your phone\'s notification shade anywhere to identify music without switching apps.',
+            value: _enableQuickSettingsTile,
+            onChanged: (val) => setState(() => _enableQuickSettingsTile = val),
+          ),
+          const SizedBox(height: 10),
+
+          // 3. Floating Bubble
+          _buildCaptureModeTile(
+            icon: LucideIcons.disc,
+            iconColor: const Color(0xFF059669),
+            title: 'Floating Music Bubble (Overlay)',
+            badgeText: 'REEL / TIKTOK ASSISTANT',
+            badgeColor: const Color(0xFF059669),
+            description: 'A draggable floating purple bubble over TikTok & Instagram videos for 1-tap music fingerprinting.',
+            value: _enableFloatingBubble,
+            onChanged: (val) => setState(() => _enableFloatingBubble = val),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCaptureModeTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String badgeText,
+    required Color badgeColor,
+    required String description,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderSubtle),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 16, color: iconColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        badgeText,
+                        style: GoogleFonts.inter(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: badgeColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  description,
+                  style: GoogleFonts.inter(fontSize: 10.5, color: AppTheme.textMuted, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            activeColor: iconColor,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
     );
   }
 

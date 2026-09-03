@@ -9,6 +9,7 @@ import '../../models/clip_model.dart';
 import '../../providers/clips_provider.dart';
 import '../../widgets/app_header.dart';
 import '../../widgets/save_clip_bottom_sheet.dart';
+import '../feed/feed_screen.dart';
 
 class HomeDashboardScreen extends StatelessWidget {
   final Function(int tabIndex) onNavigateTab;
@@ -677,74 +678,78 @@ class HomeDashboardScreen extends StatelessWidget {
   }
 
   Widget _buildRecentClipCard(BuildContext context, ClipModel clip) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  clip.contentType.toUpperCase(),
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF16A34A),
+    return GestureDetector(
+      onTap: () => XStyleInAppBrowserModal.show(context, clip),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCFCE7),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    clip.contentType.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF16A34A),
+                    ),
                   ),
                 ),
-              ),
-              Text(
-                clip.sourceAuthor.isNotEmpty ? clip.sourceAuthor : 'web',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: AppTheme.textMuted,
+                Text(
+                  clip.sourceAuthor.isNotEmpty ? clip.sourceAuthor : 'web',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: AppTheme.textMuted,
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              clip.title,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            clip.title,
-            style: GoogleFonts.outfit(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            clip.summary,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: AppTheme.textMuted,
-              height: 1.4,
+            const SizedBox(height: 4),
+            Text(
+              clip.summary,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: AppTheme.textMuted,
+                height: 1.4,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
