@@ -46,6 +46,7 @@ class ClipSerializer(serializers.ModelSerializer):
             'export_error',
             'created_at',
             'updated_at',
+            'raw_content',
         )
         read_only_fields = fields
 
