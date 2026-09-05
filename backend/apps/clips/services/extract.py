@@ -141,6 +141,7 @@ def extract_clip_metadata(clip) -> dict:
     metadata['source_author'] = author
     metadata['source_post_url'] = post_url
     metadata['embedded_resources'] = embedded_resources
+    metadata['raw_content'] = page_text or selected_text
 
     if extracted_job_url:
         metadata['extracted_resource_url'] = extracted_job_url

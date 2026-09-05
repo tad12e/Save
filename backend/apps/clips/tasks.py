@@ -198,11 +198,13 @@ def process_clip(self, clip_id: str):
         if metadata.get('dynamic_row'):
             extra['dynamic_row'] = metadata['dynamic_row']
         clip.extra_metadata = extra
+        clip.raw_content = metadata.get('raw_content') or clip.raw_content or ''
 
         # Save AI-extracted deadline and music embed URL
         update_fields = [
             'title',
             'summary',
+            'raw_content',
             'content_type',
             'tags',
             'status',
@@ -563,4 +565,55 @@ def check_deadline_reminders(self):
 
     logger.info('Deadline reminder check complete: %d reminders sent.', count)
     return count
+
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    acks_late=True,
+)
+def process_bulk_import_job(self, job_id: str):
+    from django.utils import timezone
+    from apps.clips.models import BulkImportJob, Clip
+
+    try:
+        job = BulkImportJob.objects.select_related('user').get(pk=job_id)
+    except BulkImportJob.DoesNotExist:
+        logger.error('BulkImportJob %s not found — skipping.', job_id)
+        return
+
+    logger.info('Starting bulk import enrichment for job %s (user %s)', job.id, job.user_id)
+    job.status = BulkImportJob.STATUS_PROCESSING
+    job.save(update_fields=['status'])
+
+    # Find pending clips for this user
+    pending_clips = list(
+        Clip.objects.filter(user=job.user, status=Clip.STATUS_PENDING).order_by('created_at')[:job.created_items]
+    )
+
+    if not pending_clips:
+        job.status = BulkImportJob.STATUS_DONE
+        job.completed_at = timezone.now()
+        job.save(update_fields=['status', 'completed_at'])
+        return
+
+    # Dispatch individual clip processing with staggered countdown to avoid rate limits
+    # e.g., 2-second interval between tasks
+    for idx, clip in enumerate(pending_clips):
+        countdown_secs = (idx // 5) * 3  # Batch 5 clips every 3 seconds
+        try:
+            process_clip.apply_async(args=[str(clip.id)], countdown=countdown_secs)
+            job.processed_items += 1
+        except Exception as exc:
+            logger.warning('Failed to dispatch processing for clip %s: %s', clip.id, exc)
+            job.failed_items += 1
+            if len(job.error_log) < 50:
+                job.error_log.append({'clip_id': str(clip.id), 'error': str(exc)})
+
+    job.status = BulkImportJob.STATUS_DONE
+    job.completed_at = timezone.now()
+    job.save(update_fields=['processed_items', 'failed_items', 'error_log', 'status', 'completed_at'])
+    logger.info('Dispatched enrichment for %d clips in job %s', job.processed_items, job.id)
+
 
