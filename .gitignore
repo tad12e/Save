@@ -35,3 +35,9 @@ celerybeat-schedule*
 # Antigravity agents & customizations
 .agents/
 **/.agents/
+
+# MCP & API config files (contain API keys)
+opencode.json
+mcp_config.json
+.opencode/
+

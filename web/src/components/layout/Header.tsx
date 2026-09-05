@@ -1,21 +1,13 @@
 import React, { useState } from 'react';
-import { 
-  Search, 
-  Bell, 
-  Plus, 
-  CheckCircle, 
-  Radio, 
-  Sparkles, 
-  ExternalLink,
+import {
+  Search,
+  Bell,
+  CheckCircle,
   RefreshCw,
-  Sun,
-  Moon,
-  ChevronDown,
-  ShieldCheck,
-  User as UserIcon,
+  Sparkles,
   LogOut,
   KeyRound,
-  Music
+  PanelLeftOpen,
 } from 'lucide-react';
 import { DestinationConfig } from '../../types';
 
@@ -32,257 +24,154 @@ interface HeaderProps {
   currentUser?: { name: string; email: string } | null;
   onOpenAuthModal?: () => void;
   onLogout?: () => void;
+  onToggleSidebar?: () => void;
+  sidebarCollapsed?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  searchQuery,
-  setSearchQuery,
-  destinations,
-  onQuickAddClip,
-  onOpenMusicRadar,
-  onRefreshSync,
-  isRefreshing,
-  theme,
-  setTheme,
-  currentUser,
-  onOpenAuthModal,
-  onLogout
-}) => {
+// Static copy of Stitch Premium header (64px, glassy).
+// Wiring preserved: global search, notifications, manual sync, auth menu,
+// sidebar collapse toggle.
+export const Header: React.FC<HeaderProps> = (props) => {
+  const {
+    searchQuery,
+    setSearchQuery,
+    onRefreshSync,
+    isRefreshing,
+    currentUser,
+    onOpenAuthModal,
+    onLogout,
+    onToggleSidebar,
+    sidebarCollapsed = false,
+  } = props;
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
-  const activeDests = destinations.filter(d => d.connected && d.status === 'active');
-  const defaultDest = destinations.find(d => d.isDefault) || destinations[0];
-
-  const headerBgClass = 
-    theme === 'light' ? 'bg-white border-b border-slate-200 text-slate-800' :
-    theme === 'dark' ? 'bg-slate-900 border-b border-slate-800 text-white' :
-    'bg-[#080808] border-b border-white/5 text-white';
-
-  const searchBgClass = 
-    theme === 'light' ? 'bg-slate-50 text-slate-900 border-slate-200 focus:border-amber-500 placeholder:text-slate-400' :
-    theme === 'dark' ? 'bg-slate-800 text-slate-100 border-slate-700 focus:border-amber-500 placeholder:text-slate-500' :
-    'bg-[#050505] text-stone-200 border-white/10 focus:border-amber-500/60 placeholder:text-stone-600';
+  const [showAccount, setShowAccount] = useState(false);
 
   return (
-    <header className={`sticky top-0 z-20 h-20 px-6 sm:px-8 flex items-center justify-between gap-6 transition-colors ${headerBgClass}`}>
-      {/* Global Search Bar */}
-      <div className="flex-1 max-w-xl relative">
-        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search opportunities, job cards, tags, notes..."
-          className={`w-full pl-10 pr-4 py-2 text-xs rounded-sm border focus:outline-none transition-all font-sans ${searchBgClass}`}
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono uppercase tracking-wider text-stone-400 hover:text-amber-500"
-          >
-            Clear
-          </button>
-        )}
+    <header
+      className={`fixed top-0 right-0 h-[64px] z-30 bg-white/85 backdrop-blur-[12px] border-b border-slate-200 flex items-center justify-between px-6 left-0 ${
+        sidebarCollapsed ? 'md:left-[64px]' : 'md:left-[256px]'
+      }`}
+    >
+      <div className="flex items-center gap-4">
+        <button
+          aria-label="Collapse sidebar"
+          onClick={onToggleSidebar}
+          className="h-11 w-11 hidden md:flex items-center justify-center text-slate-500 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
+        >
+          <PanelLeftOpen className="w-5 h-5" />
+        </button>
+        <div className="relative w-[280px] lg:w-[420px] group">
+          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <Search className="w-[18px] h-[18px]" />
+          </span>
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full h-10 pl-9 pr-12 text-slate-700 bg-slate-50 border border-slate-200 rounded-xl text-[13px] leading-[20px] placeholder:text-slate-400 focus:outline-none focus:border-[#2D6A4F] focus:ring-4 focus:ring-[#2D6A4F]/15 focus:bg-white transition-all shadow-sm"
+            placeholder="Search opportunities, clips, notes... (Ctrl+K)"
+            type="text"
+          />
+          <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+            <kbd className="text-[11px] leading-[14px] px-1.5 py-0.5 rounded border border-slate-200 bg-white text-slate-400 shadow-sm">
+              ⌘K
+            </kbd>
+          </div>
+        </div>
       </div>
 
-      {/* Right Controls */}
       <div className="flex items-center gap-3">
-        {/* Local Privacy Mode Status Badge */}
-        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm border bg-amber-500/10 border-amber-500/30 text-amber-400 text-[10px] font-mono tracking-wider">
-          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-          <span className="font-semibold">PRIVACY VAULT: ON-DEVICE</span>
+        <div className="hidden sm:flex items-center gap-1 px-2 py-1.5 rounded-full bg-slate-100 text-slate-600 text-[11px] leading-[14px] border border-slate-200/50">
+          <RefreshCw className={`w-[14px] h-[14px] text-emerald-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span>Ready</span>
         </div>
-
-        {/* Default Destination Quick Badge */}
-        {defaultDest && (
-          <div className={`hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-sm border text-[10px] font-mono tracking-wider ${
-            theme === 'light' ? 'bg-slate-100 border-slate-200 text-slate-700' :
-            theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-300' :
-            'bg-[#050505] border-white/5 text-stone-400'
-          }`}>
-            <Radio className="w-3.5 h-3.5 text-amber-500" />
-            <span className="opacity-60">DEFAULT:</span>
-            <span className="font-semibold flex items-center gap-1.5">
-              {defaultDest.name}
-              <CheckCircle className="w-3 h-3 text-amber-500 inline" />
-            </span>
-          </div>
-        )}
-
-        {/* 3-Way Theme Switcher Selector */}
-        <div className="relative">
-          <button
-            onClick={() => setShowThemeMenu(!showThemeMenu)}
-            className={`px-3 py-1.5 rounded-sm border text-[10px] font-mono uppercase tracking-wider flex items-center gap-2 transition-all ${
-              theme === 'light' ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200' :
-              theme === 'dark' ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' :
-              'bg-[#050505] border-amber-500/40 text-amber-400 hover:bg-amber-500/10'
-            }`}
-            title="Switch Theme Paradigm"
-          >
-            {theme === 'light' && <Sun className="w-3.5 h-3.5 text-amber-600" />}
-            {theme === 'dark' && <Moon className="w-3.5 h-3.5 text-indigo-400" />}
-            {theme === 'terminal' && <Sparkles className="w-3.5 h-3.5 text-amber-400" />}
-            <span className="hidden sm:inline">
-              {theme === 'light' ? 'Light Mode' : theme === 'dark' ? 'Dark Mode' : 'OLED Amber'}
-            </span>
-            <ChevronDown className="w-3 h-3 opacity-60" />
-          </button>
-
-          {showThemeMenu && (
-            <div className={`absolute right-0 mt-2 w-48 rounded-sm shadow-2xl z-50 p-2 space-y-1 text-xs border ${
-              theme === 'light' ? 'bg-white border-slate-200 text-slate-800' :
-              theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' :
-              'bg-[#080808] border-white/10 text-white'
-            }`}>
-              <div className="px-2 py-1 text-[9px] font-mono uppercase tracking-widest text-stone-500 border-b border-white/5 mb-1">
-                Theme Paradigm
-              </div>
-
-              <button
-                onClick={() => { setTheme('light'); setShowThemeMenu(false); }}
-                className={`w-full text-left px-2.5 py-1.5 rounded-sm font-sans flex items-center justify-between ${
-                  theme === 'light' ? 'bg-amber-500/10 text-amber-600 font-semibold' : 'hover:bg-white/5'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <Sun className="w-3.5 h-3.5 text-amber-500" /> Light Mode
-                </span>
-                {theme === 'light' && <CheckCircle className="w-3 h-3 text-amber-500" />}
-              </button>
-
-              <button
-                onClick={() => { setTheme('dark'); setShowThemeMenu(false); }}
-                className={`w-full text-left px-2.5 py-1.5 rounded-sm font-sans flex items-center justify-between ${
-                  theme === 'dark' ? 'bg-indigo-500/10 text-indigo-400 font-semibold' : 'hover:bg-white/5'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <Moon className="w-3.5 h-3.5 text-indigo-400" /> Standard Dark
-                </span>
-                {theme === 'dark' && <CheckCircle className="w-3 h-3 text-indigo-400" />}
-              </button>
-
-              <button
-                onClick={() => { setTheme('terminal'); setShowThemeMenu(false); }}
-                className={`w-full text-left px-2.5 py-1.5 rounded-sm font-sans flex items-center justify-between ${
-                  theme === 'terminal' ? 'bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30' : 'hover:bg-white/5'
-                }`}
-              >
-                <span className="flex items-center gap-2 text-amber-400 font-mono">
-                  <Sparkles className="w-3.5 h-3.5" /> OLED Cyberpunk
-                </span>
-                {theme === 'terminal' && <CheckCircle className="w-3 h-3 text-amber-400" />}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Sync Ping Refresh Button */}
         <button
           onClick={onRefreshSync}
-          disabled={isRefreshing}
-          className="p-2 rounded-sm text-stone-400 hover:text-amber-400 hover:bg-white/[0.04] transition-colors border border-transparent hover:border-white/5"
-          title="Force Uplink Sync"
+          title="Force Sync"
+          className="hidden sm:flex h-11 w-11 items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
         >
-          <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-500' : ''}`} />
+          <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
         </button>
-
-        {/* Notifications Popover Toggle */}
         <div className="relative">
           <button
+            aria-label="Notifications"
             onClick={() => setShowNotifications(!showNotifications)}
-            className="p-2 rounded-sm text-stone-400 hover:text-amber-400 hover:bg-white/[0.04] transition-colors relative border border-transparent hover:border-white/5"
+            className="relative h-11 w-11 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
           >
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-[#080808]"></span>
+            <Bell className="w-5 h-5" />
+            <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-red-600 ring-2 ring-white"></span>
           </button>
 
           {showNotifications && (
-            <div className={`absolute right-0 mt-3 w-80 rounded-sm shadow-2xl z-50 p-4 space-y-3 border ${
-              theme === 'light' ? 'bg-white border-slate-200 text-slate-800' :
-              theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-100' :
-              'bg-[#080808] border-white/10 text-white'
-            }`}>
-              <div className="flex items-center justify-between pb-2.5 border-b border-white/5">
-                <span className="font-serif text-sm font-medium">System Activity</span>
-                <span className="text-[9px] font-mono bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-sm uppercase tracking-wider">
+            <div className="absolute right-0 mt-2 w-80 rounded-2xl shadow-xl z-50 p-4 space-y-3 border bg-white border-slate-200 text-slate-900">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <span className="font-semibold text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  System Activity
+                </span>
+                <span className="text-[9px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
                   2 New
                 </span>
               </div>
-              <div className="space-y-2.5 text-xs">
-                <div className={`p-3 rounded-sm border flex gap-2.5 ${
-                  theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-[#050505] border-white/5'
-                }`}>
-                  <CheckCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-serif text-xs">Google Sheets Sync Complete</p>
-                    <p className="text-stone-500 text-[11px] font-mono mt-0.5">Row #143 appended to Vault 2026</p>
-                    <p className="text-[9px] font-mono text-amber-500/80 mt-1 uppercase tracking-wider">2 mins ago</p>
-                  </div>
+              <div className="p-3 rounded-xl border bg-slate-50 border-slate-200 flex gap-2.5">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-sans font-semibold">Google Sheets Sync Complete</p>
+                  <p className="text-slate-500 text-[11px] font-mono mt-0.5">Row #143 appended to Vault 2026</p>
+                  <p className="text-[9px] font-mono text-emerald-600 mt-1 uppercase tracking-wider">2 mins ago</p>
                 </div>
-                <div className={`p-3 rounded-sm border flex gap-2.5 ${
-                  theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-[#050505] border-white/5'
-                }`}>
-                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-serif text-xs">AI Weekly Digest Ready</p>
-                    <p className="text-stone-500 text-[11px] font-mono mt-0.5">12 opportunities scored & grouped</p>
-                    <p className="text-[9px] font-mono text-amber-500/80 mt-1 uppercase tracking-wider">1 hour ago</p>
-                  </div>
+              </div>
+              <div className="p-3 rounded-xl border bg-slate-50 border-slate-200 flex gap-2.5">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-sans font-semibold">AI Weekly Digest Ready</p>
+                  <p className="text-slate-500 text-[11px] font-mono mt-0.5">12 opportunities scored & grouped</p>
+                  <p className="text-[9px] font-mono text-emerald-600 mt-1 uppercase tracking-wider">1 hour ago</p>
                 </div>
               </div>
             </div>
           )}
         </div>
-
-        {/* Auth / Account Profile Button */}
+        <div className="h-5 w-px bg-slate-200"></div>
         {currentUser ? (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm bg-[#050505] border border-white/10 text-xs text-stone-200">
-              <UserIcon className="w-3.5 h-3.5 text-amber-500" />
-              <span className="font-mono text-xs font-semibold">{currentUser.name}</span>
-            </div>
-            {onLogout && (
-              <button
-                onClick={onLogout}
-                className="p-2 rounded-sm text-stone-400 hover:text-rose-400 hover:bg-white/[0.04] transition-colors border border-transparent hover:border-white/5"
-                title="Log Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
+          <div className="relative">
+            <button onClick={() => setShowAccount(!showAccount)} title={currentUser.name}>
+              <div className="w-9 h-9 rounded-full bg-[#2D6A4F] text-white text-[11px] font-sans font-bold flex items-center justify-center ring-1 ring-slate-200 cursor-pointer shadow-sm hover:shadow-md transition-shadow">
+                {currentUser.name.charAt(0).toUpperCase()}
+              </div>
+            </button>
+            {showAccount && (
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl shadow-xl z-50 p-3 border bg-white border-slate-200">
+                <div className="px-2 py-1.5">
+                  <div className="text-[13px] font-sans font-semibold text-slate-900 truncate">
+                    {currentUser.name}
+                  </div>
+                  <div className="text-[11px] font-sans text-slate-500 truncate">
+                    {currentUser.email}
+                  </div>
+                </div>
+                {onLogout && (
+                  <button
+                    onClick={() => {
+                      onLogout();
+                      setShowAccount(false);
+                    }}
+                    className="w-full mt-1 flex items-center gap-2 px-2 py-2 rounded-lg text-[12px] font-sans text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Log Out
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ) : (
           <button
             onClick={onOpenAuthModal}
-            className="px-3.5 py-2 rounded-sm text-xs font-mono uppercase tracking-wider font-semibold bg-[#050505] hover:bg-amber-500/10 text-amber-400 border border-amber-500/40 transition-colors flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl text-xs font-sans font-bold bg-[#2D6A4F] hover:bg-[#245640] text-white transition-colors flex items-center gap-1.5"
           >
             <KeyRound className="w-3.5 h-3.5" />
-            <span>Sign In / Register</span>
+            <span>Sign In</span>
           </button>
         )}
-
-        {/* Identify Music Radar Button */}
-        {onOpenMusicRadar && (
-          <button
-            onClick={onOpenMusicRadar}
-            className="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 px-3.5 py-2 rounded-sm text-xs font-mono tracking-wider uppercase font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
-            title="Identify song playing around you with AI Music Radar"
-          >
-            <Music className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span className="hidden sm:inline">Identify Music</span>
-          </button>
-        )}
-
-        {/* Quick Add Clip CTA Button */}
-        <button
-          onClick={onQuickAddClip}
-          className="bg-amber-500 hover:bg-amber-400 text-black px-4 py-2 rounded-sm text-xs font-mono tracking-wider uppercase font-semibold shadow-md shadow-amber-500/10 flex items-center gap-1.5 transition-all"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Save Clip</span>
-        </button>
       </div>
     </header>
   );

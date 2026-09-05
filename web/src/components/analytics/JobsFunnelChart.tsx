@@ -5,9 +5,18 @@ import { AnalyticsPayload } from '../../lib/analyticsApi';
 
 interface JobsFunnelChartProps {
   funnelData?: AnalyticsPayload['opportunity_funnel'];
+  money?: AnalyticsPayload['money'];
+  isDark?: boolean;
 }
 
-export const JobsFunnelChart: React.FC<JobsFunnelChartProps> = ({ funnelData }) => {
+export const JobsFunnelChart: React.FC<JobsFunnelChartProps> = ({ funnelData, money, isDark }) => {
+  const missedCount = money?.missed_deadlines_count ?? 12;
+  const realizedValue = money?.realized_value_index ?? '$2,850 in scholarships & tickets';
+  const shell = isDark
+    ? 'bg-[#0A0A0A] border-[#262626]'
+    : 'bg-white border-slate-200/80';
+  const heading = isDark ? 'text-[#EDEDED]' : 'text-slate-900';
+  const meta = isDark ? 'text-[#A1A1A1]' : 'text-slate-500';
   // Use real stages from backend if available, or fall back to standard pipeline
   const stages = (funnelData && funnelData.length >= 4)
     ? [
@@ -101,14 +110,14 @@ export const JobsFunnelChart: React.FC<JobsFunnelChartProps> = ({ funnelData }) 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: 0.2 }}
-      className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] space-y-4"
+      className={`rounded-2xl border p-5 shadow-[0_2px_8px_rgba(0,0,0,0.02)] space-y-4 ${shell}`}
     >
       {/* Header */}
       <div>
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <Briefcase className="w-4 h-4 text-blue-600" />
-            <span className="text-[11px] font-mono font-bold tracking-wider text-slate-500 uppercase">
+            <span className={`text-[11px] font-mono font-bold tracking-wider uppercase ${meta}`}>
               OPPORTUNITY OUTCOMES
             </span>
           </div>
@@ -118,7 +127,7 @@ export const JobsFunnelChart: React.FC<JobsFunnelChartProps> = ({ funnelData }) 
           </span>
         </div>
 
-        <h3 className="text-base font-bold text-slate-900 font-sans tracking-tight">
+        <h3 className={`text-base font-bold font-sans tracking-tight ${heading}`}>
           Jobs & Application Conversion Funnel
         </h3>
       </div>
@@ -167,7 +176,7 @@ export const JobsFunnelChart: React.FC<JobsFunnelChartProps> = ({ funnelData }) 
         <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
         <div>
           <h5 className="text-xs font-bold text-rose-900 font-sans">
-            12 Opportunities Expired Unactioned
+            {missedCount} Opportunities Expired Unactioned
           </h5>
           <p className="text-[11px] text-rose-700 font-sans mt-0.5 leading-relaxed">
             3 jobs, 4 events, and 5 scholarships passed deadlines last month. Act earlier to secure slots!
@@ -186,7 +195,7 @@ export const JobsFunnelChart: React.FC<JobsFunnelChartProps> = ({ funnelData }) 
               Opportunity Value Captured
             </span>
             <div className="text-sm font-bold text-emerald-950 font-sans">
-              $2,850 in scholarships & tickets
+              {realizedValue}
             </div>
           </div>
         </div>

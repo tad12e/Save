@@ -1,45 +1,39 @@
-import React, { useState } from 'react';
-import { 
-  ClipItem, 
-  DestinationConfig, 
-  JobCard, 
-  ConnectionSyncLog 
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import {
+  Bookmark,
+  Star,
+  Copy,
+  Check,
+  X,
+  ExternalLink,
+  MoreHorizontal,
+  Clock,
+  Flame,
+  Radio,
+  Plus,
+  RefreshCw,
+  ArrowUpRight,
+  ArrowUpDown,
+  LayoutGrid,
+  List,
+  ListFilter,
+  TrendingUp,
+  CalendarDays,
+  GraduationCap,
+  Network,
+  AlarmClock,
+  Link2,
+  FileText,
+  Eye,
+} from 'lucide-react';
+import {
+  ClipItem,
+  DestinationConfig,
+  JobCard,
+  ConnectionSyncLog,
 } from '../../types';
 import { TabType } from '../layout/Sidebar';
-import { 
-  LayoutDashboard, 
-  Bookmark, 
-  Radio, 
-  Briefcase, 
-  Sparkles, 
-  Zap, 
-  ArrowUpRight, 
-  Clock, 
-  CheckCircle, 
-  Plus, 
-  RefreshCw, 
-  ExternalLink, 
-  ChevronRight, 
-  Building2, 
-  MapPin, 
-  DollarSign, 
-  TrendingUp, 
-  FileSpreadsheet, 
-  FileText, 
-  Table, 
-  HardDrive, 
-  Puzzle, 
-  Sliders, 
-  Star,
-  Search,
-  Check,
-  Send,
-  Flame,
-  Activity,
-  BarChart2,
-  Terminal
-} from 'lucide-react';
-import { BrandIcon } from '../BrandIcons';
 
 interface DashboardPageProps {
   clips: ClipItem[];
@@ -56,1091 +50,1213 @@ interface DashboardPageProps {
   theme?: 'terminal' | 'dark' | 'light';
 }
 
-export const DashboardPage: React.FC<DashboardPageProps> = ({
-  clips,
-  setClips,
-  destinations,
-  setDestinations,
-  jobs,
-  logs,
-  setActiveTab,
-  onOpenManualAddModal,
-  onRefreshSync,
-  isRefreshing = false,
-  toggleExtensionWidget,
-  theme = 'terminal'
-}) => {
-  const [filterType, setFilterType] = useState<string>('all');
-  const [dashboardSearch, setDashboardSearch] = useState('');
-  const [pingingDestId, setPingingDestId] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'activity' | 'analytics' | 'action_hub' | 'logs'>('overview');
-  const [hoveredHeatCell, setHoveredHeatCell] = useState<{ date: string; count: number } | null>(null);
+// ---------------------------------------------------------------------------
+// Static copy of Stitch "Save - Home Dashboard (Premium)", transcribed from
+// the exported HTML (exact tokens, copy, structure). Light only.
+// Differences from the export: lucide icons instead of Material Symbols,
+// recharts-free (inline SVG like the export), plus the requested middle
+// "This Week" column. Wiring preserved: Save Clip modal, Sync Now,
+// N keyboard shortcut, stars, filters, search, empty-state toggle.
+// ---------------------------------------------------------------------------
 
-  // Dynamic Theme Helpers
-  const isLight = theme === 'light';
-  const isDark = theme === 'dark';
-  
-  const cardBgClass = isLight 
-    ? 'bg-white border-slate-200 text-slate-800 shadow-sm hover:border-amber-500/50' 
-    : isDark 
-    ? 'bg-slate-900 border-slate-800 text-slate-100 shadow-lg hover:border-indigo-500/50' 
-    : 'bg-[#080808] border-white/5 text-white hover:border-amber-500/40';
+type BadgeKind = 'LEARN' | 'APPLY' | 'TRACK' | 'HIRE';
 
-  const innerBgClass = isLight 
-    ? 'bg-slate-50 border-slate-200' 
-    : isDark 
-    ? 'bg-slate-800/80 border-slate-700/60' 
-    : 'bg-[#050505] border-white/5';
+interface StaticClip {
+  id: string;
+  badge: BadgeKind;
+  badgeExtra?: string;
+  domain: string;
+  time: string;
+  title: string;
+  excerpt: string;
+  tags: string[];
+  sync: string;
+  amber?: boolean;
+}
 
-  const titleClass = isLight 
-    ? 'text-slate-900' 
-    : 'text-white';
+const STATIC_CLIPS: StaticClip[] = [
+  {
+    id: 'c1',
+    badge: 'LEARN',
+    domain: 'twitter.com',
+    time: '2h ago',
+    title: 'Anthropic Claude 3.5 Sonnet Speculative Decoding & MoE Architecture Deep Dive',
+    excerpt:
+      'Empirical throughput metrics show 2.4x inference gain using speculative draft tokens with specialized KV-cache pruning mechanisms.',
+    tags: ['#AI', '#LLMs', '#Benchmarks'],
+    sync: 'Notion, Sheets',
+  },
+  {
+    id: 'c2',
+    badge: 'APPLY',
+    badgeExtra: 'DUE OCT 28 (42h)',
+    domain: 'grants.gov',
+    time: '5h ago',
+    title: 'NSF SBIR Phase I Proposal — High-Throughput Genomic Assembly ($275k Seed Grant)',
+    excerpt:
+      'Executive summary and preliminary technical validation sections completed. Requires letters of support and budget narrative upload.',
+    tags: ['#Grants', '#DeepTech', '#BioTech'],
+    sync: 'Sheets',
+    amber: true,
+  },
+  {
+    id: 'c3',
+    badge: 'TRACK',
+    domain: 'github.com',
+    time: 'Yesterday',
+    title: 'vLLM multi-lora-orchestrator release v0.6.2 with CUDA Graph Optimization',
+    excerpt:
+      'Hot-swapping dynamic LoRA adapters without recreating engine instances. Benchmarked at 180 tokens/sec on 8x H100 SXM nodes.',
+    tags: ['#OpenSource', '#Inference', '#Rust'],
+    sync: 'Obsidian',
+  },
+  {
+    id: 'c4',
+    badge: 'HIRE',
+    domain: 'ycombinator.com',
+    time: '2 days ago',
+    title: 'YC Tech Companies 2026 Hiring & Founding Engineer Opportunities in AI Tooling',
+    excerpt:
+      'Curated index of 14 early-stage Series A startups building foundation model tooling, compiler infrastructure, and synthesis engines.',
+    tags: ['#Career', '#Founders'],
+    sync: 'Notion',
+  },
+  {
+    id: 'c5',
+    badge: 'LEARN',
+    domain: 'youtube.com',
+    time: '3 days ago',
+    title: 'Keynote: Building Production-Grade Vector Search with HNSW and pgvector at Scale',
+    excerpt:
+      'Deep architectural walkthrough on partition strategies, RAM footprint optimization, and hybrid full-text indexing inside PostgreSQL 17.',
+    tags: ['#Databases', '#Postgres'],
+    sync: 'Notion',
+  },
+];
 
-  const subtextClass = isLight 
-    ? 'text-slate-500' 
-    : isDark 
-    ? 'text-slate-400' 
-    : 'text-stone-400';
+const FILTERS = [
+  { label: 'All', count: 148, dot: null as string | null },
+  { label: 'Apply', count: 18, dot: 'bg-amber-500' },
+  { label: 'Learn', count: 74, dot: null as string | null },
+  { label: 'Buy', count: 6, dot: null as string | null },
+  { label: 'Attend', count: 9, dot: null as string | null },
+  { label: 'Hire', count: 12, dot: null as string | null },
+  { label: 'Track', count: 29, dot: null as string | null },
+];
 
-  // Calculated Stats
-  const totalClips = clips.length;
-  const activeDestinations = destinations.filter(d => d.connected && d.status === 'active');
-  const totalSynced = destinations.reduce((acc, curr) => acc + curr.itemsSyncedCount, 0);
+const DONUT = [
+  { name: 'Learn', pct: 50, color: '#2D6A4F', dash: '119', offset: '-118.8' },
+  { name: 'Track', pct: 20, color: '#40916C', dash: '47.6', offset: '-71.2' },
+  { name: 'Apply', pct: 12, color: '#D97706', dash: '28.5', offset: '-42.7' },
+  { name: 'Hire', pct: 8, color: '#86D7AD', dash: '19', offset: '-23.7' },
+  { name: 'Attend', pct: 6, color: '#64748B', dash: '14.2', offset: '-9.5' },
+  { name: 'Buy', pct: 4, color: '#CBD5E1', dash: '9.5', offset: '0' },
+];
 
-  // Job status metrics
-  const savedJobsCount = jobs.filter(j => j.status === 'saved').length;
-  const appliedJobsCount = jobs.filter(j => j.status === 'applied').length;
-  const interviewingJobsCount = jobs.filter(j => j.status === 'interviewing').length;
-  const offerJobsCount = jobs.filter(j => j.status === 'offer').length;
+const DEADLINES = [
+  {
+    title: 'NSF SBIR Phase I',
+    badge: '2 days (Oct 28)',
+    sub: 'Review final indirect cost calculations',
+    dot: 'bg-[#EA580C]',
+    badgeClass: 'bg-red-100 text-red-700 border-red-200/50',
+  },
+  {
+    title: 'OpenAI Resident Researcher',
+    badge: '5 days (Oct 31)',
+    sub: 'Submit publications portfolio & references',
+    dot: 'bg-amber-400',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-200/50',
+  },
+  {
+    title: 'YC W25 Early Batch',
+    badge: '8 days (Nov 03)',
+    sub: 'Update 1-minute founder video link',
+    dot: 'bg-slate-300',
+    badgeClass: 'bg-slate-100 text-slate-600 border-slate-200/50',
+  },
+];
 
-  // Generate GitHub/LeetCode style contribution matrix data (16 weeks x 7 days)
-  const heatmapWeeks = React.useMemo(() => {
-    const weeks = [];
-    const today = new Date();
-    for (let w = 15; w >= 0; w--) {
-      const days = [];
-      for (let d = 0; d < 7; d++) {
-        const dateObj = new Date(today);
-        dateObj.setDate(today.getDate() - (w * 7 + (6 - d)));
-        const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const daySeed = (dateObj.getDate() * 7 + dateObj.getMonth() * 13) % 10;
-        let count = 0;
-        if (daySeed > 3) count = (daySeed % 4) + 1;
-        if (w === 0 && d >= 4) count = 3 + (d % 3); // Active streak
-        days.push({ date: dateStr, count, isToday: w === 0 && d === 6 });
-      }
-      weeks.push(days);
+const SYNC_ROWS = [
+  { name: 'Google Sheets', detail: '148 items synced • 280ms', time: '2m ago', live: true, delay: '' },
+  { name: 'Notion Workspace', detail: '142 items synced • 310ms', time: '12m ago', live: true, delay: '0.2s' },
+  { name: 'Obsidian Local Hook', detail: 'All 148 notes mirrored', time: '34m ago', live: false, delay: '' },
+  { name: 'Webhook Ingestion', detail: '96 payloads delivered', time: '1h ago', live: false, delay: '' },
+];
+
+const TOP_TAGS = [
+  { tag: '#LLM', count: 32 },
+  { tag: '#Grants', count: 18 },
+  { tag: '#Career', count: 15 },
+  { tag: '#Rust', count: 12 },
+];
+
+const STREAK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const STREAK_ON = [true, true, true, true, true, false, false];
+
+const cardClass =
+  'bg-white border border-slate-200 rounded-2xl shadow-sm';
+
+// Springy-delight motion language: weightless lifts, physical presses,
+// gentle entrances. Centralized so intensity stays consistent.
+const SPRING = { type: 'spring', stiffness: 380, damping: 28 } as const;
+const ENTER_Y = 8;
+
+// rAF count-up for stat figures (tabular-nums upstream prevents jitter).
+function useCountUp(target: number, duration = 700) {
+  const reduceMotion = useReducedMotion();
+  const [val, setVal] = useState(reduceMotion ? target : 0);
+  useEffect(() => {
+    if (reduceMotion) {
+      setVal(target);
+      return;
     }
-    return weeks;
-  }, []);
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(target * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration, reduceMotion]);
+  return val;
+}
 
-  const filteredClips = clips.filter(clip => {
-    const matchesFilter = filterType === 'all' || clip.type === filterType;
-    const matchesSearch = 
-      clip.title.toLowerCase().includes(dashboardSearch.toLowerCase()) ||
-      clip.summary.toLowerCase().includes(dashboardSearch.toLowerCase()) ||
-      clip.tags.some(t => t.toLowerCase().includes(dashboardSearch.toLowerCase()));
-    return matchesFilter && matchesSearch;
-  });
+function badgeClass(badge: BadgeKind, amber?: boolean): string {
+  if (amber) return 'bg-amber-100 text-amber-800 border-amber-200/60';
+  switch (badge) {
+    case 'LEARN':
+      return 'bg-[#caead6]/60 text-[#1b724f] border-[#caead6]';
+    case 'APPLY':
+      return 'bg-amber-100 text-amber-800 border-amber-200/60';
+    case 'TRACK':
+      return 'bg-slate-100 text-slate-600 border-slate-200/60';
+    case 'HIRE':
+      return 'bg-emerald-100 text-emerald-800 border-emerald-200/60';
+  }
+}
 
-  const handleToggleFavorite = (clipId: string) => {
-    setClips(prev =>
-      prev.map(c => c.id === clipId ? { ...c, isFavorite: !c.isFavorite } : c)
+function GoalRing({ pct }: { pct: number }) {
+  const R = 26;
+  const C = 2 * Math.PI * R;
+  return (
+    <div className="relative w-[72px] h-[72px] shrink-0">
+      <svg viewBox="0 0 72 72" className="w-[72px] h-[72px] -rotate-90">
+        <circle cx="36" cy="36" r={R} fill="none" stroke="#E2E8F0" strokeWidth="8" />
+        <circle
+          cx="36"
+          cy="36"
+          r={R}
+          fill="none"
+          stroke="#2D6A4F"
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={`${(pct / 100) * C} ${C}`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[15px] font-bold text-[#0F172A] leading-none" style={{ fontFamily: 'Outfit, sans-serif' }}>
+          7/10
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
+  const { onOpenManualAddModal, onRefreshSync, isRefreshing = false } = props;
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [filterQuery, setFilterQuery] = useState('');
+  const [starred, setStarred] = useState<Set<string>>(new Set(['c2']));
+  const [gridView, setGridView] = useState(false);
+  const [showEmpty, setShowEmpty] = useState(false);
+  const [openClip, setOpenClip] = useState<StaticClip | null>(null);
+  const [activeDonut, setActiveDonut] = useState<number | null>(null);
+  const [doneDeadlines, setDoneDeadlines] = useState<Set<string>>(new Set());
+  const [snoozed, setSnoozed] = useState<Record<string, number>>({});
+  const [copied, setCopied] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const enter = reduceMotion ? { duration: 0 } : { ...SPRING };
+
+  const totalCount = useCountUp(148);
+  const expiringCount = useCountUp(2);
+  const backlogCount = useCountUp(24);
+  const liveCount = useCountUp(4);
+  const digestCount = useCountUp(12);
+  const streakCount = useCountUp(14);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (document.activeElement?.tagName || '').toUpperCase();
+      if (e.key === 'Escape') {
+        setOpenClip(null);
+        return;
+      }
+      if ((e.key === 'n' || e.key === 'N') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        e.preventDefault();
+        onOpenManualAddModal();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onOpenManualAddModal]);
+
+  const toggleDone = (title: string) => {
+    setDoneDeadlines((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+  };
+
+  const snoozeDeadline = (title: string) => {
+    setSnoozed((prev) => ({ ...prev, [title]: ((prev[title] || 0) + 1) % 4 }));
+  };
+
+  const deadlineBadge = (d: { title: string; badge: string }) => {
+    const extra = snoozed[d.title] || 0;
+    return extra > 0 ? `${d.badge} +${extra * 2}d` : d.badge;
+  };
+
+  const copyClipLink = async (clip: StaticClip) => {
+    try {
+      await navigator.clipboard.writeText(`https://save.app/clips/${clip.id}`);
+    } catch {
+      /* clipboard unavailable — still confirm */
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  const toggleStar = (id: string) => {
+    setStarred((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const matchesFilter = (c: StaticClip) => {
+    if (activeFilter === 'All') return true;
+    return c.badge === activeFilter.toUpperCase();
+  };
+
+  const matchesQuery = (c: StaticClip) => {
+    const q = filterQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      c.title.toLowerCase().includes(q) ||
+      c.domain.toLowerCase().includes(q) ||
+      c.tags.some((t) => t.toLowerCase().includes(q))
     );
   };
 
-  const handleTestPingDest = (destId: string) => {
-    setPingingDestId(destId);
-    setTimeout(() => {
-      setPingingDestId(null);
-    }, 1000);
-  };
-
-  // Icon Helper (Official Brand SVGs)
-  const renderDestIcon = (type: string, className = 'w-4 h-4') => {
-    return <BrandIcon name={type} className={className} />;
-  };
+  const visibleClips = showEmpty ? [] : STATIC_CLIPS.filter((c) => matchesFilter(c) && matchesQuery(c));
 
   return (
-    <div className={`p-4 sm:p-6 md:p-8 lg:p-10 w-full space-y-8 animate-fadeIn min-h-screen transition-colors ${
-      isLight ? 'bg-slate-100/70 text-slate-900' : isDark ? 'bg-slate-950 text-slate-100' : 'bg-[#050505] text-white'
-    }`}>
-      {/* Hero Welcome Header */}
-      <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b ${
-        isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-      }`}>
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] font-mono tracking-[0.25em] text-amber-500 uppercase bg-amber-500/10 px-2.5 py-1 border border-amber-500/30 rounded-sm">
-              {theme === 'terminal' ? 'Vault Command Center' : theme === 'light' ? 'Workspace Dashboard' : 'Central Pipeline'}
-            </span>
-            <span className="opacity-40 text-xs">•</span>
-            <span className={`text-xs font-mono ${subtextClass}`}>Live Uplink Active</span>
-          </div>
-          <h1 className={`text-3xl md:text-4xl font-serif leading-tight ${titleClass}`}>
-            Executive <span className="italic opacity-70">Workspace Dashboard</span>
-          </h1>
-          <p className={`text-xs md:text-sm mt-2 max-w-2xl leading-relaxed ${subtextClass}`}>
-            Centralized hub for opportunity web clips, connected destination health, job application pipelines, and AI digest insights.
-          </p>
-        </div>
-
-        {/* Quick Action Button Hub */}
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={onOpenManualAddModal}
-            className="px-4 py-2.5 rounded-sm bg-amber-500 hover:bg-amber-400 text-black font-mono text-xs uppercase tracking-wider font-semibold shadow-lg shadow-amber-500/10 transition-all flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>Clip Opportunity</span>
-          </button>
-
-          <button
-            onClick={toggleExtensionWidget}
-            className={`px-4 py-2.5 rounded-sm border font-mono text-xs uppercase tracking-wider transition-colors flex items-center gap-2 ${
-              isLight ? 'bg-white text-slate-800 border-slate-300 hover:bg-slate-50' :
-              isDark ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700' :
-              'bg-[#080808] text-stone-200 border-white/10 hover:border-amber-500/40'
-            }`}
-          >
-            <Puzzle className="w-4 h-4 text-amber-500" />
-            <span>Clipper Extension</span>
-          </button>
-
-          <button
-            onClick={onRefreshSync}
-            disabled={isRefreshing}
-            className={`p-2.5 rounded-sm border transition-colors ${
-              isLight ? 'bg-white text-slate-600 border-slate-300 hover:text-amber-600' :
-              isDark ? 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white' :
-              'bg-[#080808] text-stone-400 hover:text-amber-400 border-white/10'
-            }`}
-            title="Sync All Destinations"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-amber-500' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* Sub-Navigation Tabs Bar (Mini Pages) */}
-      <div className={`flex items-center gap-2 pb-2 border-b overflow-x-auto ${
-        isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-      }`}>
-        <button
-          onClick={() => setActiveSubTab('overview')}
-          className={`px-4 py-2 rounded-sm text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-2 border whitespace-nowrap ${
-            activeSubTab === 'overview'
-              ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 font-semibold shadow-sm'
-              : isLight ? 'border-slate-200 text-slate-600 hover:bg-slate-200/60' : 'border-white/5 text-stone-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <LayoutDashboard className="w-3.5 h-3.5" />
-          <span>Overview</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('activity')}
-          className={`px-4 py-2 rounded-sm text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-2 border whitespace-nowrap ${
-            activeSubTab === 'activity'
-              ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 font-semibold shadow-sm'
-              : isLight ? 'border-slate-200 text-slate-600 hover:bg-slate-200/60' : 'border-white/5 text-stone-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <Flame className="w-3.5 h-3.5 text-amber-500" />
-          <span>Activity & Streak</span>
-          <span className="text-[9px] bg-amber-500/20 text-amber-500 px-1.5 py-0.2 rounded font-mono">14 Days</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('analytics')}
-          className={`px-4 py-2 rounded-sm text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-2 border whitespace-nowrap ${
-            activeSubTab === 'analytics'
-              ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 font-semibold shadow-sm'
-              : isLight ? 'border-slate-200 text-slate-600 hover:bg-slate-200/60' : 'border-white/5 text-stone-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <BarChart2 className="w-3.5 h-3.5 text-blue-400" />
-          <span>Clipped Analytics</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('action_hub')}
-          className={`px-4 py-2 rounded-sm text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-2 border whitespace-nowrap ${
-            activeSubTab === 'action_hub'
-              ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 font-semibold shadow-sm'
-              : isLight ? 'border-slate-200 text-slate-600 hover:bg-slate-200/60' : 'border-white/5 text-stone-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-          <span>AI Action Center</span>
-          <span className="text-[9px] bg-violet-500/20 text-violet-400 px-1.5 py-0.2 rounded font-mono">2 Recs</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('logs')}
-          className={`px-4 py-2 rounded-sm text-xs font-mono uppercase tracking-wider transition-all flex items-center gap-2 border whitespace-nowrap ${
-            activeSubTab === 'logs'
-              ? 'bg-amber-500/15 border-amber-500/40 text-amber-500 font-semibold shadow-sm'
-              : isLight ? 'border-slate-200 text-slate-600 hover:bg-slate-200/60' : 'border-white/5 text-stone-400 hover:text-white hover:bg-white/5'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Sync Audit Stream</span>
-        </button>
-      </div>
-
-      {/* GitHub/LeetCode Style Clipping Activity Matrix & Streak Grid */}
-      {(activeSubTab === 'overview' || activeSubTab === 'activity') && (
-        <div className={`rounded-sm p-6 space-y-5 border transition-all ${
-          isLight ? 'bg-gradient-to-br from-emerald-500/5 via-white to-slate-50 border-emerald-500/30 text-slate-900 shadow-sm' :
-          isDark ? 'bg-gradient-to-br from-emerald-950/30 via-slate-900 to-[#080808] border-emerald-500/25 text-slate-100 shadow-xl' :
-          'bg-gradient-to-br from-emerald-950/40 via-[#080808] to-[#050505] border-emerald-500/30 text-white shadow-2xl'
-        }`}>
-          {/* Header Row */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-black/5 dark:border-white/5">
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-sm bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                  <Flame className="w-5 h-5 text-emerald-400 animate-pulse" />
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-14">
+      <div className="w-full px-8 py-8">
+        <AnimatePresence>
+          {openClip && (
+            <>
+              <motion.div
+                key="reader-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
+                onClick={() => setOpenClip(null)}
+                className="fixed inset-0 z-40 bg-slate-900/30"
+              />
+              <motion.aside
+                key="reader-panel"
+                initial={reduceMotion ? { opacity: 0 } : { x: '100%' }}
+                animate={reduceMotion ? { opacity: 1 } : { x: 0 }}
+                exit={reduceMotion ? { opacity: 0 } : { x: '100%' }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING }}
+                className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col"
+              >
+                <div className="flex items-center gap-2 p-6 pb-0">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full border text-[11px] leading-[14px] font-semibold tracking-wide ${badgeClass(
+                      openClip.badge,
+                      openClip.amber
+                    )}`}
+                  >
+                    {openClip.badge}
+                    {openClip.badgeExtra ? ` • ${openClip.badgeExtra}` : ''}
+                  </span>
+                  <button
+                    onClick={() => setOpenClip(null)}
+                    className="ml-auto h-9 w-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                    title="Close (Esc)"
+                  >
+                    <X className="w-[18px] h-[18px]" />
+                  </button>
                 </div>
-                <div>
-                  <h2 className={`text-xl font-serif flex items-center gap-2 ${titleClass}`}>
-                    Clipping Activity & Contribution Matrix
+                <div className="p-6 pt-3 overflow-y-auto">
+                  <div className="text-[11px] leading-[14px] text-slate-400 font-mono">
+                    {openClip.domain} · {openClip.time}
+                  </div>
+                  <h2
+                    className="text-[22px] leading-[30px] font-semibold text-slate-900 mt-2"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    {openClip.title}
                   </h2>
-                  <p className={`text-xs mt-0.5 ${subtextClass}`}>
-                    GitHub/LeetCode style daily commit map of web items saved & synced.
+                  <p className="text-[14px] leading-[22px] text-slate-600 mt-3">{openClip.excerpt}</p>
+                  <div className="flex items-center flex-wrap gap-1.5 mt-4">
+                    {openClip.tags.map((t) => (
+                      <span
+                        key={t}
+                        className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-medium text-[11px] leading-[14px]"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[11px] leading-[14px] font-medium">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      {openClip.sync}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-6">
+                    <motion.button
+                      onClick={() => copyClipLink(openClip)}
+                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                      className="flex-1 h-10 rounded-xl bg-[#2D6A4F] text-white hover:bg-[#245640] transition-colors font-medium text-[13px] leading-[20px] flex items-center justify-center gap-2"
+                    >
+                      {copied ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                      {copied ? 'Link copied' : 'Copy link'}
+                    </motion.button>
+                    <motion.button
+                      onClick={() => toggleStar(openClip.id)}
+                      whileTap={reduceMotion ? undefined : { scale: 0.9 }}
+                      className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors ${
+                        starred.has(openClip.id)
+                          ? 'text-amber-500 border-amber-200 bg-amber-50'
+                          : 'text-slate-400 border-slate-200 hover:text-amber-500 hover:border-amber-200'
+                      }`}
+                      title="Star clip"
+                    >
+                      <Star
+                        className="w-[18px] h-[18px]"
+                        fill={starred.has(openClip.id) ? 'currentColor' : 'none'}
+                      />
+                    </motion.button>
+                  </div>
+                  <p className="text-[11px] leading-[14px] text-slate-400 mt-4">
+                    Press Esc or click outside to close
                   </p>
                 </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 text-xs font-mono">
-              <span className="px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-400 text-xs font-semibold border border-emerald-500/30 uppercase flex items-center gap-1.5">
-                <Flame className="w-3.5 h-3.5 fill-emerald-400" />
-                <span>14 Day Streak</span>
-              </span>
-              <div className="h-6 w-px bg-stone-300 dark:bg-stone-800"></div>
-              <div className="text-right">
-                <p className="text-emerald-400 font-bold">184 Clips</p>
-                <p className={`text-[10px] ${subtextClass}`}>THIS YEAR</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Matrix + Side Habit Stats 2-Column Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-            
-            {/* Left 3 Columns: GitHub Green Contribution Matrix */}
-            <div className="lg:col-span-3 space-y-3">
-              {/* Months Row Header */}
-              <div className="flex justify-between text-[10px] font-mono text-emerald-500/80 uppercase px-1">
-                <span>Jan</span>
-                <span>Feb</span>
-                <span>Mar</span>
-                <span>Apr</span>
-                <span>May</span>
-                <span>Jun</span>
-                <span>Jul</span>
-                <span>Aug</span>
-              </div>
-
-              {/* Heatmap Grid */}
-              <div className="overflow-x-auto pb-2">
-                <div className="flex gap-1.5 min-w-[580px]">
-                  {heatmapWeeks.map((week, wIndex) => (
-                    <div key={wIndex} className="flex flex-col gap-1.5">
-                      {week.map((day, dIndex) => {
-                        let colorClass = isLight 
-                          ? 'bg-slate-200 border-slate-300' 
-                          : 'bg-stone-900/80 border-stone-800';
-                        
-                        if (day.count === 1) {
-                          colorClass = 'bg-emerald-900/70 border-emerald-700/60 text-emerald-300';
-                        } else if (day.count === 2) {
-                          colorClass = 'bg-emerald-600 border-emerald-500 text-black';
-                        } else if (day.count >= 3) {
-                          colorClass = 'bg-emerald-400 border-emerald-300 text-black shadow-sm shadow-emerald-500/40';
-                        }
-
-                        return (
-                          <div
-                            key={dIndex}
-                            onMouseEnter={() => setHoveredHeatCell({ date: day.date, count: day.count })}
-                            onMouseLeave={() => setHoveredHeatCell(null)}
-                            className={`w-3.5 h-3.5 rounded-sm border transition-all transform hover:scale-125 hover:z-10 cursor-pointer ${colorClass} ${
-                              day.isToday ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-black' : ''
-                            }`}
-                            title={`${day.date}: ${day.count} items saved`}
-                          />
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Legend & Hover Info */}
-              <div className="flex items-center justify-between text-[10px] font-mono pt-2 border-t border-black/5 dark:border-white/5">
-                <span className="text-emerald-400 font-semibold">
-                  {hoveredHeatCell ? `${hoveredHeatCell.date}: ${hoveredHeatCell.count} saved clips` : 'Hover over cells for daily details'}
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+        <div className="flex flex-col w-full gap-6">
+          {/* Greeting + actions */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-3">
+                <h1
+                  className="text-[32px] leading-[40px] tracking-[-0.02em] font-semibold text-slate-900"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  Good morning, Alex
+                </h1>
+                <span className="inline-flex items-center px-2 py-1 rounded-full bg-[#a1f4c8] text-[#005236] text-[11px] leading-[14px] tracking-[0.02em] font-semibold shadow-sm border border-[#86d7ad]/30">
+                  PRO VAULT
                 </span>
-                
-                <div className="flex items-center gap-1.5">
-                  <span className={subtextClass}>Less</span>
-                  <div className="w-3 h-3 rounded-sm bg-stone-900 border border-stone-800"></div>
-                  <div className="w-3 h-3 rounded-sm bg-emerald-900/70 border border-emerald-700"></div>
-                  <div className="w-3 h-3 rounded-sm bg-emerald-600 border border-emerald-500"></div>
-                  <div className="w-3 h-3 rounded-sm bg-emerald-400 border border-emerald-300"></div>
-                  <span className={subtextClass}>More</span>
+              </div>
+              <p className="text-[14px] leading-[20px] text-slate-500 flex items-center gap-3">
+                <span>148 clips synchronized across 6 active streams</span>
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-medium text-[13px] leading-[20px] text-slate-600 bg-slate-100 border border-slate-200">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  All systems nominal
+                </span>
+              </p>
+            </div>
+            <div className="flex items-center gap-3 self-start md:self-auto">
+            <motion.button
+              onClick={onRefreshSync}
+              whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+              className="flex items-center gap-2 px-3 h-10 rounded-xl bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 transition-colors shadow-sm select-none group"
+            >
+                <RefreshCw
+                  className={`text-[18px] w-[18px] h-[18px] text-slate-500 group-hover:rotate-180 transition-transform duration-500 ${isRefreshing ? 'animate-spin' : ''}`}
+                />
+                <span className="font-medium text-[13px] leading-[20px]">Sync Now</span>
+                <span className="text-slate-400 text-[11px] leading-[14px] ml-0.5">
+                  {isRefreshing ? 'Syncing...' : 'Just now'}
+                </span>
+              </motion.button>
+            <motion.button
+              onClick={onOpenManualAddModal}
+              whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+              className="relative flex items-center gap-2 px-4 h-10 rounded-xl bg-[#2D6A4F] text-white hover:bg-[#245640] transition-colors shadow-sm select-none overflow-hidden group"
+            >
+                <div className="absolute inset-x-0 top-0 h-px bg-white/20"></div>
+                <Plus className="text-[18px] w-[18px] h-[18px] relative z-10" />
+                <span className="font-medium text-[13px] leading-[20px] tracking-wide relative z-10">
+                  Save Clip
+                </span>
+                <kbd className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-white/90 text-[11px] leading-[14px] font-mono relative z-10 border border-white/10 shadow-inner">
+                  N
+                </kbd>
+              </motion.button>
+            </div>
+          </div>
+
+          {/* KPI cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+            <motion.div
+              initial={{ opacity: 0, y: ENTER_Y }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={enter}
+              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                    <Bookmark className="w-[18px] h-[18px] text-emerald-600" />
+                  </div>
+                  <span className="font-medium text-[13px] leading-[20px] text-slate-500">Total Clips</span>
                 </div>
+                <span className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] leading-[14px] font-medium border border-emerald-100">
+                  <TrendingUp className="w-3 h-3" />
+                  +12% mo
+                </span>
               </div>
-            </div>
-
-            {/* Right 1 Column: Mini Habit & Goal Tracker Panel */}
-            <div className={`p-4 border rounded-sm space-y-3 font-mono text-xs ${
-              isLight ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-950/20 border-emerald-500/30'
-            }`}>
-              <div className="flex items-center justify-between pb-2 border-b border-emerald-500/20">
-                <span className="text-[10px] text-emerald-400 uppercase tracking-wider font-semibold">DAILY HABIT GOAL</span>
-                <span className="text-emerald-400 font-bold">5/5 SAVED</span>
+              <div className="mt-4 flex items-baseline justify-between">
+                <span
+                  className="text-[36px] leading-[44px] text-slate-900 tracking-tight font-semibold"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  {totalCount}
+                </span>
+                <svg className="w-24 h-8 text-emerald-500" fill="none" viewBox="0 0 80 28">
+                  <path d="M1 22L14 19L28 23L42 14L56 16L70 6L79 9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                  <path d="M1 22L14 19L28 23L42 14L56 16L70 6L79 9V28H1V22Z" fill="currentColor" fillOpacity="0.1"></path>
+                </svg>
               </div>
+              <p className="mt-2 text-[11px] leading-[14px] text-slate-500">42 saved this week</p>
+            </motion.div>
 
-              {/* Progress Bar */}
-              <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
-                <div className="bg-emerald-400 h-full w-full rounded-full animate-pulse"></div>
-              </div>
-
-              <div className="space-y-1.5 text-[11px]">
-                <div className="flex justify-between">
-                  <span className={subtextClass}>Peak Engagement:</span>
-                  <span className="text-emerald-400 font-medium">2:00 - 4:00 PM</span>
+            <motion.div
+              initial={{ opacity: 0, y: ENTER_Y }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.03 }}
+              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                    <CalendarDays className="w-[18px] h-[18px] text-amber-600" />
+                  </div>
+                  <span className="font-medium text-[13px] leading-[20px] text-slate-500">Apply Deadlines</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className={subtextClass}>Consistency Index:</span>
-                  <span className="text-emerald-400 font-medium">94% (Top 5%)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={subtextClass}>Longest Streak:</span>
-                  <span className="text-stone-300 font-medium">28 Days</span>
-                </div>
+                <span className="inline-flex items-center px-2 py-1 rounded-full bg-amber-50 text-amber-700 text-[11px] leading-[14px] font-medium border border-amber-100">
+                  &lt;48h left
+                </span>
               </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* Metrics Row - 4 High Impact Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Metric 1: Saved Vault Items */}
-        <div 
-          onClick={() => setActiveTab('clips')}
-          className={`group cursor-pointer rounded-sm p-5 transition-all relative overflow-hidden border ${cardBgClass}`}
-        >
-          <div className="flex items-center justify-between opacity-80 mb-3">
-            <span className="text-[10px] font-mono tracking-widest uppercase opacity-70">SAVED VAULT</span>
-            <div className={`w-8 h-8 rounded-sm border flex items-center justify-center ${innerBgClass}`}>
-              <Bookmark className="w-4 h-4 text-amber-500" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className={`text-3xl font-serif ${titleClass}`}>{totalClips}</span>
-            <span className="text-[10px] font-mono text-emerald-500 flex items-center gap-1">
-              <TrendingUp className="w-3 h-3" /> +12% this week
-            </span>
-          </div>
-          <p className={`text-[11px] mt-2 font-sans truncate ${subtextClass}`}>
-            {clips.filter(c => c.type === 'job').length} Job Cards • {clips.filter(c => c.type === 'article').length} Articles
-          </p>
-          <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-[10px] font-mono text-amber-500 group-hover:underline">
-            <span>Explore Vault</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
-        </div>
-
-        {/* Metric 2: Active Destination Uplinks */}
-        <div 
-          onClick={() => setActiveTab('connections')}
-          className={`group cursor-pointer rounded-sm p-5 transition-all relative overflow-hidden border ${cardBgClass}`}
-        >
-          <div className="flex items-center justify-between opacity-80 mb-3">
-            <span className="text-[10px] font-mono tracking-widest uppercase opacity-70">UPLINK PIPELINE</span>
-            <div className={`w-8 h-8 rounded-sm border flex items-center justify-center ${innerBgClass}`}>
-              <Radio className="w-4 h-4 text-emerald-400" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className={`text-3xl font-serif ${titleClass}`}>{activeDestinations.length} <span className="opacity-50 text-lg">/ {destinations.length}</span></span>
-            <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-              100% OK
-            </span>
-          </div>
-          <p className={`text-[11px] mt-2 font-sans truncate ${subtextClass}`}>
-            Google Sheets, Notion, Webhooks active
-          </p>
-          <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-[10px] font-mono text-amber-500 group-hover:underline">
-            <span>Manage Connections</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
-        </div>
-
-        {/* Metric 3: Total Synced Payloads */}
-        <div 
-          onClick={() => setActiveTab('connections')}
-          className={`group cursor-pointer rounded-sm p-5 transition-all relative overflow-hidden border ${cardBgClass}`}
-        >
-          <div className="flex items-center justify-between opacity-80 mb-3">
-            <span className="text-[10px] font-mono tracking-widest uppercase opacity-70">ITEMS SYNCED</span>
-            <div className={`w-8 h-8 rounded-sm border flex items-center justify-center ${innerBgClass}`}>
-              <Zap className="w-4 h-4 text-amber-500" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-mono text-amber-500 font-bold">{totalSynced}</span>
-            <span className={`text-[10px] font-mono ${subtextClass}`}>
-              {logs.length} Log Entries
-            </span>
-          </div>
-          <p className={`text-[11px] mt-2 font-sans truncate ${subtextClass}`}>
-            Auto-formatted JSON & tabular rows
-          </p>
-          <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-[10px] font-mono text-amber-500 group-hover:underline">
-            <span>View Sync Audit</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
-        </div>
-
-        {/* Metric 4: Job Application Funnel */}
-        <div 
-          onClick={() => setActiveTab('jobs')}
-          className={`group cursor-pointer rounded-sm p-5 transition-all relative overflow-hidden border ${cardBgClass}`}
-        >
-          <div className="flex items-center justify-between opacity-80 mb-3">
-            <span className="text-[10px] font-mono tracking-widest uppercase opacity-70">JOB PIPELINE</span>
-            <div className={`w-8 h-8 rounded-sm border flex items-center justify-center ${innerBgClass}`}>
-              <Briefcase className="w-4 h-4 text-violet-400" />
-            </div>
-          </div>
-          <div className="flex items-baseline justify-between">
-            <span className={`text-3xl font-serif ${titleClass}`}>{jobs.length}</span>
-            <span className="text-[10px] font-mono text-violet-500">
-              {interviewingJobsCount} Interviewing
-            </span>
-          </div>
-          <p className={`text-[11px] mt-2 font-sans truncate ${subtextClass}`}>
-            {appliedJobsCount} Applied • {offerJobsCount} Offers
-          </p>
-          <div className="mt-3 pt-3 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-[10px] font-mono text-amber-500 group-hover:underline">
-            <span>Open Job Kanban</span>
-            <ChevronRight className="w-3 h-3" />
-          </div>
-        </div>
-      </div>
-
-      {/* Main Grid: 2 Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Left Column (2 Cols): Recent Opportunity Clips & Job Funnel */}
-        <div className="lg:col-span-2 space-y-8">
-          
-          {/* Recent Clips Stream */}
-          <div className={`rounded-sm p-6 space-y-5 border ${cardBgClass}`}>
-            <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b ${
-              isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-            }`}>
-              <div>
-                <h2 className={`text-xl font-serif flex items-center gap-2 ${titleClass}`}>
-                  <Bookmark className="w-5 h-5 text-amber-500" />
-                  Recent Opportunity Clips
-                </h2>
-                <p className={`text-xs mt-0.5 ${subtextClass}`}>
-                  Captured web snippets, job postings, and research notes.
-                </p>
+              <div className="mt-4 flex items-baseline gap-2">
+                <span
+                  className="text-[36px] leading-[44px] text-amber-600 tracking-tight font-semibold"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  {expiringCount}
+                </span>
+                <span className="text-[15px] leading-[22px] text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Expiring
+                </span>
               </div>
+              <p className="mt-2 text-[11px] leading-[14px] text-slate-500 truncate">YC W25 &amp; NSF SBIR Grant</p>
+            </motion.div>
 
-              {/* Quick Search & Filter */}
-              <div className="flex items-center gap-2">
-                <div className="relative w-40">
-                  <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={dashboardSearch}
-                    onChange={e => setDashboardSearch(e.target.value)}
-                    placeholder="Filter clips..."
-                    className={`w-full pl-8 pr-2 py-1 text-xs rounded-sm border focus:border-amber-500 outline-none font-sans ${
-                      isLight ? 'bg-slate-100 text-slate-900 border-slate-300 placeholder:text-slate-400' :
-                      isDark ? 'bg-slate-800 text-slate-100 border-slate-700 placeholder:text-slate-500' :
-                      'bg-[#050505] text-stone-200 border-white/10 placeholder:text-stone-600'
+            <motion.div
+              initial={{ opacity: 0, y: ENTER_Y }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.06 }}
+              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                    <GraduationCap className="w-[18px] h-[18px] text-blue-600" />
+                  </div>
+                  <span className="font-medium text-[13px] leading-[20px] text-slate-500">Learn Backlog</span>
+                </div>
+                <span className="inline-flex items-center px-2 py-1 rounded-full bg-slate-50 text-slate-600 text-[11px] leading-[14px] font-medium border border-slate-200">
+                  Avg 4m read
+                </span>
+              </div>
+              <div className="mt-4 flex items-baseline gap-2">
+                <span
+                  className="text-[36px] leading-[44px] text-slate-900 tracking-tight font-semibold"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  {backlogCount}
+                </span>
+                <span className="text-[15px] leading-[22px] text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Clips
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] leading-[14px] text-blue-600 font-medium truncate">
+                8 flagged high relevance
+              </p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: ENTER_Y }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.09 }}
+              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
+                    <Network className="w-[18px] h-[18px] text-slate-600" />
+                  </div>
+                  <span className="font-medium text-[13px] leading-[20px] text-slate-500">Active Syncs</span>
+                </div>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+              </div>
+              <div className="mt-4 flex items-baseline gap-2">
+                <span
+                  className="text-[36px] leading-[44px] text-slate-900 tracking-tight font-semibold"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  {liveCount}
+                </span>
+                <span className="text-[15px] leading-[22px] text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Live
+                </span>
+              </div>
+              <p className="mt-2 text-[11px] leading-[14px] text-slate-500 truncate">
+                Notion, Sheets, Obsidian, Webhook
+              </p>
+            </motion.div>
+          </div>
+
+          {/* Intent tabs + filter bar */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-2">
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 lg:pb-0 no-scrollbar">
+              {FILTERS.map((f) => {
+                const isActive = activeFilter === f.label;
+                return (
+                  <motion.button
+                    key={f.label}
+                    onClick={() => setActiveFilter(f.label)}
+                    whileTap={reduceMotion ? undefined : { scale: 0.95 }}
+                    className={`relative flex items-center gap-2 px-4 h-9 rounded-full font-medium text-[13px] leading-[20px] transition-colors shrink-0 ${
+                      isActive
+                        ? 'text-white'
+                        : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200'
                     }`}
-                  />
-                </div>
-
-                <select
-                  value={filterType}
-                  onChange={e => setFilterType(e.target.value)}
-                  className={`px-2.5 py-1 text-xs rounded-sm border font-mono ${
-                    isLight ? 'bg-slate-100 text-slate-800 border-slate-300' :
-                    isDark ? 'bg-slate-800 text-slate-200 border-slate-700' :
-                    'bg-[#050505] text-stone-300 border-white/10'
-                  }`}
-                >
-                  <option value="all">ALL TYPES</option>
-                  <option value="job">JOBS</option>
-                  <option value="article">ARTICLES</option>
-                  <option value="deal">DEALS</option>
-                  <option value="general">GENERAL</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Clips List */}
-            <div className="space-y-3">
-              {filteredClips.slice(0, 5).map(clip => (
-                <div
-                  key={clip.id}
-                  className={`p-4 border rounded-sm transition-all group flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                    isLight ? 'bg-slate-50 border-slate-200 hover:border-slate-300' :
-                    isDark ? 'bg-slate-800/60 border-slate-700 hover:border-slate-600' :
-                    'bg-[#050505] border-white/5 hover:border-white/20'
-                  }`}
-                >
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-sm text-[9px] font-mono uppercase tracking-wider bg-amber-500/10 text-amber-500 border border-amber-500/30">
-                        {clip.type}
-                      </span>
-                      <span className={`text-[10px] font-mono ${subtextClass}`}>
-                        {clip.sourceApp}
-                      </span>
-                      <span className="opacity-40 text-xs">•</span>
-                      <span className={`text-[10px] font-mono ${subtextClass}`}>
-                        {new Date(clip.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                      </span>
-                    </div>
-
-                    <h3 className={`font-serif text-base group-hover:text-amber-500 transition-colors truncate ${titleClass}`}>
-                      {clip.title}
-                    </h3>
-
-                    {/* Extracted Metadata Pills */}
-                    {clip.extractedData && (
-                      <div className={`flex items-center gap-3 text-xs font-sans flex-wrap ${subtextClass}`}>
-                        {clip.extractedData.company && (
-                          <span className="flex items-center gap-1 font-medium">
-                            <Building2 className="w-3 h-3 opacity-60" />
-                            {clip.extractedData.company}
-                          </span>
-                        )}
-                        {clip.extractedData.salary && (
-                          <span className="flex items-center gap-1 text-emerald-500 font-mono text-[11px]">
-                            <DollarSign className="w-3 h-3" />
-                            {clip.extractedData.salary}
-                          </span>
-                        )}
-                        {clip.extractedData.location && (
-                          <span className="flex items-center gap-1 text-[11px]">
-                            <MapPin className="w-3 h-3 opacity-60" />
-                            {clip.extractedData.location}
-                          </span>
-                        )}
-                      </div>
+                  >
+                    {isActive &&
+                      (reduceMotion ? (
+                        <span className="absolute inset-0 bg-[#2D6A4F] rounded-full shadow-sm" />
+                      ) : (
+                        <motion.span
+                          layoutId="filter-pill"
+                          className="absolute inset-0 bg-[#2D6A4F] rounded-full shadow-sm"
+                          transition={{ ...SPRING }}
+                        />
+                      ))}
+                    {f.dot && (
+                      <span className={`w-1.5 h-1.5 rounded-full relative z-10 ${f.dot}`}></span>
                     )}
-                  </div>
-
-                  {/* Right Actions */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => handleToggleFavorite(clip.id)}
-                      className={`p-2 rounded-sm border transition-colors ${
-                        clip.isFavorite
-                          ? 'bg-amber-500/20 border-amber-500/50 text-amber-500'
-                          : isLight ? 'border-slate-300 text-slate-500 hover:text-slate-900' : 'border-white/5 text-stone-500 hover:text-white'
+                    <span className="relative z-10">{f.label}</span>
+                    <span
+                      className={`relative z-10 px-2 py-0.5 rounded-full text-[11px] leading-[14px] ${
+                        isActive ? 'bg-white/20 text-white' : 'text-slate-400 bg-slate-100'
                       }`}
-                      title={clip.isFavorite ? 'Unfavorite' : 'Favorite'}
                     >
-                      <Star className={`w-3.5 h-3.5 ${clip.isFavorite ? 'fill-amber-500' : ''}`} />
-                    </button>
-
-                    <a
-                      href={clip.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`p-2 rounded-sm border transition-colors ${
-                        isLight ? 'border-slate-300 text-slate-500 hover:text-slate-900 hover:border-slate-400' :
-                        isDark ? 'border-slate-700 text-slate-400 hover:text-white' :
-                        'border-white/5 text-stone-400 hover:text-white hover:border-white/20'
-                      }`}
-                      title="Open Source Link"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                </div>
-              ))}
-
-              {filteredClips.length === 0 && (
-                <div className={`p-8 text-center border rounded-sm ${innerBgClass}`}>
-                  <Bookmark className="w-6 h-6 text-stone-400 mx-auto mb-2" />
-                  <p className={`text-xs font-serif ${subtextClass}`}>No opportunity clips match your query.</p>
-                </div>
-              )}
+                      {f.count}
+                    </span>
+                  </motion.button>
+                );
+              })}
             </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                onClick={() => setActiveTab('clips')}
-                className="text-xs font-mono uppercase tracking-wider text-amber-500 hover:underline flex items-center gap-1"
-              >
-                View all {clips.length} clips in Vault <ArrowUpRight className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-2 self-end lg:self-auto shrink-0">
+              <div className="relative">
+                <input
+                  value={filterQuery}
+                  onChange={(e) => setFilterQuery(e.target.value)}
+                  className="h-9 pl-9 pr-3 bg-white border border-slate-200 text-slate-700 text-[13px] leading-[20px] rounded-xl placeholder:text-slate-400 focus:outline-none focus:border-[#2D6A4F] focus:ring-2 focus:ring-[#2D6A4F]/10 transition-all shadow-sm w-48"
+                  placeholder="Filter current view..."
+                  type="text"
+                />
+                <ListFilter className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+              <div className="h-5 w-px bg-slate-200 mx-0.5"></div>
+              <button className="h-9 px-3 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1 font-medium text-[13px] leading-[20px] transition-colors shadow-sm">
+                <ArrowUpDown className="w-4 h-4" />
+                <span>Newest First</span>
               </button>
-            </div>
-          </div>
-
-          {/* Job Kanban Funnel Progress Overview */}
-          <div className={`rounded-sm p-6 space-y-5 border ${cardBgClass}`}>
-            <div className={`flex items-center justify-between pb-4 border-b ${
-              isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-            }`}>
-              <div>
-                <h2 className={`text-xl font-serif flex items-center gap-2 ${titleClass}`}>
-                  <Briefcase className="w-5 h-5 text-violet-400" />
-                  Job Application Pipeline Status
-                </h2>
-                <p className={`text-xs mt-0.5 ${subtextClass}`}>
-                  Real-time breakdown of job applications tracked in your Kanban board.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setActiveTab('jobs')}
-                className="px-3 py-1.5 rounded-sm bg-violet-500/10 border border-violet-500/30 text-violet-400 text-xs font-mono uppercase tracking-wider hover:bg-violet-500/20 transition-colors flex items-center gap-1.5"
-              >
-                <span>Open Kanban</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Stages Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className={`p-4 border rounded-sm text-center space-y-1 ${innerBgClass}`}>
-                <span className={`text-[10px] font-mono uppercase tracking-widest ${subtextClass}`}>SAVED</span>
-                <p className={`text-2xl font-serif ${titleClass}`}>{savedJobsCount}</p>
-                <div className="w-full bg-stone-300 dark:bg-stone-800 h-1 rounded-full overflow-hidden mt-2">
-                  <div className="bg-stone-500 h-full" style={{ width: `${jobs.length ? (savedJobsCount/jobs.length)*100 : 0}%` }}></div>
-                </div>
-              </div>
-
-              <div className={`p-4 border rounded-sm text-center space-y-1 ${innerBgClass}`}>
-                <span className="text-[10px] font-mono text-blue-500 uppercase tracking-widest">APPLIED</span>
-                <p className={`text-2xl font-serif ${titleClass}`}>{appliedJobsCount}</p>
-                <div className="w-full bg-stone-300 dark:bg-stone-800 h-1 rounded-full overflow-hidden mt-2">
-                  <div className="bg-blue-500 h-full" style={{ width: `${jobs.length ? (appliedJobsCount/jobs.length)*100 : 0}%` }}></div>
-                </div>
-              </div>
-
-              <div className={`p-4 border rounded-sm text-center space-y-1 ${innerBgClass}`}>
-                <span className="text-[10px] font-mono text-amber-500 uppercase tracking-widest">INTERVIEWING</span>
-                <p className={`text-2xl font-serif ${titleClass}`}>{interviewingJobsCount}</p>
-                <div className="w-full bg-stone-300 dark:bg-stone-800 h-1 rounded-full overflow-hidden mt-2">
-                  <div className="bg-amber-500 h-full" style={{ width: `${jobs.length ? (interviewingJobsCount/jobs.length)*100 : 0}%` }}></div>
-                </div>
-              </div>
-
-              <div className={`p-4 border rounded-sm text-center space-y-1 ${innerBgClass}`}>
-                <span className="text-[10px] font-mono text-emerald-500 uppercase tracking-widest">OFFERS</span>
-                <p className={`text-2xl font-serif ${titleClass}`}>{offerJobsCount}</p>
-                <div className="w-full bg-stone-300 dark:bg-stone-800 h-1 rounded-full overflow-hidden mt-2">
-                  <div className="bg-emerald-500 h-full" style={{ width: `${jobs.length ? (offerJobsCount/jobs.length)*100 : 0}%` }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* New Visual Analytics Card */}
-          <div className={`rounded-sm p-6 space-y-5 border ${cardBgClass}`}>
-            <div className={`flex items-center justify-between pb-4 border-b ${
-              isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-            }`}>
-              <div>
-                <h2 className={`text-xl font-serif flex items-center gap-2 ${titleClass}`}>
-                  <BarChart2 className="w-5 h-5 text-blue-400" />
-                  Category Velocity & Source Usage
-                </h2>
-                <p className={`text-xs mt-0.5 ${subtextClass}`}>
-                  Visual breakdown of saved content categories, device sources, and extraction habits.
-                </p>
-              </div>
-              <span className="text-[10px] font-mono uppercase bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded border border-blue-500/30">
-                REAL-TIME METRICS
-              </span>
-            </div>
-
-            {/* Sub Analytics Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Category Velocity Progress Bars */}
-              <div className={`p-4 border rounded-sm space-y-3 ${innerBgClass}`}>
-                <h3 className={`text-xs font-mono uppercase tracking-wider text-amber-500 font-semibold`}>
-                  Top Saved Categories
-                </h3>
-                
-                <div className="space-y-2.5 text-xs">
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className={titleClass}>Job Applications</span>
-                      <span className="font-mono text-amber-500">42% (77 clips)</span>
-                    </div>
-                    <div className="w-full bg-stone-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-amber-500 h-full" style={{ width: '42%' }}></div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className={titleClass}>Tech Articles & Docs</span>
-                      <span className="font-mono text-blue-400">28% (51 shadow)</span>
-                    </div>
-                    <div className="w-full bg-stone-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-blue-400 h-full" style={{ width: '28%' }}></div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className={titleClass}>Research & Whitepapers</span>
-                      <span className="font-mono text-emerald-400">18% (33 clips)</span>
-                    </div>
-                    <div className="w-full bg-stone-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-emerald-400 h-full" style={{ width: '18%' }}></div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className={titleClass}>Software Deals & Tools</span>
-                      <span className="font-mono text-violet-400">12% (23 clips)</span>
-                    </div>
-                    <div className="w-full bg-stone-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-violet-400 h-full" style={{ width: '12%' }}></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Device Usage & Extraction Speedometer Dial */}
-              <div className={`p-4 border rounded-sm space-y-3 ${innerBgClass}`}>
-                <h3 className={`text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold`}>
-                  Source & Device Usage
-                </h3>
-
-                <div className="space-y-3 text-xs">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className={subtextClass}>Desktop Peeking Extension</span>
-                      <span className="font-mono text-emerald-400 font-bold">78%</span>
-                    </div>
-                    <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
-                      <div className="bg-emerald-500 h-full" style={{ width: '78%' }}></div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className={subtextClass}>Mobile Web App</span>
-                      <span className="font-mono text-blue-400 font-bold">15%</span>
-                    </div>
-                    <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
-                      <div className="bg-blue-400 h-full" style={{ width: '15%' }}></div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className={subtextClass}>Webhook & API Ingestion</span>
-                      <span className="font-mono text-amber-500 font-bold">7%</span>
-                    </div>
-                    <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
-                      <div className="bg-amber-500 h-full" style={{ width: '7%' }}></div>
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded bg-black/20 border border-white/5 text-[10px] font-mono text-stone-400 flex items-center justify-between">
-                    <span>AI Extraction Confidence:</span>
-                    <span className="text-emerald-400 font-bold">98.6% Accurate</span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* Webhook & Payload Ingest Inspector Terminal */}
-          <div className={`rounded-sm p-6 space-y-4 border ${cardBgClass}`}>
-            <div className={`flex items-center justify-between pb-3 border-b ${
-              isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-            }`}>
-              <div className="flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-amber-500" />
-                <div>
-                  <h3 className={`text-lg font-serif ${titleClass}`}>Live Webhook & Payload Inspector</h3>
-                  <p className={`text-xs mt-0.5 ${subtextClass}`}>
-                    Monitors extension events, API webhooks, and raw JSON payload transformations in real-time.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-mono text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1 uppercase">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Endpoint Ready
-                </span>
-              </div>
-            </div>
-
-            {/* Live Terminal Log Viewer */}
-            <div className="bg-[#030303] border border-white/10 rounded-sm p-4 font-mono text-xs space-y-2 text-stone-300">
-              <div className="flex items-center justify-between text-[10px] text-stone-500 border-b border-white/5 pb-2">
-                <span>POST https://api.saveapp.io/v1/ingest/clip</span>
-                <span className="text-amber-400">HEADERS: Bearer aes256_sec_token</span>
-              </div>
-
-              <div className="text-[11px] space-y-1.5 pt-1 text-emerald-400">
-                <div className="flex items-start gap-2">
-                  <span className="text-stone-500">[13:48:02]</span>
-                  <span className="text-blue-400 font-bold">HTTP 200 OK</span>
-                  <span className="text-stone-300">Extracted metadata from "Senior Full Stack Engineer"</span>
-                </div>
-                <div className="flex items-start gap-2 text-stone-400">
-                  <span className="text-stone-500">[13:42:15]</span>
-                  <span className="text-blue-400 font-bold">HTTP 200 OK</span>
-                  <span className="text-stone-300">Synced 1 bookmark to Notion & Google Sheets</span>
-                </div>
-                <div className="flex items-start gap-2 text-stone-400">
-                  <span className="text-stone-500">[13:30:00]</span>
-                  <span className="text-emerald-400 font-bold">EVENT</span>
-                  <span className="text-stone-300">Peeking Floating Widget Edge Trigger Triggered</span>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px]">
-                <span className="text-stone-500">PAYLOAD LATENCY: 142ms</span>
+              <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
                 <button
-                  onClick={() => alert('Test webhook payload sent! Status 200 OK')}
-                  className="text-amber-400 hover:text-amber-300 underline font-mono"
+                  onClick={() => setGridView(false)}
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+                    !gridView ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="List View"
                 >
-                  [ Send Test Payload ]
+                  <List className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setGridView(true)}
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
+                    gridView ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                  title="Grid View"
+                >
+                  <LayoutGrid className="w-4 h-4" />
                 </button>
               </div>
             </div>
           </div>
 
-        </div>
-
-        {/* Right Column (1 Col): Integrations & AI Digest Spotlight */}
-        <div className="space-y-8">
-          
-          {/* AI Action Center Card */}
-          <div className={`border rounded-sm p-6 space-y-4 relative overflow-hidden shadow-xl ${
-            isLight ? 'bg-gradient-to-br from-violet-500/5 via-amber-500/5 to-white border-violet-500/30 text-slate-900' :
-            isDark ? 'bg-slate-900 border-violet-500/30 text-slate-100' :
-            'bg-[#080808] border-violet-500/30 text-white'
-          }`}>
-            <div className="flex items-center justify-between pb-3 border-b border-black/5 dark:border-white/5">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-violet-400" />
-                <h3 className={`text-lg font-serif ${titleClass}`}>AI Action Center</h3>
-              </div>
-              <span className="text-[9px] font-mono uppercase text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Agent
-              </span>
-            </div>
-
-            <p className={`text-xs ${subtextClass}`}>Found 2 high-impact opportunity recommendations for your pipeline:</p>
-
-            {/* Action Item 1 */}
-            <div className={`p-3.5 border rounded-sm space-y-2 text-xs ${innerBgClass}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono bg-violet-500/20 text-violet-400 px-1.5 py-0.5 rounded border border-violet-500/30 uppercase">
-                  Action Item 1
-                </span>
-                <span className="text-[9px] font-mono text-stone-400">High Impact</span>
-              </div>
-              <p className={`font-serif font-medium ${titleClass}`}>
-                Senior Engineer position saved 2 days ago requires follow-up.
-              </p>
-              <p className={`text-[11px] leading-relaxed ${subtextClass}`}>
-                Average response rate increases by 42% when applying within 3 days of bookmarking.
-              </p>
-              <button
-                onClick={() => setActiveTab('jobs')}
-                className="w-full py-1.5 px-3 rounded bg-amber-500 hover:bg-amber-400 text-black font-mono text-[10px] uppercase font-bold tracking-wider transition-colors flex items-center justify-center gap-1.5"
-              >
-                <span>Review & Apply Now</span>
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
-
-            {/* Action Item 2 */}
-            <div className={`p-3.5 border rounded-sm space-y-2 text-xs ${innerBgClass}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30 uppercase">
-                  Optimization 2
-                </span>
-                <span className="text-[9px] font-mono text-stone-400">Auto-Tag</span>
-              </div>
-              <p className={`font-serif font-medium ${titleClass}`}>
-                Auto-extract salary metrics for 3 uncategorized clips.
-              </p>
-              <button
-                onClick={() => setActiveTab('clips')}
-                className="w-full py-1.5 px-3 rounded border border-white/10 hover:border-amber-500/40 font-mono text-[10px] uppercase text-stone-300 hover:text-white transition-colors"
-              >
-                Run AI Auto-Tagging
-              </button>
-            </div>
-          </div>
-
-          {/* Connected Integrations Quick Widget */}
-          <div className={`rounded-sm p-6 space-y-4 border ${cardBgClass}`}>
-            <div className={`flex items-center justify-between pb-3 border-b ${
-              isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-            }`}>
-              <div>
-                <h3 className={`text-lg font-serif flex items-center gap-2 ${titleClass}`}>
-                  <Radio className="w-4 h-4 text-amber-500" />
-                  Active Integrations
-                </h3>
-                <p className={`text-[11px] mt-0.5 ${subtextClass}`}>
-                  Target storage destinations for clips.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setActiveTab('connections')}
-                className="text-[10px] font-mono text-amber-500 uppercase tracking-wider hover:underline"
-              >
-                Manage
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              {destinations.map(dest => {
-                const isPinging = pingingDestId === dest.id;
-
-                return (
-                  <div
-                    key={dest.id}
-                    className={`p-3 border rounded-sm flex items-center justify-between text-xs ${innerBgClass}`}
+          {/* Core layout: feed + This Week middle + right rail */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Feed */}
+            <div className="lg:col-span-6 flex flex-col gap-4">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-baseline gap-2">
+                  <h2
+                    className="text-[22px] leading-[28px] tracking-[-0.015em] font-semibold text-slate-900"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`p-1.5 rounded border shrink-0 ${cardBgClass}`}>
-                        {renderDestIcon(dest.type, 'w-4 h-4')}
-                      </div>
-                      <div className="truncate">
-                        <div className="flex items-center gap-1.5">
-                          <p className={`font-medium truncate ${titleClass}`}>{dest.name}</p>
-                          {dest.isDefault && (
-                            <span className="text-[8px] font-mono uppercase bg-amber-500/20 text-amber-500 px-1 rounded border border-amber-500/30">
-                              DEF
-                            </span>
-                          )}
-                        </div>
-                        <p className={`text-[10px] font-mono truncate ${subtextClass}`}>
-                          {dest.targetResourceName || 'Configured'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {dest.connected ? (
-                        <button
-                          onClick={() => handleTestPingDest(dest.id)}
-                          disabled={isPinging}
-                          className="px-2 py-1 rounded-sm bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-[9px] font-mono uppercase hover:bg-emerald-500/20 flex items-center gap-1"
-                        >
-                          {isPinging ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                          <span>Ping</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setActiveTab('connections')}
-                          className="px-2 py-1 rounded-sm bg-stone-700 text-stone-300 text-[9px] font-mono uppercase hover:text-white"
-                        >
-                          Off
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* AI Digest Spotlight Card */}
-          <div className={`border rounded-sm p-6 space-y-4 relative overflow-hidden shadow-xl ${
-            isLight ? 'bg-gradient-to-br from-amber-500/5 to-white border-amber-500/30 text-slate-900' :
-            isDark ? 'bg-slate-900 border-amber-500/30 text-slate-100' :
-            'bg-[#080808] border-amber-500/30 text-white'
-          }`}>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none"></div>
-
-            <div className={`flex items-center justify-between pb-3 border-b relative z-10 ${
-              isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-            }`}>
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <h3 className={`text-lg font-serif ${titleClass}`}>AI Weekly Synthesis</h3>
-              </div>
-              <span className="text-[9px] font-mono uppercase text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-                PRO AI
-              </span>
-            </div>
-
-            <div className={`space-y-3 relative z-10 text-xs font-sans leading-relaxed ${subtextClass}`}>
-              <p className="italic">
-                "High salary trajectory detected in senior engineering roles saved this week. Average compensation range: <span className="text-emerald-500 font-mono font-semibold">$150,000 - $185,000</span>."
-              </p>
-              <div className={`p-3 border rounded-sm space-y-1 font-mono text-[11px] ${innerBgClass}`}>
-                <p className="text-amber-500 font-medium">• Key Skill Match: TypeScript, React, Cloud SQL</p>
-                <p>• Top Market Tag: #Remote #StaffEngineer</p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setActiveTab('digest')}
-              className="w-full py-2.5 rounded-sm bg-amber-500 hover:bg-amber-400 text-black font-mono text-xs uppercase tracking-wider font-semibold transition-all flex items-center justify-center gap-1.5 relative z-10"
-            >
-              <span>Explore AI Digest Insights</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Live Sync Audit Mini Stream */}
-          <div className={`rounded-sm p-6 space-y-4 border ${cardBgClass}`}>
-            <div className={`flex items-center justify-between pb-3 border-b ${
-              isLight ? 'border-slate-200' : isDark ? 'border-slate-800' : 'border-white/5'
-            }`}>
-              <h3 className={`text-lg font-serif flex items-center gap-2 ${titleClass}`}>
-                <Clock className="w-4 h-4 text-amber-500" />
-                Recent Sync Logs
-              </h3>
-              <span className={`text-[10px] font-mono ${subtextClass}`}>{logs.length} logged</span>
-            </div>
-
-            <div className="space-y-2 font-mono text-[11px]">
-              {logs.slice(0, 4).map(log => (
-                <div key={log.id} className={`p-2.5 border rounded-sm space-y-1 ${innerBgClass}`}>
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-amber-500 font-semibold">{log.destinationName}</span>
-                    <span className={subtextClass}>
-                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <p className={`font-sans text-xs truncate ${titleClass}`}>{log.clipTitle}</p>
+                    Recent Clips
+                  </h2>
+                  <span className="text-[13px] leading-[20px] text-slate-500">
+                    Showing {visibleClips.length} of 148 clips
+                  </span>
                 </div>
-              ))}
+                <button
+                  onClick={() => setShowEmpty((v) => !v)}
+                  className="text-[#2D6A4F] text-[11px] leading-[14px] font-medium hover:underline flex items-center gap-1 h-11 px-2"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Toggle Empty State</span>
+                </button>
+              </div>
+
+              {!showEmpty && (
+                <div className={`${cardClass} overflow-hidden flex flex-col`}>
+                  {visibleClips.map((clip) => (
+                    <article
+                      key={clip.id}
+                      onClick={() => setOpenClip(clip)}
+                      className={`p-6 hover:bg-[#F8FAFC] transition-colors group flex flex-col sm:flex-row gap-4 justify-between items-start border-b border-slate-100 last:border-b-0 cursor-pointer ${
+                        clip.amber ? 'bg-amber-50/30 hover:bg-amber-50/60' : ''
+                      } ${clip.amber ? 'border-amber-100' : ''}`}
+                    >
+                      <div className="flex items-start gap-5 min-w-0 flex-1">
+                        <div
+                          className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 shadow-sm ${
+                            clip.amber
+                              ? 'bg-amber-100 border-amber-200/50'
+                              : 'bg-slate-50 border-slate-100'
+                          }`}
+                        >
+                          <Link2 className={`w-5 h-5 ${clip.amber ? 'text-amber-700' : 'text-slate-500'}`} />
+                        </div>
+                        <div className="flex flex-col gap-2 min-w-0 flex-1">
+                          <div className="flex items-center flex-wrap gap-2 mb-1">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full border text-[11px] leading-[14px] font-semibold tracking-wide ${badgeClass(
+                                clip.badge,
+                                clip.amber
+                              )}`}
+                            >
+                              {clip.badge}
+                              {clip.badgeExtra ? ` • ${clip.badgeExtra}` : ''}
+                            </span>
+                            <span className="text-[11px] leading-[14px] text-slate-500 font-mono tracking-tight bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                              {clip.domain}
+                            </span>
+                            <span className="inline-block w-1 h-1 rounded-full bg-slate-300"></span>
+                            <span className="text-[11px] leading-[14px] text-slate-400">{clip.time}</span>
+                          </div>
+                          <span className="text-[16px] leading-[24px] font-semibold text-slate-900 hover:text-[#2D6A4F] transition-colors line-clamp-1 cursor-pointer">
+                            {clip.title}
+                          </span>
+                          <p className="text-[14px] leading-[22px] text-slate-600 line-clamp-2 pr-4">
+                            {clip.excerpt}
+                          </p>
+                          <div className="flex items-center flex-wrap gap-3 pt-2">
+                            <div className="flex items-center gap-1.5 text-[11px] leading-[14px] text-slate-500">
+                              {clip.tags.map((t) => (
+                                <span key={t} className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
+                                  {t}
+                                </span>
+                              ))}
+                            </div>
+                            <span className="inline-block w-1 h-1 rounded-full bg-slate-300"></span>
+                            <div
+                              className={`flex items-center gap-1 text-[11px] leading-[14px] px-2 py-1 rounded-full ${
+                                clip.amber
+                                  ? 'text-amber-700 bg-amber-100/50'
+                                  : 'text-emerald-600 bg-emerald-50'
+                              }`}
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span className="font-medium">{clip.sync}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className={`flex sm:flex-col items-center gap-0.5 self-end sm:self-start transition-opacity ${
+                          starred.has(clip.id) ? 'opacity-70' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleStar(clip.id);
+                          }}
+                          className={`h-9 w-9 flex items-center justify-center rounded-lg border border-transparent transition-all ${
+                            starred.has(clip.id)
+                              ? 'text-amber-500'
+                              : 'text-slate-400 hover:text-amber-500 hover:bg-white hover:border-slate-200 hover:shadow-sm'
+                          }`}
+                          title="Bookmark"
+                        >
+                          <Star
+                            className="w-[18px] h-[18px]"
+                            fill={starred.has(clip.id) ? 'currentColor' : 'none'}
+                          />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyClipLink(clip);
+                          }}
+                          className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-[#2D6A4F] rounded-lg hover:bg-white border border-transparent hover:border-slate-200 hover:shadow-sm transition-all"
+                          title="Copy URL"
+                        >
+                          <Copy className="w-[18px] h-[18px]" />
+                        </button>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-900 rounded-lg hover:bg-white border border-transparent hover:border-slate-200 hover:shadow-sm transition-all"
+                          title="More options"
+                        >
+                          <MoreHorizontal className="w-[18px] h-[18px]" />
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              {showEmpty && (
+                <div className={`${cardClass} p-8 flex-col items-center justify-center text-center flex`}>
+                  <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-[#2D6A4F] mb-4 shadow-sm">
+                    <Bookmark className="w-8 h-8" />
+                  </div>
+                  <h3
+                    className="text-[22px] leading-[28px] tracking-[-0.015em] font-semibold text-slate-900 mb-2"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    Vault Preview Mode: Clean Slate
+                  </h3>
+                  <p className="text-[14px] leading-[20px] text-slate-600 max-w-md mb-6">
+                    No clips in this view. Test out the starter template or sync your bookmarks directly
+                    from your browser.
+                  </p>
+                  <div className="p-5 bg-slate-50 border border-slate-200 rounded-xl w-full max-w-sm text-left mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-[13px] leading-[20px] text-slate-900">
+                        Starter: YC Application Template
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] leading-[14px] font-medium border border-emerald-200/60">
+                        Ready
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-[14px] text-slate-500 leading-relaxed">
+                      Includes default rubric, evaluation criteria, and pitch deck clip markers.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={onOpenManualAddModal}
+                      className="px-5 h-10 rounded-xl bg-[#2D6A4F] text-white font-medium text-[13px] leading-[20px] hover:bg-[#245640] transition-colors shadow-sm"
+                    >
+                      Import Bookmarks
+                    </button>
+                    <button
+                      onClick={() => setShowEmpty(false)}
+                      className="px-5 h-10 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium text-[13px] leading-[20px] transition-colors shadow-sm"
+                    >
+                      Return to Feed
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* This Week middle column */}
+            <div className="lg:col-span-3 flex flex-col gap-6">
+              <div className="flex items-baseline gap-2 px-1">
+                <h2
+                  className="text-[22px] leading-[28px] tracking-[-0.015em] font-semibold text-slate-900"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  This Week
+                </h2>
+                <span className="text-[13px] leading-[20px] text-slate-500">Digest & goals</span>
+              </div>
+
+              <motion.div
+                initial={{ opacity: 0, y: ENTER_Y }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={enter}
+                className={`${cardClass} p-6`}
+              >
+                <span className="text-[11px] leading-[14px] tracking-[0.02em] font-medium text-slate-500 uppercase">
+                  Week Digest
+                </span>
+                <div
+                  className="text-[30px] leading-[38px] font-semibold text-slate-900 tracking-tight tabular-nums mt-2"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  {digestCount} <span className="text-[14px] font-sans font-medium text-slate-500">saves</span>
+                </div>
+                <p className="text-[12px] leading-[18px] text-slate-500 mt-1 line-clamp-3">
+                  Top story: Anthropic Claude 3.5 Sonnet Speculative Decoding. 2 opportunities
+                  expiring soon.
+                </p>
+                <button className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-[#2D6A4F] hover:underline">
+                  View digest
+                  <ArrowUpRight className="w-3 h-3" />
+                </button>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: ENTER_Y }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.03 }}
+                className={`${cardClass} p-6`}
+              >
+                <span className="text-[11px] leading-[14px] tracking-[0.02em] font-medium text-slate-500 uppercase inline-flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5 text-[#EA580C]" />
+                  Save Streak
+                </span>
+                <div
+                  className="text-[30px] leading-[38px] font-semibold text-slate-900 tracking-tight tabular-nums mt-2"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  {streakCount} <span className="text-[14px] font-sans font-medium text-slate-500">days</span>
+                </div>
+                <div className="flex items-center gap-1 mt-2">
+                  {STREAK_DAYS.map((d, i) => (
+                    <span key={i} className="flex flex-col items-center gap-1">
+                      <span
+                        className={`w-4 h-4 rounded-full ${
+                          STREAK_ON[i] ? 'bg-[#EA580C]' : 'bg-slate-100 border border-slate-200'
+                        }`}
+                      />
+                      <span className="text-[8.5px] font-sans text-slate-400">{d}</span>
+                    </span>
+                  ))}
+                  <span className="ml-auto text-[11px] font-sans text-slate-500">Best 26d</span>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: ENTER_Y }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.06 }}
+                className={`${cardClass} p-6 flex items-center gap-3`}
+              >
+                <GoalRing pct={70} />
+                <div className="min-w-0">
+                  <span className="text-[11px] leading-[14px] tracking-[0.02em] font-medium text-slate-500 uppercase">
+                    Daily Goal
+                  </span>
+                  <div className="text-[14px] font-medium text-slate-900 mt-0.5">7 of 10 today</div>
+                  <div className="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden">
+                    <div className="h-full w-[70%] rounded-full bg-[#2D6A4F]" />
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: ENTER_Y }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.09 }}
+                className={`${cardClass} p-6`}
+              >
+                <span className="text-[11px] leading-[14px] tracking-[0.02em] font-medium text-slate-500 uppercase">
+                  Top Tags
+                </span>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {TOP_TAGS.map((t) => (
+                    <span
+                      key={t.tag}
+                      className="inline-flex items-center gap-1 text-[11px] leading-[14px] font-medium bg-[#DCFCE7] text-[#166534] rounded-full px-2 py-0.5"
+                    >
+                      {t.tag}
+                      <span className="font-bold tabular-nums">{t.count}</span>
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[11px] leading-[14px] text-slate-500 mt-2">148 clips this month</p>
+              </motion.div>
+            </div>
+
+            {/* Right rail */}
+            <div className="lg:col-span-3 flex flex-col gap-6">
+              {/* Intent donut */}
+              <motion.div
+                initial={{ opacity: 0, y: ENTER_Y }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.06 }}
+                className={`${cardClass} p-6 flex flex-col gap-5`}
+              >
+                <div className="flex items-center justify-between">
+                  <h3
+                    className="text-[15px] leading-[22px] font-semibold text-slate-900"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    Intent Distribution
+                  </h3>
+                </div>
+                <div className="flex items-center justify-center py-3">
+                  <div className="relative w-44 h-44 flex items-center justify-center group cursor-default">
+                    <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                      {DONUT.map((s, idx) => (
+                        <circle
+                          key={s.name}
+                          cx="50"
+                          cy="50"
+                          fill="none"
+                          r="40"
+                          stroke={s.color}
+                          strokeDasharray={`${s.dash} 241.4`}
+                          strokeDashoffset={s.offset}
+                          strokeLinecap="round"
+                          strokeWidth={activeDonut === idx ? 15 : 12}
+                          opacity={activeDonut === null || activeDonut === idx ? 1 : 0.3}
+                          onMouseEnter={() => setActiveDonut(idx)}
+                          onMouseLeave={() => setActiveDonut(null)}
+                          className="transition-all duration-150 cursor-pointer"
+                        />
+                      ))}
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span
+                        className="text-[28px] leading-[36px] text-slate-900 tracking-tight font-semibold tabular-nums"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        {activeDonut !== null ? `${DONUT[activeDonut].pct}%` : '148'}
+                      </span>
+                      <span className="text-[11px] leading-[14px] text-slate-500 uppercase tracking-wider font-medium mt-1">
+                        {activeDonut !== null ? DONUT[activeDonut].name : 'Total'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-2">
+                  {DONUT.map((d, idx) => (
+                    <div
+                      key={d.name}
+                      onMouseEnter={() => setActiveDonut(idx)}
+                      onMouseLeave={() => setActiveDonut(null)}
+                      className={`flex items-center justify-between group cursor-pointer transition-opacity duration-150 ${
+                        activeDonut === null || activeDonut === idx ? '' : 'opacity-40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-sm"
+                          style={{ background: d.color }}
+                        ></span>
+                        <span className="text-[13px] text-slate-600 group-hover:text-slate-900 transition-colors">
+                          {d.name}
+                        </span>
+                      </div>
+                      <span className="text-[11px] leading-[14px] text-slate-400 font-mono">
+                        {d.pct}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+
+              {/* Deadlines */}
+              <motion.div
+                initial={{ opacity: 0, y: ENTER_Y }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.09 }}
+                className={`${cardClass} p-6 flex flex-col gap-5`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center">
+                      <AlarmClock className="w-4 h-4 text-[#EA580C]" />
+                    </div>
+                    <h3
+                      className="text-[15px] leading-[22px] font-semibold text-slate-900"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      Urgent Deadlines
+                    </h3>
+                  </div>
+                  <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 text-[11px] leading-[14px] font-semibold border border-orange-200/50">
+                    3 Actions
+                  </span>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {DEADLINES.map((d, idx) => {
+                    const isDone = doneDeadlines.has(d.title);
+                    return (
+                      <React.Fragment key={d.title}>
+                        <div className="flex gap-3 items-start group">
+                          <div
+                            className={`w-2 h-2 rounded-full mt-2 shrink-0 transition-colors ${
+                              isDone
+                                ? 'bg-emerald-500'
+                                : idx === 0
+                                  ? 'bg-[#EA580C]'
+                                  : idx === 1
+                                    ? 'bg-amber-400'
+                                    : 'bg-slate-300'
+                            }`}
+                          ></div>
+                          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span
+                                className={`font-medium text-[14px] truncate transition-colors ${
+                                  isDone ? 'text-slate-400 line-through' : 'text-slate-900'
+                                }`}
+                              >
+                                {d.title}
+                              </span>
+                              {isDone ? (
+                                <span className="px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border bg-emerald-100 text-emerald-800 border-emerald-200/50">
+                                  Done
+                                </span>
+                              ) : (
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border ${d.badgeClass}`}
+                                >
+                                  {deadlineBadge(d)}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[13px] leading-[18px] text-slate-500">{d.sub}</span>
+                            {!isDone && (
+                              <span className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                <button
+                                  onClick={() => toggleDone(d.title)}
+                                  className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60 rounded-full px-2 py-0.5 transition-colors"
+                                >
+                                  Mark done
+                                </button>
+                                <button
+                                  onClick={() => snoozeDeadline(d.title)}
+                                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-full px-2 py-0.5 transition-colors"
+                                >
+                                  Snooze
+                                </button>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {idx < DEADLINES.length - 1 && <div className="h-px bg-slate-100 ml-5"></div>}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </motion.div>
+
+              {/* Sync health */}
+              <motion.div
+                initial={{ opacity: 0, y: ENTER_Y }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.12 }}
+                className={`${cardClass} p-6 flex flex-col gap-5`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                      <Clock className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <h3
+                      className="text-[15px] leading-[22px] font-semibold text-slate-900"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      Sync Stream Health
+                    </h3>
+                  </div>
+                  <span className="text-[12px] text-emerald-600 font-semibold tracking-wide">
+                    99.98% OK
+                  </span>
+                </div>
+                <div className="relative flex flex-col gap-4 overflow-hidden">
+                  {isRefreshing && !reduceMotion && (
+                    <motion.div
+                      className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-emerald-200/50 to-transparent pointer-events-none"
+                      animate={{ x: ['-120%', '420%'] }}
+                      transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }}
+                    />
+                  )}
+                  {SYNC_ROWS.map((r) => (
+                    <div key={r.name} className="flex items-center justify-between group">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="relative flex h-2 w-2 shrink-0">
+                          {r.live ? (
+                            <>
+                              <span
+                                className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                                style={r.delay ? { animationDelay: r.delay } : undefined}
+                              ></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </>
+                          ) : (
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
+                          )}
+                        </span>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-medium text-[14px] text-slate-900 truncate">
+                            {r.name}
+                          </span>
+                          <span className="text-[12px] text-slate-500">{r.detail}</span>
+                        </div>
+                      </div>
+                      <span className="text-[11px] leading-[14px] text-slate-400 font-mono group-hover:text-slate-600 transition-colors">
+                        {r.time}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <button className="mt-2 w-full h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors font-medium text-[13px] flex items-center justify-center gap-2 group">
+                  <span>View Connection Metrics</span>
+                  <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              </motion.div>
             </div>
           </div>
-
         </div>
       </div>
     </div>

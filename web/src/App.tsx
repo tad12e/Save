@@ -10,6 +10,7 @@ import { JobsPage } from './components/pages/JobsPage';
 import { DigestPage } from './components/pages/DigestPage';
 import { BoardsPage } from './components/pages/BoardsPage';
 import { SettingsPage } from './components/pages/SettingsPage';
+import { StitchPreviewPage } from './components/pages/StitchPreviewPage';
 import { ExtensionSimulator } from './components/extension/ExtensionSimulator';
 import { ManualAddClipModal } from './components/modals/ManualAddClipModal';
 import { CreatePageModal } from './components/modals/CreatePageModal';
@@ -46,7 +47,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>(() => (
     window.location.hash.includes('connections') || window.location.search.includes('oauth_success') ? 'connections' : 'dashboard'
   ));
-  const [theme, setTheme] = useState<'terminal' | 'dark' | 'light'>('terminal');
+  const [theme, setTheme] = useState<'terminal' | 'dark' | 'light'>('light');
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtensionOpen, setIsExtensionOpen] = useState(true);
@@ -59,6 +60,7 @@ export default function App() {
     return storedUser ? JSON.parse(storedUser) : { name: 'Tadiwos User', email: 'tadiwos@save.app' };
   });
   const [selectedPageForNewClip, setSelectedPageForNewClip] = useState<string | undefined>(undefined);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Storage State
@@ -279,10 +281,11 @@ export default function App() {
         onOpenCreatePageModal={() => setShowCreatePageModal(true)}
         toggleExtensionWidget={() => setIsExtensionOpen(!isExtensionOpen)}
         isExtensionOpen={isExtensionOpen}
+        collapsed={sidebarCollapsed}
       />
 
       {/* Main Content Area */}
-      <div className={`flex-1 flex flex-col min-w-0 pl-16 ${
+      <div className={`flex-1 flex flex-col min-w-0 ${sidebarCollapsed ? 'shell-offset-collapsed' : 'shell-offset'} ${
         theme === 'light' ? 'bg-slate-100' : theme === 'dark' ? 'bg-slate-950' : 'bg-[#050505]'
       }`}>
         <Header
@@ -298,9 +301,11 @@ export default function App() {
           currentUser={currentUser}
           onOpenAuthModal={() => setShowAuthModal(true)}
           onLogout={handleLogout}
+          onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
+          sidebarCollapsed={sidebarCollapsed}
         />
 
-        <main className={`flex-1 overflow-y-auto w-full ${
+        <main className={`flex-1 overflow-y-auto w-full pt-[64px] ${
           theme === 'light' ? 'bg-slate-100' : theme === 'dark' ? 'bg-slate-950' : 'bg-[#050505]'
         }`}>
           {activeTab === 'dashboard' && (
@@ -324,6 +329,7 @@ export default function App() {
             <AnalyticsPage
               clips={clips}
               destinations={destinations}
+              theme={theme}
             />
           )}
 
@@ -386,6 +392,16 @@ export default function App() {
             <SettingsPage
               destinations={destinations}
               setDestinations={setDestinations}
+            />
+          )}
+
+          {activeTab === 'stitch' && (
+            <StitchPreviewPage
+              clips={clips}
+              destinations={destinations}
+              logs={logs}
+              jobs={jobs}
+              theme={theme}
             />
           )}
         </main>

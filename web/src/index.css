@@ -1,4 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --font-display: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Stitch light (default) + Vercel dark tokens. App.tsx toggles
+   `dark` class on <html>; components keep conditional Tailwind
+   classes, these vars backstop charts and shared surfaces. */
+:root {
+  --save-canvas: #F8FAFC;
+  --save-surface: #FFFFFF;
+  --save-border: #E2E8F0;
+  --save-primary: #2D6A4F;
+  --save-mint-bg: #DCFCE7;
+  --save-mint-text: #166534;
+  --save-text: #0F172A;
+  --save-text-secondary: #475569;
+  --save-chart-grid: #F1F5F9;
+}
+
+/* Fixed-sidebar offset for the app shell (plain CSS so it always applies) */
+@media (min-width: 768px) {
+  .shell-offset {
+    padding-left: 256px;
+  }
+  .shell-offset-collapsed {
+    padding-left: 64px;
+  }
+}
+
+.dark {
+  --save-canvas: #000000;
+  --save-surface: #0A0A0A;
+  --save-border: #333333;
+  --save-primary: #EDEDED;
+  --save-mint-bg: #111111;
+  --save-mint-text: #00CA50;
+  --save-text: #EDEDED;
+  --save-text-secondary: #A1A1A1;
+  --save-chart-grid: #1F1F1F;
+}
 
 @layer utilities {
   /* Hide scrollbar for Chrome, Safari and Opera */

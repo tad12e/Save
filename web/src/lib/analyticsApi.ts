@@ -12,10 +12,19 @@ function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+export interface MoneySummary {
+  saved_dollar_value: number;
+  time_saved_hours: number;
+  action_rate_percent: number;
+  missed_deadlines_count: number;
+  realized_value_index: string;
+}
+
 export interface AnalyticsPayload {
   timeframe: string;
   calculated_at: string;
   engine: string;
+  money: MoneySummary;
   kpis: {
     total_clips: { value: number; delta_pct: number; is_positive: boolean; sparkline: number[] };
     weekly_velocity: { value: number; delta_pct: number; is_positive: boolean; sparkline: number[] };
@@ -226,6 +235,38 @@ function normalizeBackendAnalytics(
         ? rawKpis.destinations_active.sparkline
         : [2, 2, 3, 3, 3, 4, destActiveVal],
     },
+  };
+
+  // 1b. Normalize Money (real backend values, same shape as mobile).
+  // Backend olap_engine._assemble_modules returns these under kpis.* and
+  // opportunity_funnel.missed_deadlines_count / realized_value_index.
+  const rawOpp = raw.opportunity_funnel || {};
+  const totalForMoney = Number(totalClipsVal) || 0;
+  const fallbackHours = Math.round(totalForMoney * 0.25 * 10) / 10;
+  const fallbackDollars = Math.round(fallbackHours * 25);
+  const money: AnalyticsPayload['money'] = {
+    saved_dollar_value:
+      typeof rawKpis.saved_dollar_value === 'number'
+        ? rawKpis.saved_dollar_value
+        : fallbackDollars,
+    time_saved_hours:
+      typeof rawKpis.time_saved_hours === 'number'
+        ? rawKpis.time_saved_hours
+        : fallbackHours,
+    action_rate_percent:
+      typeof rawKpis.action_rate_percent === 'number'
+        ? rawKpis.action_rate_percent
+        : (typeof velocityVal === 'number' && totalForMoney > 0
+            ? Math.round((velocityVal / totalForMoney) * 1000) / 10
+            : 0),
+    missed_deadlines_count:
+      typeof rawOpp.missed_deadlines_count === 'number'
+        ? rawOpp.missed_deadlines_count
+        : 0,
+    realized_value_index:
+      typeof rawOpp.realized_value_index === 'string'
+        ? rawOpp.realized_value_index
+        : `$${fallbackDollars}`,
   };
 
   // 2. Normalize Streak Momentum
@@ -447,6 +488,7 @@ function normalizeBackendAnalytics(
     timeframe: period,
     calculated_at: raw.calculated_at || new Date().toISOString(),
     engine: raw.engine || 'DuckDB-OLAP Engine',
+    money,
     kpis,
     streak_momentum,
     daily_focus,
@@ -566,10 +608,21 @@ function generateClientSynthesizedAnalytics(
 
   const activeDestCount = destinations.filter(d => d.connected).length || 3;
 
+  // Same backend formula: ~15min per clip at $25/hr benchmark.
+  const fallbackTimeSavedHours = Math.round(totalClips * 0.25 * 10) / 10;
+  const fallbackSavedDollars = Math.round(fallbackTimeSavedHours * 25);
+
   return {
     timeframe: period,
     calculated_at: now.toISOString(),
     engine: 'DuckDB-OLAP Engine',
+    money: {
+      saved_dollar_value: fallbackSavedDollars,
+      time_saved_hours: fallbackTimeSavedHours,
+      action_rate_percent: 37.5,
+      missed_deadlines_count: 0,
+      realized_value_index: `$${fallbackSavedDollars}`,
+    },
     kpis: {
       total_clips: {
         value: totalClips,

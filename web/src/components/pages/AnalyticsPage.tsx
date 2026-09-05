@@ -1,5 +1,4 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Sparkles,
@@ -9,7 +8,8 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useAnalyticsStore, TimeframePeriod } from '../../store/analyticsStore';
-import { fetchFullAnalytics } from '../../lib/analyticsApi';
+import { useAnalyticsQuery } from '../../lib/useAnalyticsQuery';
+import { MoneyKpiStrip } from '../analytics/MoneyKpiStrip';
 import { ClipItem, DestinationConfig } from '../../types';
 
 // Image 2 Core Layout Components
@@ -34,18 +34,15 @@ import { LeaderboardCard } from '../analytics/LeaderboardCard';
 interface AnalyticsPageProps {
   clips: ClipItem[];
   destinations: DestinationConfig[];
+  theme?: 'terminal' | 'dark' | 'light';
 }
 
-export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destinations }) => {
+export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destinations, theme = 'light' }) => {
   const { selectedPeriod, setSelectedPeriod } = useAnalyticsStore();
+  const isDark = theme === 'dark' || theme === 'terminal';
 
-  // Query hook with 5-minute cache time
-  const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ['analytics_full', selectedPeriod, clips.length, destinations.length],
-    queryFn: () => fetchFullAnalytics(selectedPeriod, false, clips, destinations),
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
+  // Shared query hook with 5-minute cache time (same key as DashboardPage)
+  const { data, isLoading, isFetching, refetch } = useAnalyticsQuery(clips, destinations);
 
   const periods: Array<{ id: TimeframePeriod; label: string }> = [
     { id: 'this_week', label: 'This Week' },
@@ -55,7 +52,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
   ];
 
   return (
-    <div className="min-h-screen bg-[#FBFBFB] text-slate-900 font-sans pb-20">
+    <div className={`min-h-screen font-sans pb-20 ${isDark ? 'bg-[#000000] text-[#EDEDED]' : 'bg-[#F8FAFC] text-slate-900'}`}>
       {/* Top Main Container */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 space-y-4 sm:space-y-5">
         {/* 1. Header Row (Stats title + Action buttons) */}
@@ -128,6 +125,9 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
             {/* 3. 5-Metric Quick Stats Bar */}
             <QuickStatsBar kpis={data.kpis} />
 
+            {/* 3b. Real backend money (shared query, no extra fetch) */}
+            <MoneyKpiStrip money={data.money} isDark={isDark} />
+
             {/* 4. Main 2-Column Grid (Image 2 Structure) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
               {/* Left Column (7 cols) */}
@@ -144,8 +144,8 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
                 {/* Subjects Bar */}
                 <SubjectsBar tags={data.popular_tags} />
 
-                {/* Opportunities & Career Funnel */}
-                <JobsFunnelChart funnelData={data.opportunity_funnel} />
+                {/* Opportunities & Career Funnel (real backend money) */}
+                <JobsFunnelChart funnelData={data.opportunity_funnel} money={data.money} isDark={isDark} />
               </div>
 
               {/* Right Column (5 cols) */}
