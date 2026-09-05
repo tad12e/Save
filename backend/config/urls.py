@@ -19,9 +19,17 @@ from django.urls import include, path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/auth/', include('apps.users.urls')),
-    path('api/clips/', include('apps.clips.urls')),
-    path('api/destinations/', include('apps.destinations.urls')),
-    path('api/analytics/', include('apps.analytics.urls')),
-    path('api/dashboard/', include('apps.analytics.urls')),
+    # Versioned v1 API paths (primary namespace)
+    path('api/v1/auth/', include('apps.users.urls')),
+    path('api/v1/users/', include(('apps.users.urls', 'users-v1'), namespace='users-v1')),
+    path('api/v1/clips/', include('apps.clips.urls')),
+    path('api/v1/destinations/', include('apps.destinations.urls')),
+    path('api/v1/analytics/', include('apps.analytics.urls')),
+    # Legacy aliases
+    path('api/auth/', include(('apps.users.urls', 'users-legacy'), namespace='users-legacy')),
+    path('api/users/', include(('apps.users.urls', 'users-legacy-2'), namespace='users-legacy-2')),
+    path('api/clips/', include(('apps.clips.urls', 'clips-legacy'), namespace='clips-legacy')),
+    path('api/destinations/', include(('apps.destinations.urls', 'destinations-legacy'), namespace='destinations-legacy')),
+    path('api/analytics/', include(('apps.analytics.urls', 'analytics-legacy'), namespace='analytics-legacy')),
+    path('api/dashboard/', include(('apps.analytics.urls', 'dashboard-legacy'), namespace='dashboard-legacy')),
 ]

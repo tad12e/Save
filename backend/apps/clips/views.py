@@ -185,6 +185,78 @@ class ClipDetailView(APIView):
             return Response({'error': 'Clip not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response(ClipSerializer(clip).data)
 
+    def patch(self, request, clip_id):
+        if not request.user or not request.user.is_authenticated:
+            return Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        clip = Clip.objects.filter(pk=clip_id, user=request.user).first()
+        if not clip:
+            return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        update_fields = []
+        if 'title' in request.data:
+            clip.title = str(request.data['title'])[:512]
+            update_fields.append('title')
+
+        if 'tags' in request.data:
+            raw_tags = request.data['tags']
+            if isinstance(raw_tags, str):
+                clip.tags = [t.strip().lower() for t in raw_tags.split(',') if t.strip()]
+            elif isinstance(raw_tags, list):
+                clip.tags = [str(t).strip().lower() for t in raw_tags if str(t).strip()]
+            update_fields.append('tags')
+
+        if 'intent' in request.data or 'note' in request.data:
+            extra = clip.extra_metadata or {}
+            if 'intent' in request.data:
+                extra['intent'] = request.data['intent']
+            if 'note' in request.data:
+                extra['user_note'] = request.data['note']
+            clip.extra_metadata = extra
+            update_fields.append('extra_metadata')
+
+        if update_fields:
+            clip.save(update_fields=update_fields)
+
+        return Response(ClipSerializer(clip).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, clip_id):
+        if not request.user or not request.user.is_authenticated:
+            return Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+        clip = Clip.objects.filter(pk=clip_id, user=request.user).first()
+        if not clip:
+            return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
+        clip.delete()
+        return Response({'message': 'Clip deleted successfully.'}, status=status.HTTP_200_OK)
+
+
+class ClipContentView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, clip_id):
+        clip = Clip.objects.filter(pk=clip_id).first()
+        if not clip:
+            return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Scoped access check if authenticated
+        if request.user and request.user.is_authenticated and clip.user_id != request.user.id:
+            return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        full_content = clip.raw_content or clip.selected_text or clip.summary or ''
+        return Response({
+            'id': str(clip.id),
+            'title': clip.title or clip.url,
+            'url': clip.url,
+            'content_type': clip.content_type or 'article',
+            'summary': clip.summary or '',
+            'content': full_content,
+            'word_count': len(full_content.split()),
+            'source_platform': clip.source_platform,
+            'author': clip.source_author,
+            'tags': clip.tags,
+            'created_at': clip.created_at.isoformat(),
+        })
+
+
 
 class DashboardView(APIView):
     permission_classes = [AllowAny]
