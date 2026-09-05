@@ -62,3 +62,61 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class ApiKey(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        'CustomUser',
+        on_delete=models.CASCADE,
+        related_name='api_keys',
+    )
+    name = models.CharField(max_length=100, help_text='Friendly label, e.g. "My MCP Key"')
+    key_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    prefix = models.CharField(max_length=8, help_text='First 8 chars of the key for identification')
+    is_active = models.BooleanField(default=True)
+    last_used_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.prefix}...)"
+
+    @classmethod
+    def generate_key(cls, user, name: str) -> tuple['ApiKey', str]:
+        import hashlib
+        import secrets
+
+        # Format: save_live_<32 hex chars> (total 42 chars)
+        raw_token = f"save_live_{secrets.token_hex(16)}"
+        key_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+        prefix = raw_token[:8]
+
+        api_key = cls.objects.create(
+            user=user,
+            name=name,
+            key_hash=key_hash,
+            prefix=prefix,
+        )
+        return api_key, raw_token
+
+    @classmethod
+    def verify_key(cls, raw_token: str):
+        import hashlib
+        from django.utils import timezone
+
+        if not raw_token or not raw_token.startswith('save_'):
+            return None
+
+        key_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+        try:
+            api_key = cls.objects.select_related('user').get(key_hash=key_hash, is_active=True)
+            # Update last_used_at
+            api_key.last_used_at = timezone.now()
+            api_key.save(update_fields=['last_used_at'])
+            return api_key.user
+        except cls.DoesNotExist:
+            return None
+

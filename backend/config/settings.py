@@ -100,6 +100,7 @@ AUTH_USER_MODEL = 'users.CustomUser'
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'apps.users.authentication.ApiKeyAuthentication',
         'apps.users.authentication.JWTCookieAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],

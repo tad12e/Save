@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from . import api_key_views
 from .views import (
     GoogleAuthView,
     LogoutView,
@@ -25,4 +26,6 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('social/google/', GoogleAuthView.as_view(), name='google-auth'),
     path('google/', GoogleAuthView.as_view(), name='google-auth-alias'),
+    path('api-keys/', api_key_views.ApiKeyListCreateView.as_view(), name='api-key-list-create'),
+    path('api-keys/<uuid:key_id>/', api_key_views.ApiKeyDetailView.as_view(), name='api-key-detail'),
 ]
