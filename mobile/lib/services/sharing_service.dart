@@ -27,9 +27,10 @@ class SharingService {
   static Stream<SharedPayload> get onSharedContent => _shareStreamController.stream;
   static Stream<void> get onAudioRecognitionTrigger => _audioRecognitionController.stream;
 
+  static SharedPayload? initialPayload;
   static bool _initialized = false;
 
-  static void initialize() {
+  static Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
 
@@ -49,7 +50,7 @@ class SharingService {
     });
 
     // Check if app was launched via Share Sheet or Quick Settings
-    checkInitialShare();
+    initialPayload = await checkInitialShare();
     checkPendingAudioRecognition();
   }
 

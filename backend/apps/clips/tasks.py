@@ -137,7 +137,10 @@ def process_clip(self, clip_id: str):
         })
         clip.extra_metadata = extra
         clip.status = Clip.STATUS_DONE
-        clip.save(update_fields=[
+
+        # Generate embedding for repository BEFORE the save, so metadata +
+        # embedding persist in a single UPDATE instead of two.
+        repo_update_fields = [
             'title',
             'summary',
             'content_type',
@@ -147,18 +150,18 @@ def process_clip(self, clip_id: str):
             'source_post_url',
             'extra_metadata',
             'status',
-        ])
-
-        # Generate embedding for repository
+        ]
         try:
             from apps.clips.services.embed import generate_embedding
             text_to_embed = f"{clip.title} {clip.summary} {repo_meta.get('language', '')}"
             embedding_vector = generate_embedding(text_to_embed)
             if embedding_vector:
                 clip.embedding = embedding_vector
-                clip.save(update_fields=['embedding'])
+                repo_update_fields.append('embedding')
         except Exception as embed_exc:
             logger.warning('Embedding generation for repo clip %s failed: %s', clip.id, embed_exc)
+
+        clip.save(update_fields=repo_update_fields)
 
         # Export normal repo clip
         destination = clip.destination or get_user_destination(clip.user)
@@ -243,6 +246,20 @@ def process_clip(self, clip_id: str):
             clip.music_embed_url = music_url
             update_fields.append('music_embed_url')
 
+        # Generate embedding for vector semantic search BEFORE the save, so
+        # metadata + embedding persist in a single UPDATE instead of two.
+        # Failure path unchanged: warning logged, save proceeds without it.
+        try:
+            from apps.clips.services.embed import generate_embedding
+            text_to_embed = f"{clip.title} {clip.summary} {clip.selected_text}"
+            embedding_vector = generate_embedding(text_to_embed)
+            if embedding_vector:
+                clip.embedding = embedding_vector
+                update_fields.append('embedding')
+                logger.info('Clip %s embedding generated successfully.', clip.id)
+        except Exception as embed_exc:
+            logger.warning('Embedding generation for clip %s failed: %s', clip.id, embed_exc)
+
         clip.status = Clip.STATUS_DONE
         clip.save(update_fields=update_fields)
         logger.info(
@@ -252,18 +269,6 @@ def process_clip(self, clip_id: str):
             clip.source_author,
             clip.content_type,
         )
-
-        # Generate embedding for vector semantic search
-        try:
-            from apps.clips.services.embed import generate_embedding
-            text_to_embed = f"{clip.title} {clip.summary} {clip.selected_text}"
-            embedding_vector = generate_embedding(text_to_embed)
-            if embedding_vector:
-                clip.embedding = embedding_vector
-                clip.save(update_fields=['embedding'])
-                logger.info('Clip %s embedding generated successfully.', clip.id)
-        except Exception as embed_exc:
-            logger.warning('Embedding generation for clip %s failed: %s', clip.id, embed_exc)
 
         # If clip is a resource hub and has linked sheet/table, unpack sub-items as child clips
         if clip.is_resource_hub and clip.extracted_resource_url and not clip.parent_clip:
@@ -300,9 +305,6 @@ def process_clip(self, clip_id: str):
             clip.save(update_fields=['export_status'])
             logger.info('Clip %s target is Internal Database — saved to DB, no external export needed.', clip.id)
             return
-
-        clip.export_status = 'processing'
-        clip.save(update_fields=['export_status'])
 
         result = export_clip_to_destination(clip, destination)
         if result.success:

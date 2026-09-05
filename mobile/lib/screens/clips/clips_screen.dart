@@ -139,30 +139,41 @@ class _ClipsScreenState extends State<ClipsScreen> {
 
           // Clips List
           Expanded(
-            child: clipsProvider.isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryViolet))
-                : clipsProvider.clips.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+            child: RefreshIndicator(
+              onRefresh: () => clipsProvider.loadClips(),
+              color: AppTheme.primaryViolet,
+              child: clipsProvider.isLoading
+                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryViolet))
+                  : clipsProvider.clips.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
                           children: [
-                            const Icon(LucideIcons.inbox, size: 42, color: AppTheme.inactiveGrey),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No saved clips found',
-                              style: GoogleFonts.outfit(fontSize: 16, color: AppTheme.textMuted),
+                            SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                            Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(LucideIcons.inbox, size: 42, color: AppTheme.inactiveGrey),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'No saved clips found',
+                                    style: GoogleFonts.outfit(fontSize: 16, color: AppTheme.textMuted),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.all(16),
+                          itemCount: clipsProvider.clips.length,
+                          itemBuilder: (ctx, idx) {
+                            final clip = clipsProvider.clips[idx];
+                            return _buildClipItem(context, clip);
+                          },
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: clipsProvider.clips.length,
-                        itemBuilder: (ctx, idx) {
-                          final clip = clipsProvider.clips[idx];
-                          return _buildClipItem(context, clip);
-                        },
-                      ),
+            ),
           ),
         ],
       ),

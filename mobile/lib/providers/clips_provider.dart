@@ -10,9 +10,12 @@ class ClipsProvider extends ChangeNotifier {
 
   List<ClipModel> get clips {
     return _clips.where((clip) {
+      final cType = clip.contentType.toLowerCase().replaceAll(RegExp(r's$'), '');
+      final selCat = _selectedCategory.toLowerCase().replaceAll(RegExp(r's$'), '');
       final matchesCategory = _selectedCategory == 'All' ||
+          cType == selCat ||
           clip.contentType.toLowerCase() == _selectedCategory.toLowerCase() ||
-          (clip.extraMetadata['category_name']?.toString().toLowerCase() == _selectedCategory.toLowerCase());
+          (clip.extraMetadata['category_name']?.toString().toLowerCase().replaceAll(RegExp(r's$'), '') == selCat);
 
       final matchesSearch = _searchQuery.isEmpty ||
           clip.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
@@ -52,10 +55,11 @@ class ClipsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> createClip(String url, {String? selectedText}) async {
+  Future<bool> createClip(String url, {String? selectedText, String? destinationId}) async {
     final success = await ApiService.saveClip(
       url: url,
       selectedText: selectedText,
+      destinationId: destinationId,
     );
     if (success) {
       await loadClips();

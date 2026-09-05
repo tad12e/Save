@@ -31,3 +31,7 @@ celerybeat-schedule*
 # Temporary local scripts
 *.bat
 *.ps1
+
+# Antigravity agents & customizations
+.agents/
+**/.agents/

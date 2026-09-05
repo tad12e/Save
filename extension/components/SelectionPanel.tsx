@@ -10,6 +10,7 @@ import {
   PROVIDER_SVGS,
 } from '../lib/constants';
 import { captureMediaElementAudio } from '../lib/audio_capture';
+import { detectPageAudioHint } from '../lib/sound_detector';
 import {
   Destination,
   getAirtableTables,
@@ -521,51 +522,6 @@ export function SelectionPanel({
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  // Extract sound/music badges natively from YouTube Shorts ("Contains ..."), Reels, or TikTok
-  const detectPageAudioHint = (): string => {
-    try {
-      const href = window.location.href;
-
-      // 1. YouTube Shorts: Look for "Contains [Song Name]" or sound metadata badge
-      if (href.includes('youtube.com/shorts') || href.includes('youtube.com')) {
-        const activeShort = document.querySelector('ytd-reel-video-renderer[is-active]') || document;
-
-        // Search text nodes inside the active short for "Contains ..."
-        const textElements = Array.from(activeShort.querySelectorAll('span, yt-formatted-string, a, div'));
-        for (const el of textElements) {
-          const text = (el.textContent || '').trim();
-          if (/^Contains\s+/i.test(text) && text.length > 9 && text.length < 100) {
-            return text.replace(/^Contains\s+/i, '').trim();
-          }
-        }
-
-        const metadataModel = activeShort.querySelector('.yt-shorts-sound-metadata-view-model, a[href*="/sound/"]');
-        if (metadataModel && metadataModel.textContent?.trim()) {
-          return metadataModel.textContent.trim().replace(/^Contains\s+/i, '');
-        }
-      }
-
-      // 2. Instagram Reels: Look for audio track tag
-      if (href.includes('instagram.com')) {
-        const audioLink = document.querySelector('a[href*="/audio/"], [aria-label*="Audio"]');
-        if (audioLink && audioLink.textContent?.trim()) {
-          return audioLink.textContent.trim();
-        }
-      }
-
-      // 3. TikTok: Look for music ticker
-      if (href.includes('tiktok.com')) {
-        const musicEl = document.querySelector('[data-e2e="video-music"], a[href*="/music/"], [class*="MusicText"]');
-        if (musicEl && musicEl.textContent?.trim()) {
-          return musicEl.textContent.trim();
-        }
-      }
-    } catch (e) {
-      console.warn('Could not extract page audio hint:', e);
-    }
-
-    return document.title || '';
-  };
 
   // ─── Music Recognition ───
   const handleIdentifyMusic = async () => {

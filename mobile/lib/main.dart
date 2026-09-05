@@ -13,9 +13,9 @@ import 'widgets/save_clip_bottom_sheet.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SharingService.initialize();
+  await SharingService.initialize();
 
   runApp(
     MultiProvider(
@@ -23,13 +23,15 @@ void main() {
         ChangeNotifierProvider(create: (_) => AuthProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => ClipsProvider()..loadClips()),
       ],
-      child: const SaveMobileApp(),
+      child: SaveMobileApp(initialSharePayload: SharingService.initialPayload),
     ),
   );
 }
 
 class SaveMobileApp extends StatefulWidget {
-  const SaveMobileApp({super.key});
+  final SharedPayload? initialSharePayload;
+
+  const SaveMobileApp({super.key, this.initialSharePayload});
 
   @override
   State<SaveMobileApp> createState() => _SaveMobileAppState();
@@ -42,18 +44,24 @@ class _SaveMobileAppState extends State<SaveMobileApp> {
   @override
   void initState() {
     super.initState();
-    // 1. Listen for incoming Share Sheet events (Spotify, TikTok, etc.)
+    // 1. Listen for incoming Share Sheet events while app is already open
     _shareSubscription = SharingService.onSharedContent.listen((payload) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final context = navigatorKey.currentContext;
-        if (context != null) {
-          SaveClipBottomSheet.show(
-            context,
-            initialUrl: payload.url,
-            initialNote: payload.note,
-            platform: payload.platform,
-          );
-        }
+        navigatorKey.currentState?.push(
+          PageRouteBuilder(
+            opaque: false,
+            barrierColor: Colors.black.withValues(alpha: 0.60),
+            pageBuilder: (context, _, __) => Scaffold(
+              backgroundColor: Colors.transparent,
+              body: SaveClipBottomSheet(
+                initialUrl: payload.url,
+                initialNote: payload.note,
+                platform: payload.platform,
+                isExternalShare: true,
+              ),
+            ),
+          ),
+        );
       });
     });
 
@@ -77,32 +85,45 @@ class _SaveMobileAppState extends State<SaveMobileApp> {
 
   @override
   Widget build(BuildContext context) {
+    // If launched directly via Android Share Sheet (ACTION_SEND), show ONLY the transparent overlay
+    final isDirectShare = widget.initialSharePayload != null;
+
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Clipper',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: Consumer<AuthProvider>(
-        builder: (context, auth, _) {
-          if (auth.status == AuthStatus.initial && auth.isLoading) {
-            return const Scaffold(
-              backgroundColor: AppTheme.background,
-              body: Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF7C3AED),
-                  strokeWidth: 2.5,
-                ),
+      home: isDirectShare
+          ? Scaffold(
+              backgroundColor: Colors.transparent,
+              body: SaveClipBottomSheet(
+                initialUrl: widget.initialSharePayload!.url,
+                initialNote: widget.initialSharePayload!.note,
+                platform: widget.initialSharePayload!.platform,
+                isExternalShare: true,
               ),
-            );
-          }
+            )
+          : Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                if (auth.status == AuthStatus.initial && auth.isLoading) {
+                  return const Scaffold(
+                    backgroundColor: AppTheme.background,
+                    body: Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF7C3AED),
+                        strokeWidth: 2.5,
+                      ),
+                    ),
+                  );
+                }
 
-          if (auth.isAuthenticated) {
-            return const MainNavigationShell();
-          }
+                if (auth.isAuthenticated) {
+                  return const MainNavigationShell();
+                }
 
-          return const OnboardingScreen();
-        },
-      ),
+                return const OnboardingScreen();
+              },
+            ),
     );
   }
 }

@@ -1387,12 +1387,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     const SizedBox(height: 10),
                     // Ring Legends
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
                         _buildRingLegendDot(const Color(0xFFEA580C), '27/30d Streak'),
-                        const SizedBox(width: 8),
                         _buildRingLegendDot(const Color(0xFF10B981), '100% Goal'),
-                        const SizedBox(width: 8),
                         _buildRingLegendDot(const Color(0xFF06B6D4), '34% Actioned'),
                       ],
                     ),
@@ -1413,19 +1413,24 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(LucideIcons.award, size: 14, color: Color(0xFFC2410C)),
-                    const SizedBox(width: 6),
-                    Text(
-                      'All-Time Record: 263 Days Streak',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF9A3412),
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.award, size: 14, color: Color(0xFFC2410C)),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'All-Time Record: 263 Days Streak',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF9A3412),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 Text(
                   '76 days to beat',

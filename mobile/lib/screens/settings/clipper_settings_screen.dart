@@ -1528,7 +1528,11 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
           final title = cat['title'] as String;
           final desc = cat['desc'] as String;
           final icon = cat['icon'] as IconData;
-          final currentValue = _categoryRules[key] ?? '';
+          final rawValue = _categoryRules[key] ?? '';
+          // If backend returned 'default' or a destination that no longer exists, normalize to ''
+          final currentValue = (rawValue == 'default' || !validDests.any((d) => d.id == rawValue))
+              ? ''
+              : rawValue;
 
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -1869,7 +1873,9 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: _musicPlaylist,
+                value: ['default', 'liked', ..._spotifyPlaylists.map((p) => p.id)].contains(_musicPlaylist)
+                    ? _musicPlaylist
+                    : 'default',
                 isExpanded: true,
                 icon: const Icon(LucideIcons.chevronDown, size: 16, color: AppTheme.textMuted),
                 style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textPrimary),

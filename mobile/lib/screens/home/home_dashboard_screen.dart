@@ -38,38 +38,43 @@ class HomeDashboardScreen extends StatelessWidget {
         onNotificationTap: onNotificationTap,
         onAvatarTap: () => onNavigateTab(4), // Navigate to Profile/Settings
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Section 1: Overview Summary Cards (2x2 Grid)
-            _buildStatsGrid(totalCount, expiringCount),
-            const SizedBox(height: 14),
-
-            // Section 2: Urgency Alert Strip
-            if (expiringCount > 0) ...[
-              _buildUrgencyAlertStrip(context, expiringCount),
+      body: RefreshIndicator(
+        onRefresh: () => Provider.of<ClipsProvider>(context, listen: false).loadClips(),
+        color: const Color(0xFF2D6A4F),
+        backgroundColor: Colors.white,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Section 1: Overview Summary Cards (2x2 Grid)
+              _buildStatsGrid(totalCount, expiringCount),
               const SizedBox(height: 14),
+
+              // Section 2: Urgency Alert Strip
+              if (expiringCount > 0) ...[
+                _buildUrgencyAlertStrip(context, expiringCount),
+                const SizedBox(height: 14),
+              ],
+
+              // Section 3: Weekly AI Digest Card
+              _buildWeeklyDigestCard(context),
+              const SizedBox(height: 20),
+
+              // Section 4: Analytics Insights Teaser Banner
+              _buildAnalyticsTeaserCard(context),
+              const SizedBox(height: 20),
+
+              // Section 5: Collections Vaults Grid
+              _buildCollectionsSection(context),
+              const SizedBox(height: 20),
+
+              // Section 6: Recent Saves List
+              _buildRecentSavesSection(context, allClips),
+              const SizedBox(height: 24),
             ],
-
-            // Section 3: Weekly AI Digest Card
-            _buildWeeklyDigestCard(context),
-            const SizedBox(height: 20),
-
-            // Section 4: Analytics Insights Teaser Banner
-            _buildAnalyticsTeaserCard(context),
-            const SizedBox(height: 20),
-
-            // Section 5: Collections Vaults Grid
-            _buildCollectionsSection(context),
-            const SizedBox(height: 20),
-
-            // Section 6: Recent Saves List
-            _buildRecentSavesSection(context, allClips),
-            const SizedBox(height: 24),
-          ],
+          ),
         ),
       ),
     );

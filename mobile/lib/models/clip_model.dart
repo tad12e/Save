@@ -35,7 +35,7 @@ class ClipModel {
     return ClipModel(
       id: json['id'] ?? '',
       url: json['url'] ?? '',
-      title: json['title'] ?? 'Untitled Clip',
+      title: _cleanTitle(json['title'], json['summary'], json['url']),
       summary: json['summary'] ?? '',
       contentType: json['content_type'] ?? 'webpage',
       tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
@@ -67,5 +67,25 @@ class ClipModel {
       'created_at': createdAt.toIso8601String(),
       'extra_metadata': extraMetadata,
     };
+  }
+
+  static String _cleanTitle(dynamic rawTitle, dynamic rawSummary, dynamic rawUrl) {
+    final titleStr = (rawTitle?.toString() ?? '').trim();
+    final summaryStr = (rawSummary?.toString() ?? '').trim();
+    final urlStr = (rawUrl?.toString() ?? '').toLowerCase();
+
+    final isDomainTitle = titleStr.isEmpty ||
+        titleStr == 'x.com' ||
+        titleStr == 'twitter.com' ||
+        titleStr == 'Untitled Clip' ||
+        titleStr.startsWith('http');
+
+    if (isDomainTitle && summaryStr.isNotEmpty && summaryStr != 'Saved webpage clip.') {
+      return summaryStr.length > 65 ? '${summaryStr.substring(0, 65).trim()}...' : summaryStr;
+    }
+
+    if (titleStr.isNotEmpty) return titleStr;
+    if (urlStr.contains('x.com') || urlStr.contains('twitter.com')) return 'X Post';
+    return 'Untitled Clip';
   }
 }

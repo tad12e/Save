@@ -14,15 +14,18 @@ class ApiService {
 
   static String get defaultBaseUrl {
     if (kIsWeb) return 'http://localhost:8000';
-    try {
-      if (Platform.isAndroid) return 'http://10.0.2.2:8000';
-    } catch (_) {}
+    // 127.0.0.1 routes directly through the ADB reverse tunnel (adb reverse tcp:8000 tcp:8000)
     return 'http://127.0.0.1:8000';
   }
 
   static Future<String> getBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyBaseUrl) ?? defaultBaseUrl;
+    final saved = prefs.getString(_keyBaseUrl);
+    // If the emulator address 10.0.2.2 was previously stored, auto-migrate to 127.0.0.1
+    if (saved != null && saved.isNotEmpty && !saved.contains('10.0.2.2')) {
+      return saved;
+    }
+    return defaultBaseUrl;
   }
 
   static Future<void> setBaseUrl(String url) async {
@@ -355,7 +358,20 @@ class ApiService {
     try {
       final headers = await _getHeaders();
 
-      // 1. Try /api/clips/dashboard/ first (standard backend feed with stats & recent_clips)
+      // 1. Fetch from /api/clips/ (complete feed ordered by newest first)
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/clips/'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        final dynamic data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (data is List && data.isNotEmpty) {
+          return data.map((json) => ClipModel.fromJson(json as Map<String, dynamic>)).toList();
+        }
+      }
+
+      // 2. Fallback to /api/clips/dashboard/ (recent_clips list)
       final dashboardResponse = await http.get(
         Uri.parse('$baseUrl/api/clips/dashboard/'),
         headers: headers,
@@ -366,19 +382,6 @@ class ApiService {
         if (data is Map && data.containsKey('recent_clips')) {
           final List<dynamic> list = data['recent_clips'] ?? [];
           return list.map((json) => ClipModel.fromJson(json as Map<String, dynamic>)).toList();
-        }
-      }
-
-      // 2. Fallback to /api/clips/ in case direct listing is enabled
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/clips/'),
-        headers: headers,
-      );
-
-      if (response.statusCode == 200) {
-        final dynamic data = jsonDecode(utf8.decode(response.bodyBytes));
-        if (data is List) {
-          return data.map((json) => ClipModel.fromJson(json as Map<String, dynamic>)).toList();
         }
       }
       return [];

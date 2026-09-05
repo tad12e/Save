@@ -121,6 +121,9 @@ def extract_clip_metadata(clip) -> dict:
         logger.info('Using regex fallback for clip URL: %s', clip.url)
         title = clean_text(page_title or urlparse(clip.url).netloc or 'Saved clip')
         summary = clean_text(_build_summary(selected_text, page_text, title))
+        if title.lower() in ('x.com', 'twitter.com', 't.co') or not title or title.startswith('http'):
+            if summary and summary != title and summary != 'Saved webpage clip.':
+                title = summary[:65] + ('...' if len(summary) > 65 else '')
         content_type = _detect_content_type(f'{selected_text} {page_text}', clip.url)
         tags = _build_tags(content_type, clip.url, f'{selected_text} {page_text}')
         metadata = {

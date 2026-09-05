@@ -50,6 +50,11 @@ class ClipSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_child_clips_count(self, obj) -> int:
+        # Prefers the annotated count (same query, no extra DB hit) when the
+        # view provides it; otherwise falls back to a per-object COUNT query.
+        annotated = getattr(obj, 'prefetched_child_count', None)
+        if annotated is not None:
+            return int(annotated)
         if hasattr(obj, 'child_clips'):
             return obj.child_clips.count()
         return 0

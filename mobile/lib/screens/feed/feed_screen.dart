@@ -207,7 +207,20 @@ class _FeedScreenState extends State<FeedScreen> {
 
     final filteredClips = _selectedCategory == 'All'
         ? allClips
-        : allClips.where((c) => c.contentType.toLowerCase() == _selectedCategory.toLowerCase()).toList();
+        : allClips.where((c) {
+            final cat = _selectedCategory.toLowerCase();
+            final catSingular = cat.replaceAll(RegExp(r's$'), '');
+            final type = c.contentType.toLowerCase();
+            final typeSingular = type.replaceAll(RegExp(r's$'), '');
+
+            if (catSingular == typeSingular) return true;
+            if (cat == 'articles' && (type == 'article' || type == 'blog')) return true;
+
+            final tagsLower = c.tags.map((t) => t.toLowerCase()).toList();
+            if (cat == 'ai & ml' && (tagsLower.any((t) => t.contains('ai') || t.contains('ml')) || c.summary.toLowerCase().contains('ai'))) return true;
+            if (tagsLower.any((t) => t == cat || t.contains(catSingular))) return true;
+            return false;
+          }).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -216,48 +229,53 @@ class _FeedScreenState extends State<FeedScreen> {
         onSearchTap: () {},
         onFilterTap: () => SaveClipBottomSheet.show(context),
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Section 1: AI Ask Your Vault Bar
-            _buildAiAskVaultBar(context),
-            const SizedBox(height: 16),
+      body: RefreshIndicator(
+        onRefresh: () => Provider.of<ClipsProvider>(context, listen: false).loadClips(),
+        color: const Color(0xFF2D6A4F),
+        backgroundColor: Colors.white,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Section 1: AI Ask Your Vault Bar
+              _buildAiAskVaultBar(context),
+              const SizedBox(height: 16),
 
-            // Section 2: Category Filter Pills
-            _buildCategoryChips(),
-            const SizedBox(height: 16),
+              // Section 2: Category Filter Pills
+              _buildCategoryChips(),
+              const SizedBox(height: 16),
 
-            // Section 3: Feed Stream Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Stream (${filteredClips.length})',
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary,
+              // Section 3: Feed Stream Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Stream (${filteredClips.length})',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
-                ),
-                Text(
-                  'Real-time sync',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF16A34A),
+                  Text(
+                    'Real-time sync',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF16A34A),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
+                ],
+              ),
+              const SizedBox(height: 12),
 
-            // Section 4: Feed Cards List
-            ...filteredClips.map((clip) => _buildFeedCard(context, clip)),
-            const SizedBox(height: 24),
-          ],
+              // Section 4: Feed Cards List
+              ...filteredClips.map((clip) => _buildFeedCard(context, clip)),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );

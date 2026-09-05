@@ -2,6 +2,7 @@ from datetime import timedelta
 import logging
 
 from django.contrib.auth import get_user_model
+from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -30,6 +31,20 @@ User = get_user_model()
 
 class ClipCreateView(APIView):
     permission_classes = [AllowAny]
+
+    def get(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in to view clips.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        clips = (
+            Clip.objects.filter(user=request.user)
+            .select_related('destination')
+            .annotate(prefetched_child_count=Count('child_clips'))
+            .order_by('-created_at')[:100]
+        )
+        return Response(ClipSerializer(clips, many=True).data)
 
     def post(self, request):
         if not request.user or not request.user.is_authenticated:
@@ -184,48 +199,68 @@ class DashboardView(APIView):
         # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
 
         qs = Clip.objects.filter(user=user)
-        dest_qs = Destination.objects.filter(user=user, is_active=True)
 
         now = timezone.now()
         one_week_ago = now - timedelta(days=7)
 
-        total_clips = qs.count()
-        saved_this_week = qs.filter(created_at__gte=one_week_ago).count()
+        # Single conditional-aggregation query: one pass over the user's rows
+        # instead of six separate COUNT queries.
+        stats = qs.aggregate(
+            total_clips=Count('id'),
+            saved_this_week=Count('id', filter=Q(created_at__gte=one_week_ago)),
+            jobs_saved=Count('id', filter=Q(content_type='job')),
+            music_saved=Count('id', filter=Q(content_type='music')),
+            articles_saved=Count('id', filter=Q(content_type__in=['article', 'blog'])),
+        )
 
-        jobs_saved = qs.filter(content_type='job').count()
+        total_clips = stats['total_clips']
+        saved_this_week = stats['saved_this_week']
+        jobs_saved = stats['jobs_saved']
         if jobs_saved == 0:
-            jobs_saved = qs.filter(title__icontains='job').count() or qs.filter(url__icontains='job').count()
+            # Single query with OR instead of two sequential full-table LIKE scans.
+            # Counts each matching row once (union) rather than title-matches only.
+            jobs_saved = qs.filter(Q(title__icontains='job') | Q(url__icontains='job')).count()
+        music_saved = stats['music_saved']
+        articles_saved = stats['articles_saved']
 
-        active_destinations = dest_qs.count()
+        # Single destination fetch; row count stays identical (len of rows),
+        # provider flags computed in Python instead of 1 COUNT + 4 EXISTS queries.
+        dest_provider_list = list(
+            Destination.objects.filter(user=user, is_active=True).values_list('provider', flat=True)
+        )
+        active_destinations = len(dest_provider_list)
+        dest_providers = set(dest_provider_list)
 
-        recent_clips = ClipSerializer(qs.select_related('destination').order_by('-created_at')[:5], many=True).data
+        # One annotated base queryset per list below, so the serializer's
+        # child-clip count comes from the same query (no N+1 COUNT per clip).
+        base_clips_qs = qs.select_related('destination').annotate(
+            prefetched_child_count=Count('child_clips')
+        )
+        recent_clips = ClipSerializer(base_clips_qs.order_by('-created_at')[:50], many=True).data
 
         # Categorized breakdown
         today = timezone.now().date()
         upcoming_deadlines = ClipSerializer(
-            qs.filter(deadline_date__gte=today).order_by('deadline_date')[:5],
+            base_clips_qs.filter(deadline_date__gte=today).order_by('deadline_date')[:5],
             many=True,
         ).data
 
-        music_saved = qs.filter(content_type='music').count()
-        articles_saved = qs.filter(content_type__in=['article', 'blog']).count()
-
-        jobs_clips = ClipSerializer(qs.filter(content_type__in=['job', 'scholarship']).order_by('-created_at')[:4], many=True).data
-        music_clips = ClipSerializer(qs.filter(content_type='music').order_by('-created_at')[:4], many=True).data
-        article_clips = ClipSerializer(qs.filter(content_type__in=['article', 'blog']).order_by('-created_at')[:4], many=True).data
+        jobs_clips = ClipSerializer(base_clips_qs.filter(content_type__in=['job', 'scholarship']).order_by('-created_at')[:4], many=True).data
+        music_clips = ClipSerializer(base_clips_qs.filter(content_type='music').order_by('-created_at')[:4], many=True).data
+        article_clips = ClipSerializer(base_clips_qs.filter(content_type__in=['article', 'blog']).order_by('-created_at')[:4], many=True).data
 
         destinations_status = [
             {
                 'provider': 'google_sheets',
                 'name': 'Google Sheets',
-                'connected': dest_qs.filter(provider='google_sheets').exists(),
-                'status': 'active' if dest_qs.filter(provider='google_sheets').exists() else 'not_configured',
+                'connected': 'google_sheets' in dest_providers,
+                'status': 'active' if 'google_sheets' in dest_providers else 'not_configured',
             },
             {
                 'provider': 'notion',
                 'name': 'Notion Workspace',
-                'connected': dest_qs.filter(provider='notion').exists(),
-                'status': 'active' if dest_qs.filter(provider='notion').exists() else 'not_configured',
+                'connected': 'notion' in dest_providers,
+                'status': 'active' if 'notion' in dest_providers else 'not_configured',
             },
             {
                 'provider': 'airtable',
