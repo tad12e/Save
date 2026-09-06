@@ -1,6 +1,0 @@
-{
-  "name": "Clipper",
-  "description": "Universal smart web clipper & opportunity organizer — connects to Google Sheets, Notion, Airtable, and custom databases.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
