@@ -189,10 +189,15 @@ class ClipCreateView(APIView):
             except Exception:
                 pass
 
-        # Invalidate analytics cache for user so next load re-aggregates with fresh data
+        # Invalidate analytics and clusters cache for user so next load re-aggregates with fresh data
         try:
             from apps.analytics.olap_engine import DuckDBAnalyticsEngine
             DuckDBAnalyticsEngine.invalidate_cache(user.id)
+        except Exception:
+            pass
+
+        try:
+            invalidate_user_clusters_cache(user.id)
         except Exception:
             pass
 
@@ -258,6 +263,10 @@ class ClipDetailView(APIView):
         if not clip:
             return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
         clip.delete()
+        try:
+            invalidate_user_clusters_cache(request.user.id)
+        except Exception:
+            pass
         return Response({'message': 'Clip deleted successfully.'}, status=status.HTTP_200_OK)
 
 
@@ -674,5 +683,83 @@ class AudioRecognizeView(APIView):
             )
 
         return Response(match_result, status=status.HTTP_200_OK)
+
+
+def invalidate_user_clusters_cache(user_id):
+    """
+    Clears cached semantic clusters for the user across common parameter variations.
+    """
+    from django.core.cache import cache
+    for t in (0.72, 0.70, 0.65, 0.75, 0.80):
+        for s in (2, 3, 4):
+            cache.delete(f"clip_clusters_{user_id}_{t}_{s}")
+
+
+class ClipClustersView(APIView):
+    """
+    GET /api/clips/clusters/
+    Discovers and returns semantic clusters for the user's saved clips using
+    vector cosine similarity or token Jaccard overlap, with cluster auto-naming.
+    Cached for 5 minutes (300s TTL) for 0ms subsequent loads.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in to view clusters.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        try:
+            threshold = float(request.query_params.get('threshold', 0.72))
+            threshold = max(0.3, min(0.99, threshold))
+        except (ValueError, TypeError):
+            threshold = 0.72
+
+        try:
+            min_size = int(request.query_params.get('min_size', 2))
+            min_size = max(2, min(20, min_size))
+        except (ValueError, TypeError):
+            min_size = 2
+
+        refresh = request.query_params.get('refresh', '').lower() in ('true', '1', 'yes')
+
+        from django.core.cache import cache
+        from .services.clustering import ClipClusterEngine
+
+        cache_key = f"clip_clusters_{request.user.id}_{threshold}_{min_size}"
+
+        if not refresh:
+            try:
+                cached_clusters = cache.get(cache_key)
+                if cached_clusters is not None:
+                    return Response({
+                        'clusters': cached_clusters,
+                        'total_clusters': len(cached_clusters),
+                        'total_clustered_clips': sum(c.get('count', 0) for c in cached_clusters),
+                        'cached': True,
+                    })
+            except Exception:
+                pass
+
+        clusters = ClipClusterEngine.discover_clusters_for_user(
+            user=request.user,
+            similarity_threshold=threshold,
+            min_cluster_size=min_size,
+        )
+
+        try:
+            cache.set(cache_key, clusters, timeout=300)
+        except Exception:
+            pass
+
+        return Response({
+            'clusters': clusters,
+            'total_clusters': len(clusters),
+            'total_clustered_clips': sum(c.get('count', 0) for c in clusters),
+            'cached': False,
+        })
+
 
 

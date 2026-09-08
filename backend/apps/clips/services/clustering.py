@@ -46,7 +46,7 @@ class ClipClusterEngine:
         clips_qs = (
             Clip.objects.filter(user=user)
             .order_by('-created_at')[:80]
-            .values('id', 'title', 'summary', 'content_type', 'url', 'embedding', 'created_at')
+            .values('id', 'title', 'summary', 'content_type', 'intent', 'url', 'embedding', 'created_at')
         )
         clips_list = list(clips_qs)
         if len(clips_list) < min_cluster_size:
@@ -63,16 +63,20 @@ class ClipClusterEngine:
         results = []
         for idx, cluster_clips in enumerate(clusters):
             cluster_name = cls._generate_cluster_name(cluster_clips)
+            intents = [c.get('intent') for c in cluster_clips if c.get('intent')]
+            intent_summary = dict(Counter(intents))
             results.append({
                 'cluster_id': f"cluster_{idx + 1}",
                 'name': cluster_name,
                 'count': len(cluster_clips),
                 'clip_ids': [str(c['id']) for c in cluster_clips],
+                'intent_summary': intent_summary,
                 'preview_clips': [
                     {
                         'id': str(c['id']),
                         'title': c.get('title') or 'Untitled Clip',
                         'content_type': c.get('content_type') or 'webpage',
+                        'intent': c.get('intent') or 'learn',
                         'url': c.get('url') or '',
                     }
                     for c in cluster_clips[:4]

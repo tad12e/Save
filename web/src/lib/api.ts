@@ -446,3 +446,23 @@ export async function saveCategoryRoutingRules(rules: Record<string, string>) {
   }
 }
 
+export async function fetchClipClustersBackend(params?: { threshold?: number; minSize?: number; refresh?: boolean }) {
+  try {
+    const query = new URLSearchParams();
+    if (params?.threshold) query.set('threshold', String(params.threshold));
+    if (params?.minSize) query.set('min_size', String(params.minSize));
+    if (params?.refresh) query.set('refresh', 'true');
+
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const response = await fetch(`${BASE_URL}/api/clips/clusters/${qs}`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not fetch clip clusters from backend:', error);
+    return null;
+  }
+}
+

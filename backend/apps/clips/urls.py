@@ -5,6 +5,7 @@ from .views import (
     ClipContentView,
     ClipCreateView,
     ClipDetailView,
+    ClipClustersView,
     DashboardView,
     SimilaritySearchView,
     github_selection_save,
@@ -16,6 +17,7 @@ app_name = 'clips'
 urlpatterns = [
     path('', ClipCreateView.as_view(), name='clip-create'),
     path('dashboard/', DashboardView.as_view(), name='clip-dashboard'),
+    path('clusters/', ClipClustersView.as_view(), name='clip-clusters'),
     path('similar/', SimilaritySearchView.as_view(), name='clip-similar'),
     path('recognize-audio/', AudioRecognizeView.as_view(), name='recognize-audio'),
     path('github-selection/', github_selection_save, name='github-selection-save'),
