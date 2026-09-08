@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 from apps.destinations.models import Destination
 
-from .models import Clip
-from .serializers import ClipCreateSerializer, ClipSerializer
+from .models import Clip, CustomPage
+from .serializers import ClipCreateSerializer, ClipSerializer, CustomPageSerializer
 from .services.url import hash_url, normalise_url
 
 User = get_user_model()
@@ -49,9 +49,19 @@ class ClipCreateView(APIView):
                 matching_intents.append(intent_param)
             clips_qs = clips_qs.filter(intent__in=matching_intents)
 
+        # Filter by Custom Page if provided
+        page_param = (request.query_params.get('page_id') or request.query_params.get('page') or '').strip()
+        if page_param and page_param != 'all':
+            try:
+                import uuid as uuid_pkg
+                page_uuid = uuid_pkg.UUID(page_param)
+                clips_qs = clips_qs.filter(custom_page_id=page_uuid)
+            except (ValueError, TypeError):
+                clips_qs = clips_qs.filter(custom_page__slug=page_param)
+
         clips = (
             clips_qs
-            .select_related('destination')
+            .select_related('destination', 'custom_page')
             .annotate(prefetched_child_count=Count('child_clips'))
             .order_by('-created_at')[:100]
         )
@@ -155,6 +165,17 @@ class ClipCreateView(APIView):
             )
         initial_intent = clean_action_intent(initial_intent or 'other')
 
+        # Resolve custom page if provided
+        custom_page = None
+        page_id_val = request.data.get('custom_page_id') or request.data.get('page_id')
+        if page_id_val:
+            try:
+                import uuid as uuid_pkg
+                page_uuid = uuid_pkg.UUID(str(page_id_val))
+                custom_page = CustomPage.objects.filter(user=user, pk=page_uuid).first()
+            except (ValueError, TypeError):
+                custom_page = CustomPage.objects.filter(user=user, slug=str(page_id_val)).first()
+
         clip = Clip.objects.create(
             user=user,
             url=url_val,
@@ -163,6 +184,7 @@ class ClipCreateView(APIView):
             status=Clip.STATUS_PENDING,
             intent=initial_intent,
             destination=destination,
+            custom_page=custom_page,
             tags=user_tags,
             extra_metadata=extra_meta,
         )
@@ -250,6 +272,19 @@ class ClipDetailView(APIView):
             clip.extra_metadata = extra
             if 'extra_metadata' not in update_fields:
                 update_fields.append('extra_metadata')
+
+        if 'custom_page_id' in request.data:
+            cpage_id = request.data['custom_page_id']
+            if not cpage_id:
+                clip.custom_page = None
+            else:
+                try:
+                    import uuid as uuid_pkg
+                    cpage_uuid = uuid_pkg.UUID(str(cpage_id))
+                    clip.custom_page = CustomPage.objects.filter(user=request.user, pk=cpage_uuid).first()
+                except Exception:
+                    pass
+            update_fields.append('custom_page')
 
         if update_fields:
             clip.save(update_fields=update_fields)
@@ -760,6 +795,136 @@ class ClipClustersView(APIView):
             'total_clustered_clips': sum(c.get('count', 0) for c in clusters),
             'cached': False,
         })
+
+
+class CustomPageListCreateView(APIView):
+    """
+    GET /api/clips/pages/
+    Lists all custom workspaces/pages for the user with live clip counts.
+
+    POST /api/clips/pages/
+    Creates a new custom workspace/page with custom theme, AI Goal prompt, and content types.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in to view custom pages.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        pages_qs = (
+            CustomPage.objects.filter(user=request.user)
+            .annotate(annotated_clip_count=Count('clips'))
+            .order_by('created_at')
+        )
+        return Response(CustomPageSerializer(pages_qs, many=True).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        name = str(request.data.get('name', '')).strip()
+        if not name:
+            return Response(
+                {'error': 'Name is required for custom page.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        import re
+        base_slug = request.data.get('slug') or re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+        if not base_slug:
+            base_slug = 'page'
+
+        slug = base_slug
+        counter = 1
+        while CustomPage.objects.filter(user=request.user, slug=slug).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+
+        content_types = request.data.get('content_types') or ['general', 'article', 'research']
+        if isinstance(content_types, str):
+            content_types = [c.strip() for c in content_types.split(',') if c.strip()]
+
+        page = CustomPage.objects.create(
+            user=request.user,
+            name=name,
+            slug=slug,
+            icon_name=request.data.get('icon_name') or request.data.get('icon') or 'Bookmark',
+            color=request.data.get('color') or '#8B5CF6',
+            bg_color=request.data.get('bg_color') or 'rgba(139, 92, 246, 0.15)',
+            description=request.data.get('description', '').strip(),
+            content_types=content_types,
+            ai_goal_prompt=request.data.get('ai_goal_prompt', '').strip(),
+            is_system_default=bool(request.data.get('is_system_default', False)),
+        )
+        return Response(CustomPageSerializer(page).data, status=status.HTTP_201_CREATED)
+
+
+class CustomPageDetailView(APIView):
+    """
+    GET /api/clips/pages/<uuid:pk>/
+    PATCH /api/clips/pages/<uuid:pk>/
+    DELETE /api/clips/pages/<uuid:pk>/
+    """
+    permission_classes = [AllowAny]
+
+    def _get_page(self, request, pk):
+        if not request.user or not request.user.is_authenticated:
+            return None
+        return CustomPage.objects.filter(pk=pk, user=request.user).first()
+
+    def get(self, request, pk):
+        page = self._get_page(request, pk)
+        if not page:
+            return Response({'error': 'Custom page not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(CustomPageSerializer(page).data, status=status.HTTP_200_OK)
+
+    def patch(self, request, pk):
+        page = self._get_page(request, pk)
+        if not page:
+            return Response({'error': 'Custom page not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        update_fields = []
+        if 'name' in request.data:
+            page.name = str(request.data['name']).strip()
+            update_fields.append('name')
+        if 'icon_name' in request.data:
+            page.icon_name = str(request.data['icon_name']).strip()
+            update_fields.append('icon_name')
+        if 'color' in request.data:
+            page.color = str(request.data['color']).strip()
+            update_fields.append('color')
+        if 'bg_color' in request.data:
+            page.bg_color = str(request.data['bg_color']).strip()
+            update_fields.append('bg_color')
+        if 'description' in request.data:
+            page.description = str(request.data['description']).strip()
+            update_fields.append('description')
+        if 'content_types' in request.data:
+            ctypes = request.data['content_types']
+            if isinstance(ctypes, str):
+                ctypes = [c.strip() for c in ctypes.split(',') if c.strip()]
+            page.content_types = ctypes
+            update_fields.append('content_types')
+        if 'ai_goal_prompt' in request.data:
+            page.ai_goal_prompt = str(request.data['ai_goal_prompt']).strip()
+            update_fields.append('ai_goal_prompt')
+
+        if update_fields:
+            page.save(update_fields=update_fields)
+
+        return Response(CustomPageSerializer(page).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        page = self._get_page(request, pk)
+        if not page:
+            return Response({'error': 'Custom page not found.'}, status=status.HTTP_404_NOT_FOUND)
+        page.delete()
+        return Response({'message': 'Custom page deleted successfully.'}, status=status.HTTP_200_OK)
+
 
 
 

@@ -2,8 +2,37 @@ from rest_framework import serializers
 
 from apps.destinations.models import Destination
 
-from .models import Clip
+from .models import Clip, CustomPage
 from .services.url import hash_url, normalise_url
+
+
+class CustomPageSerializer(serializers.ModelSerializer):
+    clip_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomPage
+        fields = (
+            'id',
+            'name',
+            'slug',
+            'icon_name',
+            'color',
+            'bg_color',
+            'description',
+            'content_types',
+            'ai_goal_prompt',
+            'is_system_default',
+            'clip_count',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+    def get_clip_count(self, obj) -> int:
+        annotated = getattr(obj, 'annotated_clip_count', None)
+        if annotated is not None:
+            return int(annotated)
+        return obj.clips.count()
 
 
 class ClipSerializer(serializers.ModelSerializer):
@@ -14,6 +43,8 @@ class ClipSerializer(serializers.ModelSerializer):
     parent_clip_id = serializers.UUIDField(source='parent_clip.id', read_only=True, allow_null=True)
     parent_clip_title = serializers.CharField(source='parent_clip.title', read_only=True, allow_null=True)
     child_clips_count = serializers.SerializerMethodField()
+    custom_page_id = serializers.UUIDField(source='custom_page.id', read_only=True, allow_null=True)
+    custom_page_name = serializers.CharField(source='custom_page.name', read_only=True, allow_null=True)
 
     class Meta:
         model = Clip
@@ -29,6 +60,8 @@ class ClipSerializer(serializers.ModelSerializer):
             'parent_clip_id',
             'parent_clip_title',
             'child_clips_count',
+            'custom_page_id',
+            'custom_page_name',
             'is_resource_hub',
             'extracted_resource_url',
             'title',

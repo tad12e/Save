@@ -4,6 +4,37 @@ from django.conf import settings
 from django.db import models
 
 
+class CustomPage(models.Model):
+    """
+    Custom user workspaces / categories with personalized identity, theme,
+    content-type mappings, and specialized AI Goal extraction prompts.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='custom_pages',
+    )
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255)
+    icon_name = models.CharField(max_length=64, default='Bookmark')
+    color = models.CharField(max_length=32, default='#8B5CF6')
+    bg_color = models.CharField(max_length=64, default='rgba(139, 92, 246, 0.15)')
+    description = models.TextField(blank=True, default='')
+    content_types = models.JSONField(default=list, blank=True)
+    ai_goal_prompt = models.TextField(blank=True, default='')
+    is_system_default = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ('user', 'slug')
+
+    def __str__(self):
+        return f"{self.name} ({self.user})"
+
+
 class Clip(models.Model):
     STATUS_PENDING = 'pending'
     STATUS_PROCESSING = 'processing'
@@ -49,6 +80,13 @@ class Clip(models.Model):
         blank=True,
         on_delete=models.CASCADE,
         related_name='child_clips',
+    )
+    custom_page = models.ForeignKey(
+        CustomPage,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='clips',
     )
     url = models.URLField(max_length=2048)
     url_hash = models.CharField(max_length=64, db_index=True)

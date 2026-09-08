@@ -185,7 +185,7 @@ Ensure all text fields are clean single-line strings without any raw newlines or
 """
 
 
-def ai_summarize(url: str, page_text: str, selected_text: str = '') -> dict | None:
+def ai_summarize(url: str, page_text: str, selected_text: str = '', ai_goal_prompt: str = '') -> dict | None:
     """
     Call Google Gemini using Schema-Enforced Structured Outputs (responseSchema).
     Validates output via Pydantic model and returns a clean dictionary.
@@ -203,6 +203,8 @@ def ai_summarize(url: str, page_text: str, selected_text: str = '') -> dict | No
 
     # Build the user message with the page content
     user_content = f'URL: {url}\n\n'
+    if ai_goal_prompt:
+        user_content += f'--- USER WORKSPACE GOAL ---\n{ai_goal_prompt}\n(Tailor your summary and key takeaways specifically toward this goal)\n\n'
     if clean_selected:
         user_content += f'--- SELECTED TEXT ---\n{clean_selected[:2000]}\n\n'
     user_content += f'--- PAGE CONTENT ---\n{clean_page[:6000]}'

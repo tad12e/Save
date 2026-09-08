@@ -1,3 +1,5 @@
+import type { CustomPageConfig } from '../types';
+
 export interface AuthorizeParams {
   provider: string;
   name: string;
@@ -70,7 +72,13 @@ export async function authorizeDestinationBackend(params: AuthorizeParams): Prom
   }
 }
 
-export async function createClipBackend(clipData: { url: string; selected_text?: string; destination_id?: string; is_privacy_mode?: boolean }) {
+export async function createClipBackend(clipData: {
+  url: string;
+  selected_text?: string;
+  destination_id?: string;
+  is_privacy_mode?: boolean;
+  custom_page_id?: string;
+}) {
   try {
     const response = await fetch(`${BASE_URL}/api/clips/`, {
       method: 'POST',
@@ -84,6 +92,7 @@ export async function createClipBackend(clipData: { url: string; selected_text?:
         selected_text: clipData.selected_text || '',
         destination_id: clipData.destination_id,
         privacy_mode: clipData.is_privacy_mode || false,
+        custom_page_id: clipData.custom_page_id,
       }),
     });
     if (!response.ok) return null;
@@ -93,6 +102,7 @@ export async function createClipBackend(clipData: { url: string; selected_text?:
     return null;
   }
 }
+
 
 export async function fetchDestinationsBackend() {
   try {
@@ -465,4 +475,95 @@ export async function fetchClipClustersBackend(params?: { threshold?: number; mi
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Custom Pages & Workspaces Backend APIs
+// ---------------------------------------------------------------------------
+
+export async function fetchCustomPagesBackend() {
+  try {
+    const response = await fetch(`${BASE_URL}/api/clips/pages/`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not fetch custom pages from backend:', error);
+    return null;
+  }
+}
+
+export async function createCustomPageBackend(pageData: {
+  name: string;
+  slug?: string;
+  icon_name?: string;
+  color?: string;
+  bg_color?: string;
+  description?: string;
+  content_types?: string[];
+  ai_goal_prompt?: string;
+}) {
+  try {
+    const response = await fetch(`${BASE_URL}/api/clips/pages/`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(pageData),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not create custom page on backend:', error);
+    return null;
+  }
+}
+
+export async function updateCustomPageBackend(pageId: string, data: any) {
+  try {
+    const response = await fetch(`${BASE_URL}/api/clips/pages/${pageId}/`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not update custom page on backend:', error);
+    return null;
+  }
+}
+
+export async function deleteCustomPageBackend(pageId: string) {
+  try {
+    const response = await fetch(`${BASE_URL}/api/clips/pages/${pageId}/`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('Could not delete custom page on backend:', error);
+    return false;
+  }
+}
+
+export function convertBackendPageToConfig(p: any): CustomPageConfig {
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    iconName: p.icon_name || 'FolderGit2',
+    color: p.color || '#8B5CF6',
+    bgColor: p.bg_color || 'rgba(139, 92, 246, 0.15)',
+    description: p.description || '',
+    contentTypes: p.content_types || ['general', 'article'],
+    aiGoalPrompt: p.ai_goal_prompt || '',
+    createdAt: p.created_at || new Date().toISOString(),
+    isSystemDefault: Boolean(p.is_system_default),
+  };
+}
+
+
 

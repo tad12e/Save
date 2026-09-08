@@ -101,12 +101,15 @@ def extract_clip_metadata(clip) -> dict:
     # --- Try AI-powered summarization first ---
     metadata = None
     try:
-        from apps.clips.services.summarize import ai_summarize
+        goal_prompt = ''
+        if getattr(clip, 'custom_page', None) and clip.custom_page.ai_goal_prompt:
+            goal_prompt = clip.custom_page.ai_goal_prompt
 
         ai_result = ai_summarize(
             url=clip.url,
             page_text=page_text,
             selected_text=selected_text,
+            ai_goal_prompt=goal_prompt,
         )
         if ai_result:
             logger.info('Using AI summary for clip URL: %s', clip.url)

@@ -82,7 +82,7 @@ def process_clip(self, clip_id: str):
     from apps.destinations.services import export_clip_to_destination, get_user_destination
 
     try:
-        clip = Clip.objects.select_related('destination', 'user', 'parent_clip').get(pk=clip_id)
+        clip = Clip.objects.select_related('destination', 'user', 'parent_clip', 'custom_page').get(pk=clip_id)
     except Clip.DoesNotExist:
         logger.error('Clip %s not found — skipping.', clip_id)
         return

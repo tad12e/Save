@@ -39,7 +39,14 @@ import {
   getStoredCustomPages,
   saveStoredCustomPages 
 } from './lib/storage';
-import { createClipBackend, fetchDestinationsBackend } from './lib/api';
+import { 
+  createClipBackend, 
+  fetchDestinationsBackend,
+  fetchCustomPagesBackend,
+  createCustomPageBackend,
+  deleteCustomPageBackend,
+  convertBackendPageToConfig
+} from './lib/api';
 import { INITIAL_DIGEST } from './data/mockData';
 import { CheckCircle, Zap, X } from 'lucide-react';
 
@@ -71,9 +78,9 @@ export default function App() {
   const [boards, setBoards] = useState<SharedBoard[]>(() => getStoredBoards());
   const [customPages, setCustomPages] = useState<CustomPageConfig[]>(() => getStoredCustomPages());
 
-  // Fetch real destinations & default status from Django backend on mount
+  // Fetch real destinations & custom pages from Django backend on mount
   useEffect(() => {
-    async function loadBackendDestinations() {
+    async function loadBackendData() {
       const backendDestList = await fetchDestinationsBackend();
       if (backendDestList && Array.isArray(backendDestList) && backendDestList.length > 0) {
         // Find which destination the backend says is default (if any)
@@ -102,9 +109,24 @@ export default function App() {
           });
         });
       }
+
+      // Load custom pages/workspaces from backend
+      const backendPages = await fetchCustomPagesBackend();
+      if (backendPages && Array.isArray(backendPages) && backendPages.length > 0) {
+        const converted = backendPages.map(convertBackendPageToConfig);
+        setCustomPages(prev => {
+          const map = new Map<string, CustomPageConfig>();
+          // Start with existing/local pages
+          prev.forEach(p => map.set(p.slug || p.id, p));
+          // Overlay or add backend persisted pages
+          converted.forEach(p => map.set(p.slug || p.id, p));
+          return Array.from(map.values());
+        });
+      }
     }
-    loadBackendDestinations();
+    loadBackendData();
   }, []);
+
 
   // LocalStorage Persistence Effect
   useEffect(() => { saveStoredDestinations(destinations); }, [destinations]);
@@ -148,11 +170,13 @@ export default function App() {
     destinationType: string;
     destinationId?: string;
     targetResourceName?: string;
+    pageId?: string;
   }): Promise<boolean> => {
     return createClipBackend({
       url: clipData.url,
       selected_text: clipData.selectedText,
       destination_id: clipData.destinationId,
+      custom_page_id: clipData.pageId,
     }).then(backendClip => {
       if (!backendClip) {
         triggerToast('Save failed. The clip was not sent to the backend.');
@@ -179,6 +203,7 @@ export default function App() {
         sourceApp: 'Chrome Extension',
         syncedTo: [targetDest.type],
         storageMode: 'cloud',
+        pageId: backendClip.custom_page_id || clipData.pageId,
       };
 
       setClips(prev => [newClip, ...prev]);
@@ -202,24 +227,58 @@ export default function App() {
   };
 
   // Handle Manual Add Clip
-  const handleAddClipManual = (newClip: ClipItem) => {
+  const handleAddClipManual = async (newClip: ClipItem) => {
     setClips(prev => [newClip, ...prev]);
     triggerToast(`Saved clip added to Vault!`);
+
+    // When saving in cloud mode, persist to backend with associated custom_page_id
+    if (newClip.storageMode !== 'local') {
+      const backendClip = await createClipBackend({
+        url: newClip.url,
+        selected_text: newClip.selectedText,
+        custom_page_id: newClip.pageId,
+        is_privacy_mode: false,
+      });
+      if (backendClip && backendClip.id) {
+        setClips(prev => prev.map(c => c.id === newClip.id ? { ...c, id: backendClip.id } : c));
+      }
+    }
   };
 
   // Handle Create Custom Page
-  const handleCreateCustomPage = (newPage: CustomPageConfig) => {
+  const handleCreateCustomPage = async (newPage: CustomPageConfig) => {
     setCustomPages(prev => [...prev, newPage]);
     setActiveTab(newPage.id);
     triggerToast(`Created Custom Page: ${newPage.name}`);
+
+    // Persist to backend and update local ID with persisted UUID
+    const backendRes = await createCustomPageBackend({
+      name: newPage.name,
+      slug: newPage.slug,
+      icon_name: newPage.iconName,
+      color: newPage.color,
+      bg_color: newPage.bgColor,
+      description: newPage.description,
+      content_types: newPage.contentTypes,
+      ai_goal_prompt: newPage.aiGoalPrompt,
+      is_system_default: newPage.isSystemDefault,
+    });
+
+    if (backendRes && backendRes.id) {
+      setCustomPages(prev => prev.map(p => p.id === newPage.id ? { ...p, id: backendRes.id } : p));
+      setActiveTab(backendRes.id);
+    }
   };
 
   // Handle Delete Custom Page
-  const handleDeleteCustomPage = (pageId: string) => {
+  const handleDeleteCustomPage = async (pageId: string) => {
     setCustomPages(prev => prev.filter(p => p.id !== pageId));
     setActiveTab('dashboard');
     triggerToast(`Deleted custom page.`);
+
+    await deleteCustomPageBackend(pageId);
   };
+
 
   // Handle Direct Export to Destination
   const handleSendToDestination = (clip: ClipItem, destType: string) => {
