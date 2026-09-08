@@ -289,8 +289,29 @@ class DestinationTestPingView(APIView):
 
         target = dest.config.get('target_resource_name', dest.name)
         provider = dest.provider
-        latency_ms = 145
 
+        from apps.destinations.services import ADAPTERS
+        adapter = ADAPTERS.get(provider)
+        if adapter and hasattr(adapter, 'ping'):
+            ping_res = adapter.ping(dest)
+            if not ping_res.get('success'):
+                return Response({
+                    'status': 'error',
+                    'provider': provider,
+                    'target': target,
+                    'latency_ms': ping_res.get('latency_ms', 0),
+                    'message': ping_res.get('error', f'Connection to {dest.name} failed.'),
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({
+                'status': 'success',
+                'provider': provider,
+                'target': target,
+                'latency_ms': ping_res.get('latency_ms', 120),
+                'message': ping_res.get('message', f'Connection verified OK to {dest.name} ({target})'),
+            })
+
+        latency_ms = 145
         return Response({
             'status': 'success',
             'provider': provider,

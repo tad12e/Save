@@ -1,12 +1,18 @@
 from apps.destinations.adapters.google_sheets import GoogleSheetsAdapter
 from apps.destinations.adapters.notion import NotionAdapter
 from apps.destinations.adapters.spotify import SpotifyAdapter
+from apps.destinations.adapters.airtable import AirtableAdapter
+from apps.destinations.adapters.webhook import WebhookAdapter
+from apps.destinations.adapters.youtube_music import YouTubeMusicAdapter
 from apps.destinations.models import Destination
 
 ADAPTERS = {
     Destination.PROVIDER_NOTION: NotionAdapter(),
     Destination.PROVIDER_GOOGLE_SHEETS: GoogleSheetsAdapter(),
     Destination.PROVIDER_SPOTIFY: SpotifyAdapter(),
+    Destination.PROVIDER_AIRTABLE: AirtableAdapter(),
+    Destination.PROVIDER_WEBHOOK: WebhookAdapter(),
+    Destination.PROVIDER_YOUTUBE_MUSIC: YouTubeMusicAdapter(),
 }
 
 
