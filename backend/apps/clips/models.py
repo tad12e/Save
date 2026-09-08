@@ -77,6 +77,13 @@ class Clip(models.Model):
     title = models.CharField(max_length=512, blank=True, null=True)
     summary = models.TextField(blank=True, null=True)
     content_type = models.CharField(max_length=100, blank=True, null=True)
+    intent = models.CharField(
+        max_length=50,
+        default='other',
+        db_index=True,
+        blank=True,
+        help_text="Dynamic 1-word action verb (e.g. 'apply', 'cook', 'listen', 'deploy', 'learn')",
+    )
     tags = models.JSONField(default=list, blank=True)
     embedding = models.JSONField(default=list, blank=True, null=True)
 

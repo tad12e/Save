@@ -156,5 +156,17 @@ def extract_clip_metadata(clip) -> dict:
         metadata['is_resource_hub'] = False
         metadata['extracted_resource_url'] = ''
 
+    # Resolve action intent if not already extracted by AI
+    from apps.clips.services.intent_detector import IntentDetector, clean_action_intent
+    if not metadata.get('intent'):
+        detected = IntentDetector.detect_heuristic_intent(
+            url=clip.url,
+            text=f'{selected_text} {page_text}',
+            content_type=metadata.get('content_type', ''),
+        )
+        metadata['intent'] = clean_action_intent(detected or 'other')
+    else:
+        metadata['intent'] = clean_action_intent(metadata['intent'])
+
     return metadata
 

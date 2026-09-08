@@ -62,6 +62,16 @@ class ClipAnalysisResponse(BaseModel):
     summary: str = Field(description="1-2 clean single-line sentences without newlines (max 350 chars)")
     category_name: str = Field(description="Capitalized category tab name (e.g. 'Jobs', 'Articles', 'Scholarships', 'Recipes', 'Real Estate', 'Podcasts', 'Tools')")
     content_type: str = Field(description="lowercase slug e.g. job, scholarship, article, event, tool, real_estate, recipe, podcast, webpage")
+    action_intent: str = Field(
+        default="other",
+        description=(
+            "Exactly ONE lowercase action verb representing what the user can DO with this clip. "
+            "Examples: 'apply' (jobs/grants), 'learn' (guides/papers), 'buy' (products/deals), "
+            "'attend' (events/webinars), 'cook' (recipes), 'listen' (music/podcast), "
+            "'deploy' (devops/code), 'hire' (recruiting), 'invest' (stocks/pitch), 'read' (essays). "
+            "MUST be a single word, maximum 20 characters, lowercase, no spaces."
+        )
+    )
     tags: list[str] = Field(default_factory=list, description="3-6 lowercase specific tags")
     deadline_date: str = Field(default="", description="YYYY-MM-DD or empty string")
     music_embed_url: str = Field(default="", description="Direct audio URL if applicable")
@@ -89,6 +99,16 @@ _GEMINI_RESPONSE_SCHEMA = {
         "content_type": {
             "type": "STRING",
             "description": "lowercase slug e.g. job, scholarship, article, event, tool, real_estate, recipe, podcast, webpage"
+        },
+        "action_intent": {
+            "type": "STRING",
+            "description": (
+                "Exactly ONE lowercase action verb representing what the user can DO with this clip. "
+                "Examples: 'apply' (jobs/grants), 'learn' (guides/papers), 'buy' (products/deals), "
+                "'attend' (events/webinars), 'cook' (recipes), 'listen' (music/podcast), "
+                "'deploy' (devops/code), 'hire' (recruiting), 'invest' (stocks/pitch), 'read' (essays). "
+                "MUST be a single word, maximum 20 characters, lowercase, no spaces."
+            )
         },
         "tags": {
             "type": "ARRAY",
@@ -265,5 +285,9 @@ def ai_summarize(url: str, page_text: str, selected_text: str = '') -> dict | No
         result['deadline_date'] = match.group(0) if match else None
     else:
         result['deadline_date'] = None
+
+    # Sanitize and assign dynamic action intent (1 lowercase verb)
+    from apps.clips.services.intent_detector import clean_action_intent
+    result['intent'] = clean_action_intent(result.get('action_intent') or 'other')
 
     return result
