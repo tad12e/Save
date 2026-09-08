@@ -190,3 +190,20 @@ class SaveApiClient:
             payload["note"] = note
 
         return self._request("PATCH", f"/clips/{clip_id}/", json=payload)
+
+    def get_clusters(
+        self,
+        threshold: float = 0.72,
+        min_size: int = 2,
+        refresh: bool = False,
+    ) -> dict:
+        """
+        Discover auto-clustered semantic groups for the user's saved clips.
+        """
+        params: dict[str, Any] = {
+            "threshold": threshold,
+            "min_size": min_size,
+        }
+        if refresh:
+            params["refresh"] = "true"
+        return self._request("GET", "/clips/clusters/", params=params)

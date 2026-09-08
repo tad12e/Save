@@ -223,6 +223,32 @@ def update_clip(
         return f"Error updating clip {clip_id}: {str(e)}"
 
 
+@mcp.tool()
+def get_clusters(
+    threshold: float = 0.72,
+    min_size: int = 2,
+    refresh: bool = False,
+) -> str:
+    """
+    Retrieve auto-discovered semantic clusters/collections of clips from the user's vault.
+    Uses vector cosine similarity with AI-generated category titles.
+
+    Args:
+        threshold: Vector similarity threshold (default 0.72). Higher values make tighter clusters.
+        min_size: Minimum number of clips per cluster (default 2).
+        refresh: Force recomputing clusters instead of reading from 5-minute cache (default False).
+    """
+    try:
+        client = _get_client()
+        result = client.get_clusters(threshold=threshold, min_size=min_size, refresh=refresh)
+        clusters = result.get("clusters", [])
+        if not clusters:
+            return "No natural semantic clusters found among current clips (need more related items)."
+        return json.dumps(result, indent=2)
+    except SaveApiError as e:
+        return f"Error discovering clusters: {str(e)}"
+
+
 def main():
     """Main entrypoint running FastMCP over stdio transport."""
     mcp.run(transport="stdio")
