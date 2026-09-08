@@ -38,8 +38,19 @@ class ClipCreateView(APIView):
                 {'error': 'Authentication required. Please sign in to view clips.'},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+        clips_qs = Clip.objects.filter(user=request.user)
+
+        # Action Intent query filter (supports canonical categories or specific action verbs)
+        intent_param = request.query_params.get('intent', '').strip().lower()
+        if intent_param and intent_param != 'all':
+            from apps.clips.services.intent_detector import CANONICAL_MAPPING
+            matching_intents = [k for k, v in CANONICAL_MAPPING.items() if v == intent_param]
+            if intent_param not in matching_intents:
+                matching_intents.append(intent_param)
+            clips_qs = clips_qs.filter(intent__in=matching_intents)
+
         clips = (
-            Clip.objects.filter(user=request.user)
+            clips_qs
             .select_related('destination')
             .annotate(prefetched_child_count=Count('child_clips'))
             .order_by('-created_at')[:100]
@@ -133,12 +144,24 @@ class ClipCreateView(APIView):
         if request.data.get('table_name') or request.data.get('tableName'):
             extra_meta['target_table_name'] = request.data.get('table_name') or request.data.get('tableName')
 
+        # Fast 0ms intent detection for immediate badge display before Celery task completes
+        from apps.clips.services.intent_detector import IntentDetector, clean_action_intent
+        initial_intent = request.data.get('intent')
+        if not initial_intent:
+            initial_intent = IntentDetector.detect_heuristic_intent(
+                url=url_val,
+                text=sel_text,
+                content_type=request.data.get('content_type', ''),
+            )
+        initial_intent = clean_action_intent(initial_intent or 'other')
+
         clip = Clip.objects.create(
             user=user,
             url=url_val,
             url_hash=u_hash,
             selected_text=request.data.get('selected_text', ''),
             status=Clip.STATUS_PENDING,
+            intent=initial_intent,
             destination=destination,
             tags=user_tags,
             extra_metadata=extra_meta,
@@ -205,14 +228,23 @@ class ClipDetailView(APIView):
                 clip.tags = [str(t).strip().lower() for t in raw_tags if str(t).strip()]
             update_fields.append('tags')
 
-        if 'intent' in request.data or 'note' in request.data:
+        if 'intent' in request.data:
+            from apps.clips.services.intent_detector import clean_action_intent
+            clean_int = clean_action_intent(request.data['intent'])
+            clip.intent = clean_int
+            update_fields.append('intent')
             extra = clip.extra_metadata or {}
-            if 'intent' in request.data:
-                extra['intent'] = request.data['intent']
-            if 'note' in request.data:
-                extra['user_note'] = request.data['note']
+            extra['intent'] = clean_int
             clip.extra_metadata = extra
-            update_fields.append('extra_metadata')
+            if 'extra_metadata' not in update_fields:
+                update_fields.append('extra_metadata')
+
+        if 'note' in request.data:
+            extra = clip.extra_metadata or {}
+            extra['user_note'] = request.data['note']
+            clip.extra_metadata = extra
+            if 'extra_metadata' not in update_fields:
+                update_fields.append('extra_metadata')
 
         if update_fields:
             clip.save(update_fields=update_fields)
@@ -350,6 +382,34 @@ class DashboardView(APIView):
         if recent_clips and recent_clips[0].get('summary'):
             highlight_summary = f"Latest Opportunity ({recent_clips[0].get('title') or 'Clip'}): {recent_clips[0].get('summary')}"
 
+        # Live dynamic aggregation of Action Intents for donut chart & filter counts
+        from apps.clips.services.intent_detector import CANONICAL_INTENTS, normalize_canonical_intent
+        raw_intent_counts = qs.values('intent').annotate(count=Count('id'))
+        intent_map = {ci: 0 for ci in CANONICAL_INTENTS}
+        for item in raw_intent_counts:
+            c_intent = normalize_canonical_intent(item.get('intent') or 'other')
+            intent_map[c_intent] = intent_map.get(c_intent, 0) + item['count']
+
+        INTENT_COLORS = {
+            'learn': '#2D6A4F',
+            'track': '#40916C',
+            'apply': '#D97706',
+            'buy': '#0284C7',
+            'attend': '#7C3AED',
+            'hire': '#EC4899',
+            'other': '#64748B',
+        }
+        intent_slices = [
+            {
+                'name': ci.capitalize(),
+                'intent': ci,
+                'count': intent_map.get(ci, 0),
+                'pct': round((intent_map.get(ci, 0) / max(total_clips, 1)) * 100),
+                'color': INTENT_COLORS.get(ci, '#64748B'),
+            }
+            for ci in CANONICAL_INTENTS
+        ]
+
         return Response({
             'user': {
                 'name': (getattr(user, 'name', '') or user.email) if user else '',
@@ -370,6 +430,8 @@ class DashboardView(APIView):
                 'music': music_clips,
                 'articles': article_clips,
             },
+            'intent_distribution': intent_slices,
+            'intent_counts': intent_map,
             'ai_digest_highlight': {
                 'title': highlight_title,
                 'summary': highlight_summary,
@@ -387,18 +449,7 @@ class SimilaritySearchView(APIView):
     """
     permission_classes = [AllowAny]
 
-    def post(self, request):
-        if not request.user or not request.user.is_authenticated:
-            return Response(
-                {'error': 'Authentication required. Please sign in.'},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-        user = request.user
-
-        text = request.data.get('text', '').strip()
-        threshold = float(request.data.get('threshold', 0.65))
-        limit = int(request.data.get('limit', 5))
-
+    def _perform_similarity_search(self, user, text, threshold, limit):
         if not text:
             return Response({'relevant': False, 'reason': 'empty_text'})
 
@@ -430,13 +481,37 @@ class SimilaritySearchView(APIView):
                     'url': best_match['url'],
                 },
                 'top_matches': matches,
+                'results': matches,
             })
 
         return Response({
             'relevant': False,
             'similarity_score': 0.0,
             'reason': 'below_threshold',
+            'results': [],
         })
+
+    def get(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        text = (request.query_params.get('q') or request.query_params.get('text') or '').strip()
+        threshold = float(request.query_params.get('threshold', 0.65))
+        limit = int(request.query_params.get('limit', 5))
+        return self._perform_similarity_search(request.user, text, threshold, limit)
+
+    def post(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        text = str(request.data.get('text', '')).strip()
+        threshold = float(request.data.get('threshold', 0.65))
+        limit = int(request.data.get('limit', 5))
+        return self._perform_similarity_search(request.user, text, threshold, limit)
 
 
 

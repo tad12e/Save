@@ -114,6 +114,7 @@ def process_clip(self, clip_id: str):
         clip.title = repo_meta.get('full_name') or repo_meta.get('name') or clip.url
         clip.summary = repo_meta.get('description') or f"GitHub repository by {repo_info['owner']}"
         clip.content_type = 'repo'
+        clip.intent = 'build'
         clip.source_platform = Clip.PLATFORM_GITHUB
         clip.source_author = repo_info['owner']
         clip.source_post_url = clip.url
@@ -144,6 +145,7 @@ def process_clip(self, clip_id: str):
             'title',
             'summary',
             'content_type',
+            'intent',
             'tags',
             'source_platform',
             'source_author',
@@ -174,6 +176,8 @@ def process_clip(self, clip_id: str):
         clip.title = metadata.get('title') or clip.url
         clip.summary = metadata.get('summary') or ''
         clip.content_type = metadata.get('content_type') or 'webpage'
+        if not clip.intent or clip.intent == 'other':
+            clip.intent = metadata.get('intent') or 'other'
         # Preserve and merge user tags with AI extracted tags
         user_tags = clip.tags or []
         ai_tags = metadata.get('tags') or []
@@ -206,6 +210,7 @@ def process_clip(self, clip_id: str):
             'summary',
             'raw_content',
             'content_type',
+            'intent',
             'tags',
             'status',
             'source_platform',
@@ -428,6 +433,7 @@ def process_github_list_repo(self, clip_id: str):
                     'summary': r['description'],
                     'selected_text': r['description'],
                     'content_type': r['content_type'],  # Usually 'tool'
+                    'intent': 'build',
                     'tags': [
                         r['content_type'],
                         r['pricing'],
