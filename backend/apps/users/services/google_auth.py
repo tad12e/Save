@@ -1,9 +1,12 @@
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 GOOGLE_TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo'
 GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo'
@@ -44,6 +47,7 @@ def verify_google_access_token(access_token):
         'google_id': token_data.get('sub', ''),
         'name': '',
         'picture': '',
+        'profile_error': '',
     }
 
     try:
@@ -55,7 +59,8 @@ def verify_google_access_token(access_token):
             userinfo = json.loads(response.read().decode())
         profile['name'] = userinfo.get('name', '')
         profile['picture'] = userinfo.get('picture', '')
-    except (urllib.error.HTTPError, urllib.error.URLError):
-        pass
+    except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+        logger.warning("Google userinfo fetch failed for %s: %s", email, exc)
+        profile['profile_error'] = 'fetch_failed'
 
     return profile

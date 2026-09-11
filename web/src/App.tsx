@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { DashboardPage } from './components/pages/DashboardPage';
+import { ActivityFeedPage } from './components/pages/ActivityFeedPage';
 import { AnalyticsPage } from './components/pages/AnalyticsPage';
 import { ConnectionsPage } from './components/pages/ConnectionsPage';
 import { ClipsPage } from './components/pages/ClipsPage';
@@ -22,7 +23,7 @@ import {
   ClipItem, 
   JobCard, 
   ConnectionSyncLog, 
-  SharedBoard,
+  SharedBoard, 
   CustomPageConfig 
 } from './types';
 import { 
@@ -51,10 +52,41 @@ import { INITIAL_DIGEST } from './data/mockData';
 import { CheckCircle, Zap, X } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>(() => (
-    window.location.hash.includes('connections') || window.location.search.includes('oauth_success') ? 'connections' : 'dashboard'
-  ));
-  const [theme, setTheme] = useState<'terminal' | 'dark' | 'light'>('light');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const hash = window.location.hash.replace('#', '').toLowerCase();
+    if (hash === 'feed') return 'feed';
+    if (hash === 'clips') return 'clips';
+    if (hash === 'settings') return 'settings';
+    if (hash === 'analytics') return 'analytics';
+    if (hash === 'connections' || window.location.search.includes('oauth_success')) return 'connections';
+    if (hash === 'jobs') return 'jobs';
+    if (hash === 'digest') return 'digest';
+    if (hash === 'boards') return 'boards';
+    return 'dashboard';
+  });
+
+  // Keep window.location.hash in sync with activeTab
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '').toLowerCase();
+      if (hash && hash !== activeTab) {
+        setActiveTab(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const currentHash = window.location.hash.replace('#', '').toLowerCase();
+    if (activeTab && activeTab !== currentHash) {
+      window.history.replaceState(null, '', `#${activeTab}`);
+    }
+  }, [activeTab]);
+  const [theme, setTheme] = useState<'terminal' | 'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('clipper_theme');
+    return (saved === 'light' || saved === 'dark' || saved === 'terminal') ? saved : 'dark';
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtensionOpen, setIsExtensionOpen] = useState(true);
@@ -138,6 +170,7 @@ export default function App() {
 
   // Sync html class for theme mode
   useEffect(() => {
+    localStorage.setItem('clipper_theme', theme);
     if (theme === 'dark' || theme === 'terminal') {
       document.documentElement.classList.add('dark');
     } else {
@@ -328,7 +361,7 @@ export default function App() {
 
   return (
     <div className={`min-h-screen flex font-sans antialiased selection:bg-amber-500 selection:text-black transition-colors duration-200 ${
-      theme === 'light' ? 'bg-slate-100 text-slate-900' : theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-[#050505] text-[#e0e0e0]'
+      theme === 'light' ? 'bg-slate-100 text-slate-900' : 'bg-[#000000] text-[#EDEDED]'
     }`}>
       {/* Navigation Sidebar */}
       <Sidebar
@@ -341,11 +374,12 @@ export default function App() {
         toggleExtensionWidget={() => setIsExtensionOpen(!isExtensionOpen)}
         isExtensionOpen={isExtensionOpen}
         collapsed={sidebarCollapsed}
+        theme={theme}
       />
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col min-w-0 ${sidebarCollapsed ? 'shell-offset-collapsed' : 'shell-offset'} ${
-        theme === 'light' ? 'bg-slate-100' : theme === 'dark' ? 'bg-slate-950' : 'bg-[#050505]'
+        theme === 'light' ? 'bg-slate-100' : 'bg-[#000000]'
       }`}>
         <Header
           searchQuery={searchQuery}
@@ -365,7 +399,7 @@ export default function App() {
         />
 
         <main className={`flex-1 overflow-y-auto w-full pt-[64px] ${
-          theme === 'light' ? 'bg-slate-100' : theme === 'dark' ? 'bg-slate-950' : 'bg-[#050505]'
+          theme === 'light' ? 'bg-slate-100' : 'bg-[#000000]'
         }`}>
           {activeTab === 'dashboard' && (
             <DashboardPage
@@ -384,11 +418,30 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'feed' && (
+            <ActivityFeedPage
+              clips={clips}
+              setClips={setClips}
+              destinations={destinations}
+              setDestinations={setDestinations}
+              jobs={jobs}
+              logs={logs}
+              setActiveTab={setActiveTab}
+              onOpenManualAddModal={() => handleOpenAddClipForPage()}
+              onRefreshSync={handleRefreshSync}
+              isRefreshing={isRefreshing}
+              theme={theme}
+              searchQuery={searchQuery}
+              onSendToDestination={handleSendToDestination}
+            />
+          )}
+
           {activeTab === 'analytics' && (
             <AnalyticsPage
               clips={clips}
               destinations={destinations}
               theme={theme}
+              setTheme={setTheme}
             />
           )}
 
@@ -398,6 +451,7 @@ export default function App() {
               setDestinations={setDestinations}
               logs={logs}
               setLogs={setLogs}
+              theme={theme}
             />
           )}
 
@@ -451,6 +505,7 @@ export default function App() {
             <SettingsPage
               destinations={destinations}
               setDestinations={setDestinations}
+              theme={theme}
             />
           )}
 

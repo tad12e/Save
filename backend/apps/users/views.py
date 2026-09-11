@@ -1,4 +1,5 @@
 from django.conf import settings
+import logging
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -15,6 +16,8 @@ from .serializers import (
 )
 from .services.otp import OTPEmailDeliveryError
 from .tokens import get_tokens_for_user
+
+logger = logging.getLogger(__name__)
 
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str | None = None) -> Response:
@@ -177,12 +180,14 @@ class LogoutView(APIView):
 
     def post(self, request):
         refresh_token = request.data.get('refresh_token') or request.COOKIES.get('refresh_token')
+        revoked = False
         if refresh_token:
             try:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
-            except Exception:
-                pass
+                revoked = True
+            except Exception as exc:
+                logger.warning("Logout blacklist failed: %s", exc)
 
-        response = Response({'message': 'Logged out successfully.'}, status=status.HTTP_200_OK)
+        response = Response({'message': 'Logged out successfully.', 'revoked': revoked}, status=status.HTTP_200_OK)
         return clear_auth_cookies(response)

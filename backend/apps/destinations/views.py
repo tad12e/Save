@@ -1,3 +1,4 @@
+import logging
 import os
 import urllib.parse
 from django.conf import settings
@@ -12,6 +13,8 @@ from .models import Destination
 from .serializers import DestinationCreateSerializer, DestinationSerializer
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 
 # def get_or_create_demo_user():
@@ -422,8 +425,12 @@ class GoogleOAuthCallbackView(APIView):
                     try:
                         uid = state.split(':')[0].replace('user_', '')
                         user = User.objects.filter(pk=uid).first()
-                    except Exception:
-                        pass
+                        if not user:
+                            logger.warning("Google Sheets OAuth with unknown user state %r", state)
+                            return self.frontend_redirect('oauth_error=invalid_state')
+                    except Exception as exc:
+                        logger.warning("Google Sheets OAuth with invalid state %r: %s", state, exc)
+                        return self.frontend_redirect('oauth_error=invalid_state')
 
                 dest_filter = {'user': user, 'provider': 'google_sheets'} if user else {'provider': 'google_sheets'}
                 dest = Destination.objects.filter(**dest_filter).first()
@@ -446,7 +453,8 @@ class GoogleOAuthCallbackView(APIView):
                 dest.save()
 
                 return self.frontend_redirect('oauth_success=google_sheets')
-        except Exception:
+        except Exception as exc:
+            logger.warning("Google Sheets OAuth token exchange failed: %s", exc)
             return self.frontend_redirect('oauth_error=token_exchange_failed')
 
 
@@ -511,11 +519,13 @@ class SpotifyOAuthCallbackView(APIView):
                     headers={'Authorization': f'Bearer {access_token}'},
                 )
                 spotify_profile = {}
+                profile_error = ''
                 try:
                     with urllib.request.urlopen(profile_req, timeout=10) as prof_resp:
                         spotify_profile = json.loads(prof_resp.read().decode('utf-8'))
                 except Exception as p_err:
-                    pass
+                    logger.warning("Spotify profile fetch failed, saving tokens without profile: %s", p_err)
+                    profile_error = 'profile_fetch_failed'
 
                 user = request.user if (request.user and request.user.is_authenticated) else None
                 dest_filter = {'user': user, 'provider': 'spotify'} if user else {'provider': 'spotify'}
@@ -528,13 +538,17 @@ class SpotifyOAuthCallbackView(APIView):
                         is_active=True
                     )
 
+                display_name = spotify_profile.get('display_name', '')
+                if profile_error and not display_name:
+                    display_name = 'Connected (profile unavailable)'
                 dest.config.update({
                     'access_token': access_token,
                     'refresh_token': refresh_token or dest.config.get('refresh_token'),
                     'expires_in': expires_in,
                     'spotify_user_id': spotify_profile.get('id', ''),
-                    'spotify_display_name': spotify_profile.get('display_name', ''),
+                    'spotify_display_name': display_name,
                     'spotify_email': spotify_profile.get('email', ''),
+                    'profile_error': profile_error,
                     'token_status': 'ACTIVE_OAUTH_TOKEN',
                     'authorized_at': timezone.now().isoformat(),
                     'target_resource_name': 'Playlist: Clipper Tracks (Default)'
@@ -544,6 +558,7 @@ class SpotifyOAuthCallbackView(APIView):
 
                 return self.frontend_redirect('oauth_success=spotify')
         except Exception as exc:
+            logger.warning("Spotify OAuth token exchange failed: %s", exc)
             return self.frontend_redirect('oauth_error=spotify_token_exchange_failed')
 
 

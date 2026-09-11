@@ -383,6 +383,49 @@ export const INITIAL_CLIPS: ClipItem[] = [
       author: 'rust-ai-org',
       rating: '⭐ 4.8k Stars'
     }
+  },
+  {
+    id: 'clip_7',
+    title: 'Staff ML Infrastructure Engineer — Candidate Portfolio & Recommendations',
+    url: 'https://linkedin.com/in/marcus-chen-ml-infra',
+    selectedText: 'Marcus Chen: Ex-Stripe Staff Platform Lead. Specialized in large-scale model inference, Kubernetes GPU scheduling, and high-throughput vector store architectures.',
+    summary: 'Candidate profile for Staff/Principal Infrastructure role. Strong open-source track record in distributed inference.',
+    type: 'job',
+    tags: ['Hire', 'Candidate', 'ML Infra', 'Staff Engineer', 'Kubernetes'],
+    createdAt: '2026-08-05T16:45:00Z',
+    sourceApp: 'Chrome Extension',
+    syncedTo: ['notion', 'airtable'],
+    storageMode: 'cloud',
+    pageId: 'page_job',
+    faviconUrl: 'https://www.google.com/s2/favicons?domain=linkedin.com&sz=64',
+    extractedData: {
+      company: 'Marcus Chen (Staff Candidate)',
+      salary: '$220,000 - $260,000',
+      location: 'San Francisco, CA / Remote',
+      rating: 'Top 1% Candidate Match'
+    },
+    isFavorite: true
+  },
+  {
+    id: 'clip_8',
+    title: 'H100 SXM5 GPU Cloud Cluster Deal — 40% Off Annual Reserved Instances',
+    url: 'https://lambdalabs.com/service/gpu-cloud/pricing-deal',
+    selectedText: 'Special allocation: 8x H100 SXM5 80GB clusters with 3.2Tbps Quantum-2 InfiniBand. Annual committed contract locked at $1.99/GPU/hr (40% discount).',
+    summary: 'Reserved GPU cloud capacity pricing contract for production LLM training & fine-tuning pipelines.',
+    type: 'deal',
+    tags: ['Buy', 'Deal', 'GPU', 'Infrastructure', 'H100', 'Discount'],
+    createdAt: '2026-08-04T10:15:00Z',
+    sourceApp: 'Chrome Extension',
+    syncedTo: ['google_sheets', 'notion'],
+    storageMode: 'cloud',
+    pageId: 'page_projects',
+    faviconUrl: 'https://www.google.com/s2/favicons?domain=lambdalabs.com&sz=64',
+    extractedData: {
+      price: '$1.99 / GPU / hr (40% Off)',
+      deadline: 'Limited availability (Q3/Q4 2026)',
+      company: 'Lambda Labs & CoreWeave'
+    },
+    isFavorite: false
   }
 ];
 

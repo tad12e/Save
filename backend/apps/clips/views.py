@@ -189,41 +189,50 @@ class ClipCreateView(APIView):
             extra_metadata=extra_meta,
         )
 
+        warnings: list[str] = []
+
         if custom_deadline:
             try:
                 from datetime import datetime
                 clip.deadline_date = datetime.strptime(str(custom_deadline)[:10], '%Y-%m-%d').date()
                 clip.save(update_fields=['deadline_date'])
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Ignoring invalid deadline %r for clip %s: %s", custom_deadline, clip.id, exc)
+                warnings.append('Invalid deadline ignored. Expected format YYYY-MM-DD.')
 
         clip.duplicate = False
 
         try:
             from .tasks import process_clip
             process_clip.delay(str(clip.id))
-        except Exception:
+        except Exception as exc:
+            logger.warning("Celery enqueue failed for clip %s: %s. Trying background thread.", clip.id, exc)
             # Run in daemon background thread so HTTP request returns in <50ms without blocking user UI
             try:
                 import threading
                 from .tasks import process_clip
                 threading.Thread(target=lambda: process_clip(str(clip.id)), daemon=True).start()
-            except Exception:
-                pass
+            except Exception as thread_exc:
+                logger.error("Background processing unavailable for clip %s: %s", clip.id, thread_exc)
+                warnings.append('Clip saved but background processing unavailable. Summary/embeddings will be delayed.')
 
         # Invalidate analytics and clusters cache for user so next load re-aggregates with fresh data
         try:
             from apps.analytics.olap_engine import DuckDBAnalyticsEngine
             DuckDBAnalyticsEngine.invalidate_cache(user.id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Analytics cache invalidation failed for user %s: %s", user.id, exc)
+            warnings.append('Clip saved but analytics cache refresh failed. Stats may be briefly stale.')
 
         try:
             invalidate_user_clusters_cache(user.id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Cluster cache invalidation failed for user %s: %s", user.id, exc)
 
-        return Response(ClipSerializer(clip).data, status=status.HTTP_201_CREATED)
+        data = ClipSerializer(clip).data
+        if warnings:
+            data['warnings'] = warnings
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class ClipDetailView(APIView):
@@ -281,9 +290,19 @@ class ClipDetailView(APIView):
                 try:
                     import uuid as uuid_pkg
                     cpage_uuid = uuid_pkg.UUID(str(cpage_id))
-                    clip.custom_page = CustomPage.objects.filter(user=request.user, pk=cpage_uuid).first()
-                except Exception:
-                    pass
+                except (ValueError, TypeError, AttributeError) as exc:
+                    logger.warning("Ignoring invalid custom_page_id %r for clip %s: %s", cpage_id, clip.id, exc)
+                    return Response(
+                        {'error': 'Invalid custom_page_id. Expected a valid UUID.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                cpage = CustomPage.objects.filter(user=request.user, pk=cpage_uuid).first()
+                if not cpage:
+                    return Response(
+                        {'error': 'Custom page not found.'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                clip.custom_page = cpage
             update_fields.append('custom_page')
 
         if update_fields:
@@ -300,8 +319,8 @@ class ClipDetailView(APIView):
         clip.delete()
         try:
             invalidate_user_clusters_cache(request.user.id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Cluster cache invalidation failed after delete for user %s: %s", request.user.id, exc)
         return Response({'message': 'Clip deleted successfully.'}, status=status.HTTP_200_OK)
 
 
@@ -775,8 +794,8 @@ class ClipClustersView(APIView):
                         'total_clustered_clips': sum(c.get('count', 0) for c in cached_clusters),
                         'cached': True,
                     })
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Cluster cache get failed for user %s: %s", request.user.id, exc)
 
         clusters = ClipClusterEngine.discover_clusters_for_user(
             user=request.user,
@@ -786,8 +805,8 @@ class ClipClustersView(APIView):
 
         try:
             cache.set(cache_key, clusters, timeout=300)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Cluster cache set failed for user %s: %s", request.user.id, exc)
 
         return Response({
             'clusters': clusters,

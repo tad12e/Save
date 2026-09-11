@@ -8,27 +8,32 @@ export interface IconProps {
 // ─── Destination Brand Icons (Iconify Official SVGs) ───
 
 export const GoogleSheetsIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
-  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" fill="#0F9D58" />
-    <path d="M14 2v6h6L14 2z" fill="#87CEAC" />
-    <rect x="7" y="11" width="10" height="8" rx="0.75" fill="#FFFFFF" />
-    <path d="M7 13.5h10M7 16h10M10.5 11v8" stroke="#0F9D58" strokeWidth="1.1" strokeLinecap="round" />
+  <svg className={className} style={style} viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path fill="#188038" d="M442.2 128L314.2 0v128z" />
+    <path fill="#34A853" d="M314.2 128V0H104.7C85.4 0 69.8 15.6 69.8 34.9v442.2c0 19.3 15.6 34.9 34.9 34.9h302.5c19.3 0 34.9-15.6 34.9-34.9V128z" />
+    <path fill="#FFFFFF" d="M139.6 197.8v168.7h232.7V197.8zm101.9 139.7h-72.7v-40.7h72.7zm0-69.9h-72.7v-40.7h72.7zm101.8 69.9h-72.7v-40.7h72.7zm0-69.9h-72.7v-40.7h72.7z" />
   </svg>
 );
 
+export const StitchSheetsIcon: React.FC<IconProps> = (props) => <GoogleSheetsIcon {...props} />;
+
 export const NotionIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
-  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M4.16 3.28c.44.38 1.1.38 1.87.38h11.94c.77 0 1.43 0 1.87-.38.46-.4.65-1.04.65-2.06H3.51c0 1.02.18 1.66.65 2.06zm-1.85 4.54v13.31c0 1 .81 1.82 1.81 1.82h15.76c1 0 1.82-.81 1.82-1.82V7.82H2.31zm6.81 3.52h2.25l3.75 5.9v-5.9h2.15v8.03h-2.25L11.26 13.47v5.9H9.12v-8.03z" fill="currentColor" />
+  <svg className={className} style={style} viewBox="0 0 256 268" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path fill="#FFFFFF" d="M16.092 11.538L164.09.608c18.179-1.56 22.85-.508 34.28 7.801l47.243 33.282C253.406 47.414 256 48.975 256 55.207v182.527c0 11.439-4.155 18.205-18.696 19.24L65.44 267.378c-10.913.517-16.11-1.043-21.825-8.327L8.826 213.814C2.586 205.487 0 199.254 0 191.97V29.726c0-9.352 4.155-17.153 16.092-18.188" />
+    <path d="M164.09.608L16.092 11.538C4.155 12.573 0 20.374 0 29.726v162.245c0 7.284 2.585 13.516 8.826 21.843l34.789 45.237c5.715 7.284 10.912 8.844 21.825 8.327l171.864-10.404c14.532-1.035 18.696-7.801 18.696-19.24V55.207c0-5.911-2.336-7.614-9.21-12.66l-1.185-.856L198.37 8.409C186.94.1 182.27-.952 164.09.608M69.327 52.22c-14.033.945-17.216 1.159-25.186-5.323L23.876 30.778c-2.06-2.086-1.026-4.69 4.163-5.207l142.274-10.395c11.947-1.043 18.17 3.12 22.842 6.758l24.401 17.68c1.043.525 3.638 3.637.517 3.637L71.146 52.095zm-16.36 183.954V81.222c0-6.767 2.077-9.887 8.3-10.413L230.02 60.93c5.724-.517 8.31 3.12 8.31 9.879v153.917c0 6.767-1.044 12.49-10.387 13.008l-161.487 9.361c-9.343.517-13.489-2.594-13.489-10.921M212.377 89.53c1.034 4.681 0 9.362-4.681 9.897l-7.783 1.542v114.404c-6.758 3.637-12.981 5.715-18.18 5.715c-8.308 0-10.386-2.604-16.609-10.396l-50.898-80.079v77.476l16.1 3.646s0 9.362-12.989 9.362l-35.814 2.077c-1.043-2.086 0-7.284 3.63-8.318l9.351-2.595V109.823l-12.98-1.052c-1.044-4.68 1.55-11.439 8.826-11.965l38.426-2.585l52.958 81.113v-71.76l-13.498-1.552c-1.043-5.733 3.111-9.896 8.3-10.404z" fill="#000000" />
   </svg>
 );
 
 export const AirtableIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
-  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M11.36 2.52a.85.85 0 0 1 .78 0l9.36 4.68a.85.85 0 0 1 0 1.52l-9.36 4.68a.85.85 0 0 1-.78 0L2 8.72a.85.85 0 0 1 0-1.52l9.36-4.68z" fill="#18BFFF" />
-    <path d="M11.5 13.85v7.65a.5.5 0 0 1-.72.45L2.28 17.7a.5.5 0 0 1-.28-.45v-7.65l9.5 4.25z" fill="#F82B60" />
-    <path d="M12.5 13.85l9.5-4.25v7.65a.5.5 0 0 1-.28.45l-8.5 4.25a.5.5 0 0 1-.72-.45v-7.65z" fill="#FCB400" />
+  <svg className={className} style={style} viewBox="0 0 256 215" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path fill="#FFBF00" d="M114.259 2.701L18.86 42.176c-5.305 2.195-5.25 9.73.089 11.847l95.797 37.989a35.54 35.54 0 0 0 26.208 0l95.799-37.99c5.337-2.115 5.393-9.65.086-11.846L141.442 2.7a35.55 35.55 0 0 0-27.183 0" />
+    <path fill="#26B5F8" d="M136.35 112.757v94.902c0 4.514 4.55 7.605 8.746 5.942l106.748-41.435a6.39 6.39 0 0 0 4.035-5.941V71.322c0-4.514-4.551-7.604-8.747-5.941l-106.748 41.434a6.39 6.39 0 0 0-4.035 5.942" />
+    <path fill="#ED3049" d="m111.423 117.654l-31.68 15.296l-3.217 1.555L9.65 166.548C5.411 168.593 0 165.504 0 160.795V71.72c0-1.704.874-3.175 2.046-4.283a7.3 7.3 0 0 1 1.618-1.213c1.598-.959 3.878-1.215 5.816-.448l101.41 40.18c5.155 2.045 5.56 9.268.533 11.697" />
+    <path fill="#000000" fillOpacity=".22" d="m111.423 117.654l-31.68 15.296L2.045 67.438a7.3 7.3 0 0 1 1.618-1.213c1.598-.959 3.878-1.215 5.816-.448l101.41 40.18c5.155 2.045 5.56 9.268.533 11.697" />
   </svg>
 );
+
+export const StitchAirtableIcon: React.FC<IconProps> = (props) => <AirtableIcon {...props} />;
 
 export const SpotifyIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
   <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -37,11 +42,23 @@ export const SpotifyIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style 
   </svg>
 );
 
+export const StitchSpotifyIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.563.387-.857.207-2.35-1.435-5.308-1.76-8.793-.963-.335.077-.67-.133-.746-.468-.077-.334.132-.67.467-.746 3.808-.87 7.076-.496 9.722 1.115.294.18.386.562.207.855zm1.226-2.723c-.226.367-.706.482-1.072.256-2.687-1.652-6.785-2.131-9.965-1.166-.413.127-.848-.106-.973-.519-.126-.413.107-.849.52-9.74 3.632-1.102 8.147-.568 11.234 1.33.366.225.48.706.256 1.072zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71c-.493.15-1.016-.128-1.166-.62-.149-.494.13-1.017.622-1.168 3.532-1.073 9.404-.866 13.115 1.337.445.264.59.838.327 1.282-.264.444-.838.59-1.282.327z" />
+  </svg>
+);
+
 export const YouTubeMusicIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
   <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="12" cy="12" r="11" fill="#FF0000" />
     <circle cx="12" cy="12" r="6" stroke="#FFFFFF" strokeWidth="1.8" />
     <polygon points="10.5,9.5 15,12 10.5,14.5" fill="#FFFFFF" />
+  </svg>
+);
+
+export const StitchYouTubeMusicIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1zm-2-3l5 3-5 3V8z" />
   </svg>
 );
 
@@ -110,12 +127,8 @@ export const SaveVaultIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', styl
 );
 
 export const WebhookIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
-  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c0-2.21 1.79-4 4-4h1" />
-    <path d="M6 13V7a4 4 0 0 1 7.5-2" />
-    <circle cx="18" cy="17" r="3" fill="#6366f1" stroke="#818cf8" />
-    <circle cx="6" cy="17" r="3" fill="#6366f1" stroke="#818cf8" />
-    <circle cx="14" cy="5" r="3" fill="#6366f1" stroke="#818cf8" />
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M7 21q-2.075 0-3.537-1.463T2 16q0-1.825 1.138-3.187T6 11.1v2.075q-.875.3-1.437 1.075T4 16q0 1.25.875 2.125T7 19t2.125-.875T10 16v-1h5.875q.2-.225.488-.363T17 14.5q.625 0 1.063.438T18.5 16t-.437 1.063T17 17.5q-.35 0-.638-.137T15.876 17H11.9q-.35 1.725-1.713 2.863T7 21m10 0q-1.4 0-2.537-.687T12.675 18.5h2.675q.35.25.775.375T17 19q1.25 0 2.125-.875T20 16t-.875-2.125T17 13q-.5 0-.925.138t-.8.412l-3.05-5.075q-.525-.1-.875-.5T11 7q0-.625.438-1.062T12.5 5.5t1.063.438T14 7v.213q0 .087-.05.212l2.175 3.65q.2-.05.425-.062T17 11q2.075 0 3.538 1.463T22 16t-1.463 3.538T17 21M7 17.5q-.625 0-1.062-.437T5.5 16q0-.55.35-.95t.85-.525l2.35-3.9q-.725-.675-1.138-1.612T7.5 7q0-2.075 1.463-3.537T12.5 2t3.538 1.463T17.5 7h-2q0-1.25-.875-2.125T12.5 4t-2.125.875T9.5 7q0 1.075.65 1.888t1.65 1.037L8.425 15.55q.05.125.063.225T8.5 16q0 .625-.437 1.063T7 17.5" />
   </svg>
 );
 

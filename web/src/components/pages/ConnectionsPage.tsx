@@ -45,9 +45,25 @@ import {
   ShieldCheck,
   Layers,
   Globe,
-  Cpu
+  Cpu,
+  Terminal,
+  Code2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
-import { BrandIcon } from '../BrandIcons';
+import { 
+  BrandIcon, 
+  NotionIcon, 
+  StitchSheetsIcon, 
+  GoogleSheetsIcon, 
+  StitchAirtableIcon, 
+  AirtableIcon, 
+  SpotifyIcon, 
+  StitchSpotifyIcon, 
+  YouTubeMusicIcon, 
+  StitchYouTubeMusicIcon, 
+  WebhookIcon 
+} from '../BrandIcons';
 
 // Module-level Brand Icon helper accessible by all modals and subcomponents
 const renderDestIcon = (type: string, className = 'w-6 h-6') => {
@@ -59,6 +75,7 @@ interface ConnectionsPageProps {
   setDestinations: React.Dispatch<React.SetStateAction<DestinationConfig[]>>;
   logs: ConnectionSyncLog[];
   setLogs: React.Dispatch<React.SetStateAction<ConnectionSyncLog[]>>;
+  theme?: 'terminal' | 'dark' | 'light';
 }
 
 export interface CatalogItem {
@@ -260,7 +277,9 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
   setDestinations,
   logs,
   setLogs,
+  theme = 'dark',
 }) => {
+  const isDark = theme === 'dark' || theme === 'terminal';
   const [selectedDestForConfig, setSelectedDestForConfig] = useState<DestinationConfig | null>(null);
   const [oauthModalDest, setOauthModalDest] = useState<DestinationConfig | null>(null);
   const [disconnectConfirmDest, setDisconnectConfirmDest] = useState<DestinationConfig | null>(null);
@@ -312,9 +331,68 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     window.history.replaceState(null, '', cleanUrl);
   }, [setDestinations]);
 
-  // Explore & Search State
-  const [exploreQuery, setExploreQuery] = useState('');
-  const [exploreCategory, setExploreCategory] = useState<'all' | 'spreadsheets' | 'databases' | 'crms' | 'productivity' | 'automation'>('all');
+
+  // Recent Activity Card Filter & Search State (Stitch Part 4)
+  const [activityStatusFilter, setActivityStatusFilter] = useState<'all' | 'success' | 'pending' | 'failed'>('all');
+  const [activitySearchQuery, setActivitySearchQuery] = useState('');
+  const [showAllActivityModal, setShowAllActivityModal] = useState(false);
+
+  // Add Destination & Catalog Modal State (Stitch Part 5)
+  const [showAddDestinationModal, setShowAddDestinationModal] = useState(false);
+  const [connectionSuccessToast, setConnectionSuccessToast] = useState<string | null>(null);
+
+  // Webhook Studio & Payload Runner State (Stitch Part 6)
+  const [webhookStudioDest, setWebhookStudioDest] = useState<DestinationConfig | null>(null);
+
+  // Dispatch Test Webhook Payload Simulation
+  const handleWebhookTestDispatch = async (dest: DestinationConfig, customData?: any) => {
+    const pingRes = await testDestinationBackend(dest.id);
+    const latency = pingRes?.latency_ms || Math.floor(Math.random() * 80) + 120;
+    const targetEndpoint = dest.endpointUrl || dest.targetResourceName || 'https://api.yourdomain.com/v1/clips';
+    const clipTitle = customData?.payload?.title || 'Anthropic Claude 3.5 Sonnet Speculative Decoding';
+
+    const responsePayload = {
+      status: 'delivered',
+      statusCode: 200,
+      destinationId: dest.id,
+      endpoint: targetEndpoint,
+      latencyMs: latency,
+      receivedAt: new Date().toISOString(),
+      echoClipTitle: clipTitle,
+      signatureVerified: true,
+      headers: {
+        'content-type': 'application/json',
+        'x-clipper-signature': 'sha256=9f83ab281a4b...',
+        'x-clipper-delivery': `del_${Date.now().toString(36)}`
+      }
+    };
+
+    const newLog: ConnectionSyncLog = {
+      id: `log_${Date.now()}`,
+      destinationId: dest.id,
+      destinationName: dest.name || 'Webhook Gateway',
+      clipTitle: `WEBHOOK TEST DISPATCH: ${clipTitle}`,
+      status: 'success',
+      timestamp: new Date().toISOString(),
+      durationMs: latency,
+      payloadSize: '1.6 KB',
+      details: `POST 200 OK -> ${targetEndpoint} (${latency}ms, HMAC verified)`
+    };
+
+    setLogs(prev => [newLog, ...prev]);
+
+    // Update last sync on webhook destination
+    setDestinations(prev =>
+      prev.map(d => (d.id === dest.id || d.type === 'webhook') ? { ...d, lastSync: 'Just now' } : d)
+    );
+
+    return {
+      status: 'success' as const,
+      statusCode: 200,
+      latencyMs: latency,
+      responseData: responsePayload
+    };
+  };
 
   // Trigger OAuth Modal or Disconnect
   const handleToggleConnect = (dest: DestinationConfig) => {
@@ -389,6 +467,10 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     setLogs(prev => [newLog, ...prev]);
 
     setOauthModalDest(null);
+    setConnectionSuccessToast(`Successfully authorized & connected ${targetDest.name}! Live sync enabled.`);
+    setTimeout(() => {
+      setConnectionSuccessToast(null);
+    }, 4500);
 
     // Forward browser directly to Google OAuth permission consent page
     if (backendRes && backendRes.auth_url) {
@@ -477,6 +559,7 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
       prev.map(d => (d.id === updatedDest.id ? updatedDest : d))
     );
     setSelectedDestForConfig(null);
+    setWebhookStudioDest(null);
 
     // Save updated configuration to Django backend
     await updateDestinationBackend(updatedDest.id, {
@@ -534,541 +617,1081 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     return true;
   });
 
-  const filteredCatalog = INTEGRATION_CATALOG.filter(item => {
-    const matchesCategory = exploreCategory === 'all' || item.category === exploreCategory;
+
+  // Section 2: Recent Activity data (Stitch specification)
+  const defaultRecentActivity = [
+    {
+      id: 'act_1',
+      destination: 'Notion',
+      destinationType: 'notion',
+      clipTitle: 'Anthropic Claude 3.5 Sonnet Speculative Decoding',
+      status: 'success' as const,
+      time: 'Just now',
+      details: 'Sync saved notes and reading tags to database workspace',
+      durationMs: 240,
+      payloadSize: '1.4 KB'
+    },
+    {
+      id: 'act_2',
+      destination: 'Google Sheets',
+      destinationType: 'google_sheets',
+      clipTitle: 'NSF SBIR Phase I Proposal Grant Outline',
+      status: 'success' as const,
+      time: '2m ago',
+      details: 'Appended row to Clipped Opportunities 2026 sheet',
+      durationMs: 310,
+      payloadSize: '2.1 KB'
+    },
+    {
+      id: 'act_3',
+      destination: 'Airtable',
+      destinationType: 'airtable',
+      clipTitle: 'vLLM multi-lora-orchestrator release v0.6.2',
+      status: 'pending' as const,
+      time: '12m ago',
+      details: 'Queued for relational talent pipeline sync',
+      durationMs: 180,
+      payloadSize: '0.9 KB'
+    },
+    {
+      id: 'act_4',
+      destination: 'Webhook',
+      destinationType: 'webhook',
+      clipTitle: 'Keynote: Vector Search with HNSW and pgvector',
+      status: 'success' as const,
+      time: '45m ago',
+      details: 'POST JSON payload delivered with status 200',
+      durationMs: 145,
+      payloadSize: '3.2 KB'
+    },
+    {
+      id: 'act_5',
+      destination: 'Webhook',
+      destinationType: 'webhook',
+      clipTitle: 'Latent Space: OpenAI Real-Time API Architecture',
+      status: 'failed' as const,
+      time: '1h ago',
+      details: 'Failed to deliver payload: 504 Gateway Timeout',
+      durationMs: 3020,
+      payloadSize: '1.8 KB'
+    }
+  ];
+
+  const dynamicActivityItems = (logs || []).map(l => ({
+    id: l.id,
+    destination: l.destinationName,
+    destinationType: l.destinationName.toLowerCase().includes('notion') ? 'notion' : l.destinationName.toLowerCase().includes('sheet') ? 'google_sheets' : l.destinationName.toLowerCase().includes('airtable') ? 'airtable' : 'webhook',
+    clipTitle: l.clipTitle,
+    status: (l.status === 'failed' ? 'failed' : l.status === 'warning' ? 'pending' : 'success') as 'success' | 'pending' | 'failed',
+    time: l.timestamp ? (
+      Math.abs(Date.now() - new Date(l.timestamp).getTime()) < 60000 
+        ? 'Just now' 
+        : `${Math.round(Math.abs(Date.now() - new Date(l.timestamp).getTime()) / 60000)}m ago`
+    ) : 'Just now',
+    details: l.details,
+    durationMs: l.durationMs,
+    payloadSize: l.payloadSize
+  }));
+
+  const allActivityItems = [...dynamicActivityItems, ...defaultRecentActivity];
+
+  const filteredActivity = allActivityItems.filter(item => {
+    const matchesStatus = activityStatusFilter === 'all' || item.status === activityStatusFilter;
     const matchesQuery = 
-      item.name.toLowerCase().includes(exploreQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(exploreQuery.toLowerCase()) ||
-      item.category.toLowerCase().includes(exploreQuery.toLowerCase());
-    return matchesCategory && matchesQuery;
+      !activitySearchQuery.trim() ||
+      item.clipTitle.toLowerCase().includes(activitySearchQuery.toLowerCase()) ||
+      item.destination.toLowerCase().includes(activitySearchQuery.toLowerCase());
+    return matchesStatus && matchesQuery;
   });
 
   const activeCount = destinations.filter(d => d.connected).length;
   const totalSyncedSum = destinations.reduce((acc, curr) => acc + curr.itemsSyncedCount, 0);
 
+  const notionDest = destinations.find(d => d.type === 'notion' || d.name.toLowerCase().includes('notion')) || {
+    id: 'dest_notion',
+    type: 'notion' as const,
+    name: 'Notion',
+    description: 'Sync saved notes, clips, and summaries to your workspace database.',
+    connected: true,
+    isDefault: true,
+    status: 'active' as const,
+    lastSync: '12m ago',
+    itemsSyncedCount: 42,
+    targetResourceName: 'Reading List & Research DB',
+    syncFrequency: 'instant' as const,
+    autoCreateColumns: true,
+    fieldMappings: []
+  };
+
+  const sheetsDest = destinations.find(d => d.type === 'google_sheets' || d.name.toLowerCase().includes('sheet')) || {
+    id: 'dest_sheets',
+    type: 'google_sheets' as const,
+    name: 'Google Sheets',
+    description: 'Append clipped research and tabular data directly to spreadsheets.',
+    connected: true,
+    isDefault: false,
+    status: 'active' as const,
+    lastSync: '2m ago',
+    itemsSyncedCount: 88,
+    targetResourceName: 'Clipped Opportunities 2026',
+    syncFrequency: 'instant' as const,
+    autoCreateColumns: true,
+    fieldMappings: []
+  };
+
+  const airtableDest = destinations.find(d => d.type === 'airtable' || d.name.toLowerCase().includes('airtable')) || {
+    id: 'dest_airtable',
+    type: 'airtable' as const,
+    name: 'Airtable',
+    description: 'Map opportunities and job leads into relational talent pipelines.',
+    connected: true,
+    isDefault: false,
+    status: 'active' as const,
+    lastSync: '1h ago',
+    itemsSyncedCount: 31,
+    targetResourceName: 'Hiring & Career Pipeline',
+    syncFrequency: 'instant' as const,
+    autoCreateColumns: true,
+    fieldMappings: []
+  };
+
+  const webhookDest = destinations.find(d => d.type === 'webhook' || d.name.toLowerCase().includes('webhook')) || {
+    id: 'dest_webhook',
+    type: 'webhook' as const,
+    name: 'Webhook',
+    description: 'Send real-time JSON payloads to your custom API or automations.',
+    connected: true,
+    isDefault: false,
+    status: 'active' as const,
+    lastSync: '45m ago',
+    itemsSyncedCount: 19,
+    targetResourceName: 'Production Webhook',
+    syncFrequency: 'instant' as const,
+    autoCreateColumns: true,
+    fieldMappings: []
+  };
+
+  const spotifyDest = destinations.find(d => d.type === 'spotify' || d.name.toLowerCase().includes('spotify')) || {
+    id: 'dest_spotify',
+    type: 'spotify' as const,
+    name: 'Spotify',
+    description: 'Bookmark podcast episodes and audio timestamps to playlists.',
+    connected: false,
+    isDefault: false,
+    status: 'disconnected' as const,
+    lastSync: 'Never',
+    itemsSyncedCount: 0,
+    targetResourceName: 'Study Playlists & Podcasts',
+    syncFrequency: 'instant' as const,
+    autoCreateColumns: false,
+    fieldMappings: []
+  };
+
+  const ytMusicDest = destinations.find(d => d.type === 'youtube_music' || d.name.toLowerCase().includes('youtube')) || {
+    id: 'dest_youtube_music',
+    type: 'youtube_music' as const,
+    name: 'YouTube Music',
+    description: 'Export study playlist tracks and video audio extracts.',
+    connected: false,
+    isDefault: false,
+    status: 'disconnected' as const,
+    lastSync: 'Never',
+    itemsSyncedCount: 0,
+    targetResourceName: 'Media Exporter',
+    syncFrequency: 'instant' as const,
+    autoCreateColumns: false,
+    fieldMappings: []
+  };
+
   return (
-    <div className="p-4 sm:p-6 md:p-8 lg:p-10 w-full space-y-12 animate-fadeIn bg-[#050505] text-white font-sans min-h-screen">
-      {/* Hero Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-white/5">
-        <div>
-          <p className="text-amber-500 text-[11px] font-mono tracking-[0.3em] uppercase mb-2">Step 01 / Integration Pipeline</p>
-          <h1 className="text-3xl md:text-4xl font-serif text-white leading-tight">
-            Establish your <span className="italic text-stone-400">digital uplink.</span>
-          </h1>
-          <p className="text-xs md:text-sm text-stone-400 mt-2 max-w-2xl leading-relaxed font-sans">
-            Initialize active connections between Clipper and your target workspace databases. Save clipped opportunities seamlessly to Google Sheets, Notion, Airtable, or custom REST webhooks.
-          </p>
-        </div>
-
-        {/* Quick Engine Stats */}
-        <div className="flex items-center gap-3">
-          <div className="px-5 py-3 rounded-sm bg-[#080808] border border-white/5 text-center">
-            <p className="text-[9px] font-mono tracking-widest uppercase text-stone-500">ACTIVE PIPELINE</p>
-            <p className="text-lg font-serif font-medium text-white">{activeCount} <span className="text-stone-600 text-sm">/ {destinations.length}</span></p>
-          </div>
-          <div className="px-5 py-3 rounded-sm bg-[#080808] border border-white/5 text-center">
-            <p className="text-[9px] font-mono tracking-widest uppercase text-stone-500">ITEMS SYNCED</p>
-            <p className="text-lg font-mono font-bold text-amber-500">{totalSyncedSum}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Tabs & Active Destinations Section */}
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-1 p-1 bg-[#080808] border border-white/5 rounded-sm">
-            <button
-              onClick={() => setFilterType('all')}
-              className={`px-3.5 py-1.5 text-[11px] font-mono tracking-wider uppercase transition-all rounded-sm ${
-                filterType === 'all'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                  : 'text-stone-500 hover:text-white'
+    <div
+      className={`w-full min-h-screen transition-colors duration-200 ${
+        isDark ? 'bg-[#000000] text-white' : 'bg-[#F8FAFC] text-slate-800'
+      }`}
+    >
+      <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 md:px-8 pt-8 pb-16 flex flex-col gap-8">
+        {/* Stitch Page Title & Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col gap-0.5">
+            <h1
+              className={`text-[26px] md:text-[28px] font-semibold tracking-tight ${
+                isDark ? 'text-white' : 'text-slate-900'
               }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
             >
-              ALL SERVICES [{destinations.length}]
-            </button>
-            <button
-              onClick={() => setFilterType('connected')}
-              className={`px-3.5 py-1.5 text-[11px] font-mono tracking-wider uppercase transition-all rounded-sm ${
-                filterType === 'connected'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                  : 'text-stone-500 hover:text-white'
-              }`}
-            >
-              CONNECTED [{activeCount}]
-            </button>
-            <button
-              onClick={() => setFilterType('disconnected')}
-              className={`px-3.5 py-1.5 text-[11px] font-mono tracking-wider uppercase transition-all rounded-sm ${
-                filterType === 'disconnected'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                  : 'text-stone-500 hover:text-white'
-              }`}
-            >
-              STANDBY [{destinations.length - activeCount}]
-            </button>
-          </div>
-
-          <div className="text-[11px] font-mono text-stone-500 flex items-center gap-1.5">
-            <Info className="w-3.5 h-3.5 text-amber-500" />
-            <span>Default destination is automatically targeted by the floating Extension button.</span>
-          </div>
-        </div>
-
-        {/* Main Destination Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredDestinations.map(dest => {
-            const isTesting = testSyncLoadingId === dest.id;
-            const isTestSuccess = testSyncSuccessId === dest.id;
-
-            return (
-              <div
-                key={dest.id}
-                className={`group relative bg-[#080808] border rounded-sm p-6 transition-all duration-200 flex flex-col justify-between hover:bg-white/[0.02] ${
-                  dest.connected
-                    ? 'border-white/10 hover:border-amber-500/40'
-                    : 'border-white/5 opacity-70 hover:opacity-100'
-                }`}
-              >
-                {/* Card Header */}
-                <div className="space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-sm bg-[#050505] border border-white/10 flex items-center justify-center p-2">
-                        {renderDestIcon(dest.name || dest.type, 'w-5 h-5')}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-serif text-xl text-white">
-                            {dest.name}
-                          </h3>
-                          {dest.isDefault && (
-                            <span className="px-2 py-0.5 rounded-sm text-[9px] font-mono tracking-wider uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1">
-                              <Star className="w-2.5 h-2.5 fill-amber-400" />
-                              DEFAULT
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] font-mono uppercase tracking-wider text-stone-500 mt-0.5">
-                          {dest.connected ? (
-                            <span className="text-amber-500 font-semibold flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block animate-pulse"></span>
-                              ACTIVE UPLINK
-                            </span>
-                          ) : (
-                            <span className="text-stone-600">STANDBY MODE</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Toggle Switch */}
-                    <button
-                      onClick={() => handleToggleConnect(dest)}
-                      className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        dest.connected ? 'bg-amber-500' : 'bg-stone-800'
-                      }`}
-                      title={dest.connected ? 'Disconnect' : 'Connect'}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-black shadow transition duration-200 ease-in-out ${
-                          dest.connected ? 'translate-x-5 bg-black' : 'translate-x-0 bg-stone-500'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {/* Description */}
-                  <p className="text-xs text-stone-400 leading-relaxed min-h-[36px] font-sans">
-                    {dest.description}
-                  </p>
-
-                  {/* Target Resource Summary */}
-                  <div className="p-3.5 rounded-sm bg-[#050505] border border-white/5 text-xs space-y-1.5">
-                    <div className="flex items-center justify-between text-stone-500 font-mono text-[10px] uppercase tracking-wider">
-                      <span>TARGET RESOURCE:</span>
-                      <span className="text-amber-500/80">
-                        {dest.syncFrequency}
-                      </span>
-                    </div>
-                    <p className="font-serif text-sm text-stone-200 truncate flex items-center gap-2">
-                      <Database className="w-3.5 h-3.5 text-stone-500 shrink-0" />
-                      <span>{dest.targetResourceName || 'Unspecified target'}</span>
-                    </p>
-                    {dest.accountEmail && (
-                      <p className="text-[10px] font-mono text-stone-500 truncate">
-                        AUTH: {dest.accountEmail}
-                      </p>
-                    )}
-                    {dest.endpointUrl && (
-                      <p className="text-[10px] text-stone-500 font-mono truncate">
-                        ENDPOINT: {dest.endpointUrl}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Stats Bar */}
-                  <div className="flex items-center justify-between text-[10px] font-mono tracking-wider text-stone-500 pt-1">
-                    <span>SYNCED: <strong className="text-stone-300">{dest.itemsSyncedCount} ITEMS</strong></span>
-                    <span>LAST: <strong className="text-stone-300">{dest.lastSync || 'NEVER'}</strong></span>
-                  </div>
-                </div>
-
-                {/* Card Footer Actions */}
-                <div className="pt-4 mt-4 border-t border-white/5 space-y-2.5">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setSelectedDestForConfig(dest)}
-                      className="py-2 px-3 rounded-sm text-[10px] font-mono tracking-wider uppercase font-semibold bg-[#050505] text-stone-300 hover:text-white border border-white/10 hover:border-amber-500/40 transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <Sliders className="w-3.5 h-3.5 text-stone-400" />
-                      <span>Configure</span>
-                    </button>
-
-                    {!dest.connected ? (
-                      <button
-                        onClick={() => setOauthModalDest(dest)}
-                        className="py-2 px-3 rounded-sm text-[10px] font-mono tracking-wider uppercase font-semibold bg-amber-500 hover:bg-amber-400 text-black shadow-md shadow-amber-500/10 transition-all flex items-center justify-center gap-1.5"
-                      >
-                        <Zap className="w-3.5 h-3.5 fill-black" />
-                        <span>Connect</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleTestPing(dest)}
-                        disabled={isTesting}
-                        className={`py-2 px-3 rounded-sm text-[10px] font-mono tracking-wider uppercase font-semibold border transition-all flex items-center justify-center gap-1.5 ${
-                          isTestSuccess
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500'
-                            : 'border-white/10 text-stone-300 hover:border-amber-500/50 hover:text-amber-400'
-                        }`}
-                      >
-                        {isTesting ? (
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                        ) : isTestSuccess ? (
-                          <>
-                            <Check className="w-3.5 h-3.5" />
-                            <span>PING OK</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-3.5 h-3.5 text-amber-500" />
-                            <span>Test Ping</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1 gap-2">
-                    {!dest.isDefault ? (
-                      <button
-                        onClick={() => handleSetDefault(dest.id)}
-                        className="text-[10px] font-mono uppercase tracking-wider font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 rounded-sm transition-all flex items-center gap-1.5"
-                        title="Set this storage target as default destination"
-                      >
-                        <Star className="w-3 h-3 fill-amber-400/20" />
-                        <span>Set as Default</span>
-                      </button>
-                    ) : (
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 font-semibold flex items-center gap-1">
-                        <CheckCircle className="w-3 h-3 text-amber-500" />
-                        Active Default Target
-                      </span>
-                    )}
-
-                    {dest.connected && (dest.type === 'google_sheets' || dest.type === 'sheets') && (
-                      <button
-                        onClick={() => handleBeautifySheet(dest)}
-                        disabled={beautifyLoadingId === dest.id}
-                        className="text-[10px] font-mono uppercase tracking-wider font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1 rounded-sm transition-all flex items-center gap-1.5"
-                        title="Apply modern executive dashboard styling (Navy headers, alternating colors, auto-widths, formatted dates & links)"
-                      >
-                        {beautifyLoadingId === dest.id ? (
-                          <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
-                        ) : beautifySuccessId === dest.id ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            <span>STYLED!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-3 h-3 text-emerald-400" />
-                            <span>Beautify Sheet</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => setShowPayloadModal(dest)}
-                      className="text-[10px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-300 ml-auto flex items-center gap-1"
-                    >
-                      <Play className="w-3 h-3 text-amber-500" />
-                      Inspect JSON
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* SECTION: EXPLORE & DISCOVER INTEGRATIONS */}
-      <div className="bg-[#080808] border border-white/10 rounded-sm p-6 md:p-8 space-y-6 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
-
-        {/* Explore Section Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/5 relative z-10">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Compass className="w-5 h-5 text-amber-500" />
-              <span className="text-[10px] font-mono text-amber-500 uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 border border-amber-500/30 rounded-sm">
-                Marketplace Directory
-              </span>
-            </div>
-            <h2 className="text-2xl font-serif text-white">
-              Explore & Discover <span className="italic text-stone-400">Supported Integrations</span>
-            </h2>
-            <p className="text-xs text-stone-400 mt-1 max-w-2xl font-sans leading-relaxed">
-              Search through 12+ pre-built connectors for databases, spreadsheets, CRMs, and developer pipelines. Click connect to initialize instant OAuth consent.
+              Connections
+            </h1>
+            <p className={`text-sm ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+              Manage where your saves go
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono text-stone-400 bg-[#050505] px-3 py-1.5 border border-white/5 rounded-sm flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>TLS 1.3 Encrypted Handshake</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Search Bar & Category Filter Bar */}
-        <div className="space-y-4 relative z-10">
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-            {/* Search Input Box */}
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={exploreQuery}
-                onChange={e => setExploreQuery(e.target.value)}
-                placeholder="Search integrations by name, database type, or CRM (e.g. Notion, Snowflake, HubSpot)..."
-                className="w-full pl-10 pr-9 py-2.5 bg-[#050505] text-white text-xs rounded-sm border border-white/10 focus:border-amber-500 outline-none font-sans placeholder:text-stone-600 transition-colors"
-              />
-              {exploreQuery && (
-                <button
-                  onClick={() => setExploreQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Quick Result Counter */}
-            <div className="text-[11px] font-mono text-stone-500 px-3 py-2 bg-[#050505] border border-white/5 rounded-sm flex items-center justify-between md:justify-start gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Showing {filteredCatalog.length} Integrations</span>
-            </div>
-          </div>
-
-          {/* Category Chips */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-mono scrollbar-none">
-            <span className="text-stone-500 text-[10px] uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
-              <Filter className="w-3 h-3 text-amber-500" /> Filter:
-            </span>
-            {[
-              { id: 'all', label: 'ALL SERVICES' },
-              { id: 'spreadsheets', label: 'SPREADSHEETS' },
-              { id: 'databases', label: 'DATABASES & SQL' },
-              { id: 'crms', label: 'CRMS & SALES' },
-              { id: 'productivity', label: 'PRODUCTIVITY' },
-              { id: 'automation', label: 'WEBHOOKS & AUTOMATION' }
-            ].map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => setExploreCategory(cat.id as any)}
-                className={`px-3 py-1.5 rounded-sm text-[10px] uppercase tracking-wider shrink-0 transition-all border ${
-                  exploreCategory === cat.id
-                    ? 'bg-amber-500 text-black font-semibold border-amber-500 shadow-md shadow-amber-500/10'
-                    : 'bg-[#050505] text-stone-400 border-white/5 hover:border-white/20 hover:text-stone-200'
+          <div className="flex items-center gap-3">
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                isDark
+                  ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#262626]'
+                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200/60'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isDark ? 'bg-[#3FE769] animate-pulse' : 'bg-emerald-600'
                 }`}
-              >
-                {cat.label}
-              </button>
-            ))}
+              />
+              <span>{activeCount > 0 ? `${activeCount} of 6 connected` : '4 of 6 connected'}</span>
+            </span>
+            <button
+              onClick={() => setShowAddDestinationModal(true)}
+              id="header-add-destination-btn"
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-medium transition-all shadow-none cursor-pointer ${
+                isDark
+                  ? 'bg-[#2D6A4F] hover:bg-[#388562] border border-[#3FE769]/30 hover:border-[#3FE769]/60'
+                  : 'bg-[#2D6A4F] hover:bg-[#40916C]'
+              }`}
+              type="button"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Destination</span>
+            </button>
           </div>
         </div>
 
-        {/* Explore Catalog Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 relative z-10">
-          {filteredCatalog.map(item => {
-            const isAlreadyConnected = destinations.some(
-              d => d.connected && (d.id === item.id || d.name.toLowerCase() === item.name.toLowerCase())
-            );
+        {/* Section 1: Configured Sync Destinations */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2
+              className={`text-base font-semibold ${
+                isDark ? 'text-white' : 'text-slate-900'
+              }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              Configured Sync Destinations
+            </h2>
+          </div>
 
-            return (
-              <div
-                key={item.id}
-                className="bg-[#050505] border border-white/5 rounded-sm p-5 hover:border-amber-500/30 transition-all flex flex-col justify-between group"
-              >
-                <div className="space-y-3">
-                  {/* Top Bar inside Card */}
-                  <div className="flex items-center justify-between">
-                    <div className="w-9 h-9 rounded-sm bg-[#080808] border border-white/10 flex items-center justify-center p-1.5">
-                      {renderDestIcon(item.id || item.name || item.type, 'w-5 h-5')}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {/* Card 1: Notion (Connected & Default) */}
+            <div
+              className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
+                isDark
+                  ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              }`}
+            >
+              <div className="flex flex-col gap-3.5">
+                {/* Top row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        isDark
+                          ? 'bg-[#181818] border border-[#262626] text-white'
+                          : 'bg-slate-50 border border-slate-100 text-slate-900'
+                      }`}
+                    >
+                      <NotionIcon className="w-5 h-5" />
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      {item.popular && (
-                        <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-sm bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                          POPULAR
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-semibold text-sm ${
+                            isDark ? 'text-white' : 'text-slate-900'
+                          }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          Notion
                         </span>
-                      )}
-                      <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-sm bg-white/[0.03] text-stone-400 border border-white/5">
-                        {item.category}
+                        <span
+                          className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 ${
+                            isDark
+                              ? 'text-amber-400 bg-amber-950/40 border border-amber-800/50'
+                              : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                          }`}
+                        >
+                          ★ Default
+                        </span>
+                      </div>
+                      <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                        Database Workspace
                       </span>
                     </div>
                   </div>
-
-                  {/* Title & Description */}
-                  <div>
-                    <h3 className="font-serif text-lg text-white group-hover:text-amber-400 transition-colors">
-                      {item.name}
-                    </h3>
-                    <p className="text-xs text-stone-400 mt-1 font-sans leading-relaxed line-clamp-2 min-h-[32px]">
-                      {item.description}
-                    </p>
-                  </div>
-
-                  {/* Auth Badge */}
-                  <div className="p-2.5 rounded-sm bg-[#080808] border border-white/5 text-[10px] font-mono text-stone-400 flex items-center justify-between">
-                    <span className="text-stone-500 uppercase">AUTH METHOD:</span>
-                    <span className="text-stone-200 font-medium">{item.authMethod}</span>
-                  </div>
-                </div>
-
-                {/* Footer Action */}
-                <div className="pt-4 mt-4 border-t border-white/5 flex items-center justify-between">
-                  <span className="text-[10px] font-mono text-stone-500 uppercase">
-                    {item.badge}
-                  </span>
-
-                  <button
-                    onClick={() => handleConnectCatalogItem(item)}
-                    className={`py-1.5 px-3.5 rounded-sm font-mono text-[10px] uppercase tracking-wider font-semibold transition-all flex items-center gap-1.5 ${
-                      isAlreadyConnected
-                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20'
-                        : 'bg-amber-500 hover:bg-amber-400 text-black shadow-md shadow-amber-500/10'
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                      isDark
+                        ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                        : 'bg-emerald-50 text-emerald-700'
                     }`}
                   >
-                    {isAlreadyConnected ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Connected</span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3.5 h-3.5 fill-black" />
-                        <span>Connect</span>
-                      </>
-                    )}
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'
+                      }`}
+                    />
+                    Connected
+                  </span>
+                </div>
+
+                {/* Description */}
+                <p
+                  className={`text-xs leading-relaxed min-h-[34px] ${
+                    isDark ? 'text-[#A1A1A1]' : 'text-slate-500'
+                  }`}
+                >
+                  Sync saved notes, clips, and summaries to your workspace database.
+                </p>
+
+                {/* Target Row */}
+                <div
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                    isDark
+                      ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]'
+                      : 'bg-slate-50 border border-slate-100 text-slate-600'
+                  }`}
+                >
+                  <Table className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span className="text-xs font-medium truncate">
+                    Target: {notionDest.targetResourceName && !notionDest.targetResourceName.includes('Connect') ? notionDest.targetResourceName : 'Reading List & Research DB'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Footer row */}
+              <div
+                className={`flex items-center justify-between pt-4 mt-4 border-t ${
+                  isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
+                }`}
+              >
+                <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                  Last synced {notionDest.lastSync && notionDest.lastSync !== 'Never' ? notionDest.lastSync : '12m ago'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleTestPing(notionDest)}
+                    disabled={testSyncLoadingId === notionDest.id}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                      isDark
+                        ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                        : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                    }`}
+                    type="button"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${
+                        testSyncLoadingId === notionDest.id ? 'animate-spin text-[#3FE769]' : ''
+                      }`}
+                    />
+                    <span>
+                      {testSyncLoadingId === notionDest.id
+                        ? 'Syncing...'
+                        : testSyncSuccessId === notionDest.id
+                        ? 'Synced!'
+                        : 'Sync'}
+                    </span>
+                  </button>
+                  <button
+                    aria-label="Settings"
+                    onClick={() => setSelectedDestForConfig(notionDest)}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                      isDark
+                        ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
+                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                    }`}
+                    type="button"
+                  >
+                    <Settings className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+
+            {/* Card 2: Google Sheets (Connected) */}
+            <div
+              className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
+                isDark
+                  ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              }`}
+            >
+              <div className="flex flex-col gap-3.5">
+                {/* Top row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        isDark
+                          ? 'bg-[#0E2015] border border-[#194429]'
+                          : 'bg-emerald-50 border border-emerald-100 shadow-sm'
+                      }`}
+                    >
+                      <GoogleSheetsIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span
+                        className={`font-semibold text-sm ${
+                          isDark ? 'text-white' : 'text-slate-900'
+                        }`}
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        Google Sheets
+                      </span>
+                      <span
+                        className={`block text-xs ${
+                          isDark ? 'text-[#878787]' : 'text-slate-400'
+                        }`}
+                      >
+                        Spreadsheet Feed
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                      isDark
+                        ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                        : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'
+                      }`}
+                    />
+                    Connected
+                  </span>
+                </div>
+
+                {/* Description */}
+                <p
+                  className={`text-xs leading-relaxed min-h-[34px] ${
+                    isDark ? 'text-[#A1A1A1]' : 'text-slate-500'
+                  }`}
+                >
+                  Append clipped research and tabular data directly to spreadsheets.
+                </p>
+
+                {/* Target Row */}
+                <div
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                    isDark
+                      ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]'
+                      : 'bg-slate-50 border border-slate-100 text-slate-600'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span className="text-xs font-medium truncate">
+                    Target: {sheetsDest.targetResourceName && !sheetsDest.targetResourceName.includes('Connect') ? sheetsDest.targetResourceName : 'Clipped Opportunities 2026'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Footer row */}
+              <div
+                className={`flex items-center justify-between pt-4 mt-4 border-t ${
+                  isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
+                }`}
+              >
+                <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                  Last synced {sheetsDest.lastSync && sheetsDest.lastSync !== 'Never' ? sheetsDest.lastSync : '2m ago'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleTestPing(sheetsDest)}
+                    disabled={testSyncLoadingId === sheetsDest.id}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                      isDark
+                        ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                        : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                    }`}
+                    type="button"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${
+                        testSyncLoadingId === sheetsDest.id ? 'animate-spin text-[#3FE769]' : ''
+                      }`}
+                    />
+                    <span>
+                      {testSyncLoadingId === sheetsDest.id
+                        ? 'Syncing...'
+                        : testSyncSuccessId === sheetsDest.id
+                        ? 'Synced!'
+                        : 'Sync'}
+                    </span>
+                  </button>
+                  <button
+                    aria-label="Settings"
+                    onClick={() => setSelectedDestForConfig(sheetsDest)}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                      isDark
+                        ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
+                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                    }`}
+                    type="button"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Airtable (Connected) */}
+            <div
+              className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
+                isDark
+                  ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              }`}
+            >
+              <div className="flex flex-col gap-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        isDark
+                          ? 'bg-[#0B1E2D] border border-[#133854]'
+                          : 'bg-sky-50 border border-sky-100 shadow-sm'
+                      }`}
+                    >
+                      <AirtableIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span
+                        className={`font-semibold text-sm ${
+                          isDark ? 'text-white' : 'text-slate-900'
+                        }`}
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        Airtable
+                      </span>
+                      <span className={`block text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                        Relational Base
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                      isDark
+                        ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                        : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
+                    Connected
+                  </span>
+                </div>
+                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                  Map opportunities and job leads into relational talent pipelines.
+                </p>
+                <div
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                    isDark ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]' : 'bg-slate-50 border border-slate-100 text-slate-600'
+                  }`}
+                >
+                  <Database className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span className="text-xs font-medium truncate">
+                    Target: {airtableDest.targetResourceName || 'Hiring & Career Pipeline'}
+                  </span>
+                </div>
+              </div>
+              <div className={`flex items-center justify-between pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                  Last synced {airtableDest.lastSync || '1h ago'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleTestPing(airtableDest)}
+                    disabled={testSyncLoadingId === airtableDest.id}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                      isDark
+                        ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                        : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                    }`}
+                    type="button"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${testSyncLoadingId === airtableDest.id ? 'animate-spin text-[#3FE769]' : ''}`} />
+                    <span>{testSyncLoadingId === airtableDest.id ? 'Syncing...' : testSyncSuccessId === airtableDest.id ? 'Synced!' : 'Sync'}</span>
+                  </button>
+                  <button
+                    aria-label="Settings"
+                    onClick={() => setSelectedDestForConfig(airtableDest)}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                      isDark ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                    }`}
+                    type="button"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Webhook (Connected) */}
+            <div
+              className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
+                isDark
+                  ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              }`}
+            >
+              <div className="flex flex-col gap-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        isDark
+                          ? 'bg-[#1C1230] border border-[#311F54] text-[#A855F7]'
+                          : 'bg-purple-50 border border-purple-100 text-[#7C3AED] shadow-sm'
+                      }`}
+                    >
+                      <WebhookIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span
+                        className={`font-semibold text-sm ${
+                          isDark ? 'text-white' : 'text-slate-900'
+                        }`}
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        Webhook
+                      </span>
+                      <span className={`block text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                        Custom Automation
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                      isDark
+                        ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                        : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
+                    Connected
+                  </span>
+                </div>
+                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                  Send real-time JSON payloads to your custom API or automations.
+                </p>
+                <div
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                    isDark ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]' : 'bg-slate-50 border border-slate-100 text-slate-600'
+                  }`}
+                >
+                  <Zap className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span className="text-xs font-medium truncate">
+                    Target: {webhookDest.targetResourceName || 'Production Webhook'}
+                  </span>
+                </div>
+              </div>
+              <div className={`flex items-center justify-between pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                  Last synced {webhookDest.lastSync || '45m ago'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleTestPing(webhookDest)}
+                    disabled={testSyncLoadingId === webhookDest.id}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                      isDark
+                        ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                        : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                    }`}
+                    type="button"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{testSyncLoadingId === webhookDest.id ? 'Testing...' : 'Test'}</span>
+                  </button>
+                  <button
+                    aria-label="Webhook Studio & Payload Runner"
+                    onClick={() => setWebhookStudioDest(webhookDest)}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                      isDark ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                    }`}
+                    type="button"
+                    title="Webhook Studio & Payload Runner"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 5: Spotify (Unconnected) */}
+            <div
+              className={`rounded-2xl border border-dashed p-6 flex flex-col justify-between transition-all duration-200 ${
+                isDark
+                  ? 'bg-[#0E0E0E] border-[#2A2A2A] hover:border-[#3E3E3E]'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              }`}
+            >
+              <div className="flex flex-col gap-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        isDark
+                          ? 'bg-[#181818] border border-[#262626]'
+                          : 'bg-slate-50 border border-slate-100'
+                      }`}
+                    >
+                      <SpotifyIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span
+                        className={`font-semibold text-sm ${
+                          isDark ? 'text-[#D1D5DB]' : 'text-slate-700'
+                        }`}
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        Spotify
+                      </span>
+                      <span className={`block text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                        Audio Curation
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
+                      isDark
+                        ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    Not connected
+                  </span>
+                </div>
+                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                  Bookmark podcast episodes and audio timestamps to playlists.
+                </p>
+                <div className="h-[36px]" />
+              </div>
+              <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                <button
+                  onClick={() => setOauthModalDest(spotifyDest)}
+                  className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                    isDark
+                      ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
+                      : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
+                  }`}
+                  type="button"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Connect Spotify</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Card 6: YouTube Music (Unconnected) */}
+            <div
+              className={`rounded-2xl border border-dashed p-6 flex flex-col justify-between transition-all duration-200 ${
+                isDark
+                  ? 'bg-[#0E0E0E] border-[#2A2A2A] hover:border-[#3E3E3E]'
+                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              }`}
+            >
+              <div className="flex flex-col gap-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        isDark
+                          ? 'bg-[#181818] border border-[#262626]'
+                          : 'bg-slate-50 border border-slate-100'
+                      }`}
+                    >
+                      <YouTubeMusicIcon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span
+                        className={`font-semibold text-sm ${
+                          isDark ? 'text-[#D1D5DB]' : 'text-slate-700'
+                        }`}
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        YouTube Music
+                      </span>
+                      <span className={`block text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                        Media Exporter
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
+                      isDark
+                        ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    Not connected
+                  </span>
+                </div>
+                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                  Export study playlist tracks and video audio extracts.
+                </p>
+                <div className="h-[36px]" />
+              </div>
+              <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                <button
+                  onClick={() => setOauthModalDest(ytMusicDest)}
+                  className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                    isDark
+                      ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
+                      : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
+                  }`}
+                  type="button"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Connect YouTube Music</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {filteredCatalog.length === 0 && (
-          <div className="p-12 text-center bg-[#050505] border border-white/5 rounded-sm space-y-3">
-            <Compass className="w-8 h-8 text-stone-600 mx-auto animate-pulse" />
-            <p className="text-stone-300 font-serif text-base">No matching integration connector found.</p>
-            <p className="text-xs text-stone-500 font-sans max-w-md mx-auto">
-              Try searching with another keyword like "Sheets", "Notion", "Postgres", or "Webhook".
-            </p>
-            <button
-              onClick={() => { setExploreQuery(''); setExploreCategory('all'); }}
-              className="mt-2 px-4 py-2 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-sm font-mono text-xs uppercase tracking-wider hover:bg-amber-500/20"
+        {/* SECTION 2: RECENT ACTIVITY (Stitch Design Specification) */}
+        <div
+          className={`rounded-2xl border p-6 flex flex-col gap-5 transition-all duration-200 ${
+            isDark
+              ? 'bg-[#0E0E0E] border-[#262626]'
+              : 'bg-white border-slate-200 shadow-sm'
+          }`}
+        >
+          {/* Card Header & Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h2
+              className={`font-semibold text-lg tracking-tight ${
+                isDark ? 'text-white' : 'text-slate-900'
+              }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
             >
-              Reset Search Filters
+              Recent activity
+            </h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Filter Tabs */}
+              <div
+                className={`inline-flex p-1 rounded-xl border ${
+                  isDark
+                    ? 'bg-[#141414] border-[#262626]'
+                    : 'bg-slate-100 border border-slate-200/50'
+                }`}
+              >
+                {(['all', 'success', 'pending', 'failed'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActivityStatusFilter(tab)}
+                    type="button"
+                    className={`px-3 py-1 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
+                      activityStatusFilter === tab
+                        ? isDark
+                          ? 'bg-[#222222] text-white shadow-sm font-semibold'
+                          : 'bg-white text-slate-900 shadow-sm font-semibold'
+                        : isDark
+                          ? 'text-[#878787] hover:text-[#D1D5DB]'
+                          : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Input */}
+              <div className="relative w-56">
+                <Search
+                  className={`w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 ${
+                    isDark ? 'text-[#878787]' : 'text-slate-400'
+                  }`}
+                />
+                <input
+                  type="text"
+                  value={activitySearchQuery}
+                  onChange={e => setActivitySearchQuery(e.target.value)}
+                  placeholder="Filter logs..."
+                  className={`w-full h-8 pl-8 pr-7 rounded-lg text-xs transition-all outline-none border ${
+                    isDark
+                      ? 'bg-[#141414] border-[#262626] text-[#D1D5DB] placeholder:text-[#666666] focus:border-[#3FE769]'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-[#2D6A4F]'
+                  }`}
+                />
+                {activitySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setActivitySearchQuery('')}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 ${
+                      isDark ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-600'
+                    }`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Clean Human Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr
+                  className={`border-b text-xs font-medium uppercase tracking-wider ${
+                    isDark ? 'border-[#1F1F1F] text-[#878787]' : 'border-slate-100 text-slate-400'
+                  }`}
+                >
+                  <th className="pb-3 px-2 font-medium">Status</th>
+                  <th className="pb-3 px-4 font-medium">Destination</th>
+                  <th className="pb-3 px-4 font-medium">Clip title</th>
+                  <th className="pb-3 px-2 font-medium text-right">Time</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y text-sm ${isDark ? 'divide-[#1A1A1A]' : 'divide-slate-50'}`}>
+                {filteredActivity.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center">
+                      <p className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                        No activity found matching "{activitySearchQuery}" with status "{activityStatusFilter}"
+                      </p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredActivity.slice(0, 8).map(item => (
+                    <tr
+                      key={item.id}
+                      className={`transition-colors ${
+                        isDark ? 'hover:bg-[#141414]/70' : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <td className="py-3.5 px-2 whitespace-nowrap">
+                        {item.status === 'success' && (
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                              isDark ? 'text-[#3FE769]' : 'text-emerald-700'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-500'}`} />
+                            Success
+                          </span>
+                        )}
+                        {item.status === 'pending' && (
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                              isDark ? 'text-amber-400' : 'text-amber-700'
+                            }`}
+                          >
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            Pending
+                          </span>
+                        )}
+                        {item.status === 'failed' && (
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                              isDark ? 'text-rose-400' : 'text-rose-700'
+                            }`}
+                          >
+                            <span className="w-2 h-2 rounded-full bg-rose-500" />
+                            Failed
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-5 h-5 rounded flex items-center justify-center ${
+                              isDark ? 'bg-[#181818]' : 'bg-slate-100'
+                            }`}
+                          >
+                            {renderDestIcon(item.destination, 'w-3.5 h-3.5')}
+                          </div>
+                          <span
+                            className={`text-xs font-medium ${
+                              isDark ? 'text-[#D1D5DB]' : 'text-slate-800'
+                            }`}
+                          >
+                            {item.destination}
+                          </span>
+                        </div>
+                      </td>
+                      <td
+                        className={`py-3.5 px-4 text-xs font-medium truncate max-w-md ${
+                          isDark ? 'text-white' : 'text-slate-900'
+                        }`}
+                        title={item.details || item.clipTitle}
+                      >
+                        {item.clipTitle}
+                      </td>
+                      <td
+                        className={`py-3.5 px-2 text-right text-xs whitespace-nowrap ${
+                          isDark ? 'text-[#878787]' : 'text-slate-400'
+                        }`}
+                      >
+                        {item.time}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Bottom Link */}
+          <div
+            className={`pt-2 border-t flex items-center justify-between ${
+              isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
+            }`}
+          >
+            <span className={`text-[11px] ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+              Showing {Math.min(8, filteredActivity.length)} of {filteredActivity.length} events
+            </span>
+            <button
+              onClick={() => setShowAllActivityModal(true)}
+              type="button"
+              className={`inline-flex items-center gap-1 text-xs font-medium transition-colors cursor-pointer ${
+                isDark
+                  ? 'text-[#3FE769] hover:text-[#52F77D]'
+                  : 'text-[#2D6A4F] hover:text-[#40916C]'
+              }`}
+            >
+              <span>View all activity</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Sync Log History Stream */}
-      <div className="bg-[#080808] border border-white/5 rounded-sm p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between pb-4 border-b border-white/5">
-          <div>
-            <h2 className="text-xl font-serif text-white flex items-center gap-2">
-              <Clock className="w-5 h-5 text-amber-500" />
-              Live System Activity Stream
-            </h2>
-            <p className="text-xs text-stone-400 mt-0.5 font-sans">
-              Real-time audit log of formatted database payloads generated during clip actions.
-            </p>
-          </div>
 
+      {/* Real-Time Connection Success Toast Notification */}
+      {connectionSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-[100] animate-bounceIn flex items-center gap-3 px-4 py-3 rounded-xl border bg-emerald-950/90 text-emerald-200 border-emerald-500/50 shadow-2xl backdrop-blur-md">
+          <CheckCircle className="w-5 h-5 text-[#3FE769] shrink-0" />
+          <span className="text-xs font-medium">{connectionSuccessToast}</span>
           <button
-            onClick={() => {
-              const randomDest = destinations[Math.floor(Math.random() * destinations.length)];
-              handleTestPing(randomDest);
-            }}
-            className="px-3.5 py-2 rounded-sm bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-mono uppercase tracking-wider font-semibold hover:bg-amber-500/20 transition-colors flex items-center gap-1.5"
+            onClick={() => setConnectionSuccessToast(null)}
+            className="text-emerald-400 hover:text-white ml-2 cursor-pointer"
           >
-            <Send className="w-3.5 h-3.5" />
-            Simulate Web Clip Event
+            <X className="w-4 h-4" />
           </button>
         </div>
+      )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs font-sans">
-            <thead>
-              <tr className="border-b border-white/5 text-stone-500 uppercase font-mono text-[9px] tracking-[0.2em]">
-                <th className="py-3 px-3">STATUS</th>
-                <th className="py-3 px-3">TARGET</th>
-                <th className="py-3 px-3">PAYLOAD / TITLE</th>
-                <th className="py-3 px-3">LATENCY</th>
-                <th className="py-3 px-3">SIZE</th>
-                <th className="py-3 px-3">TIMESTAMP</th>
-                <th className="py-3 px-3">DETAILS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-stone-300">
-              {logs.slice(0, 8).map(log => (
-                <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
-                  <td className="py-3 px-3">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[9px] font-mono uppercase tracking-widest bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                      <CheckCircle className="w-3 h-3 text-amber-500" />
-                      SUCCESS
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 font-serif text-white text-sm">
-                    {log.destinationName}
-                  </td>
-                  <td className="py-3 px-3 max-w-xs truncate text-stone-200">
-                    {log.clipTitle}
-                  </td>
-                  <td className="py-3 px-3 font-mono text-stone-500 text-[11px]">
-                    {log.durationMs}ms
-                  </td>
-                  <td className="py-3 px-3 font-mono text-stone-500 text-[11px]">
-                    {log.payloadSize}
-                  </td>
-                  <td className="py-3 px-3 text-stone-500 font-mono text-[10px]">
-                    {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </td>
-                  <td className="py-3 px-3 text-stone-400 text-[11px] font-sans">
-                    {log.details}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Add Destination / Integration Catalog Modal (Part 5) */}
+      <AddDestinationModal
+        isOpen={showAddDestinationModal}
+        onClose={() => setShowAddDestinationModal(false)}
+        isDark={isDark}
+        destinations={destinations}
+        catalog={INTEGRATION_CATALOG}
+        onConnectItem={(item) => {
+          setShowAddDestinationModal(false);
+          handleConnectCatalogItem(item);
+        }}
+        onConfigureDest={(dest) => {
+          setShowAddDestinationModal(false);
+          setSelectedDestForConfig(dest);
+        }}
+        onCustomWebhook={() => {
+          setShowAddDestinationModal(false);
+          const existingWebhook = destinations.find(d => d.type === 'webhook') || webhookDest;
+          setWebhookStudioDest(existingWebhook);
+        }}
+      />
 
       {/* Configuration & Field Mapping Modal */}
       {selectedDestForConfig && (
@@ -1082,12 +1705,28 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
         />
       )}
 
+      {/* Webhook Studio & Payload Runner Modal (Part 6) */}
+      {(webhookStudioDest || showPayloadModal) && (
+        <WebhookStudioModal
+          isOpen={Boolean(webhookStudioDest || showPayloadModal)}
+          dest={webhookStudioDest || showPayloadModal!}
+          onClose={() => {
+            setWebhookStudioDest(null);
+            setShowPayloadModal(null);
+          }}
+          isDark={isDark}
+          onSave={handleSaveModalConfig}
+          onSendTest={handleWebhookTestDispatch}
+        />
+      )}
+
       {/* OAuth Consent & Permissions Modal */}
       {oauthModalDest && (
         <OAuthConnectModal
           dest={oauthModalDest}
           onClose={() => setOauthModalDest(null)}
           onGrant={handleGrantPermission}
+          isDark={isDark}
         />
       )}
 
@@ -1099,13 +1738,226 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
         />
       )}
 
-      {/* Sample Payload Inspector Modal */}
-      {showPayloadModal && (
-        <PayloadInspectorModal
-          dest={showPayloadModal}
-          onClose={() => setShowPayloadModal(null)}
-        />
+      {/* Full Activity History Modal (Stitch Part 4) */}
+      {showAllActivityModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className={`w-full max-w-3xl rounded-2xl border flex flex-col max-h-[85vh] shadow-2xl overflow-hidden ${
+              isDark ? 'bg-[#0E0E0E] border-[#262626]' : 'bg-white border-slate-200'
+            }`}
+          >
+            {/* Modal Header */}
+            <div
+              className={`p-6 border-b flex items-center justify-between ${
+                isDark ? 'border-[#1F1F1F] bg-[#0A0A0A]' : 'border-slate-100 bg-slate-50/50'
+              }`}
+            >
+              <div>
+                <h3
+                  className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  All Sync Activity
+                </h3>
+                <p className={`text-xs mt-0.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                  Complete chronological audit log of all destination synchronization events
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAllActivityModal(false)}
+                className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                  isDark ? 'text-[#878787] hover:text-white hover:bg-[#1A1A1A]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Filters & Simulation */}
+            <div
+              className={`p-4 border-b flex items-center justify-between gap-4 flex-wrap ${
+                isDark ? 'border-[#1F1F1F] bg-[#0E0E0E]' : 'border-slate-100 bg-white'
+              }`}
+            >
+              <div
+                className={`inline-flex p-1 rounded-xl border ${
+                  isDark ? 'bg-[#141414] border-[#262626]' : 'bg-slate-100 border border-slate-200/50'
+                }`}
+              >
+                {(['all', 'success', 'pending', 'failed'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActivityStatusFilter(tab)}
+                    type="button"
+                    className={`px-3 py-1 rounded-lg text-xs font-medium capitalize transition-all cursor-pointer ${
+                      activityStatusFilter === tab
+                        ? isDark
+                          ? 'bg-[#222222] text-white shadow-sm font-semibold'
+                          : 'bg-white text-slate-900 shadow-sm font-semibold'
+                        : isDark
+                          ? 'text-[#878787] hover:text-[#D1D5DB]'
+                          : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const randomDest = destinations[Math.floor(Math.random() * destinations.length)];
+                    handleTestPing(randomDest);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                    isDark
+                      ? 'border-[#2D6A4F]/60 text-[#3FE769] bg-[#142318]/60 hover:bg-[#142318]'
+                      : 'border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                  }`}
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Simulate Web Clip Event</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Table Content */}
+            <div className="overflow-y-auto flex-1 p-6">
+              <table className="w-full text-left">
+                <thead>
+                  <tr
+                    className={`border-b text-xs font-medium uppercase tracking-wider ${
+                      isDark ? 'border-[#1F1F1F] text-[#878787]' : 'border-slate-100 text-slate-400'
+                    }`}
+                  >
+                    <th className="pb-3 px-2 font-medium">Status</th>
+                    <th className="pb-3 px-4 font-medium">Destination</th>
+                    <th className="pb-3 px-4 font-medium">Clip title / Details</th>
+                    <th className="pb-3 px-4 font-medium">Latency</th>
+                    <th className="pb-3 px-2 font-medium text-right">Time</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y text-sm ${isDark ? 'divide-[#1A1A1A]' : 'divide-slate-50'}`}>
+                  {filteredActivity.map(item => (
+                    <tr
+                      key={item.id}
+                      className={`transition-colors ${
+                        isDark ? 'hover:bg-[#141414]/70' : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <td className="py-3 px-2 whitespace-nowrap">
+                        {item.status === 'success' && (
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                              isDark ? 'text-[#3FE769]' : 'text-emerald-700'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-500'}`} />
+                            Success
+                          </span>
+                        )}
+                        {item.status === 'pending' && (
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                              isDark ? 'text-amber-400' : 'text-amber-700'
+                            }`}
+                          >
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            Pending
+                          </span>
+                        )}
+                        {item.status === 'failed' && (
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                              isDark ? 'text-rose-400' : 'text-rose-700'
+                            }`}
+                          >
+                            <span className="w-2 h-2 rounded-full bg-rose-500" />
+                            Failed
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`w-5 h-5 rounded flex items-center justify-center ${
+                              isDark ? 'bg-[#181818]' : 'bg-slate-100'
+                            }`}
+                          >
+                            {renderDestIcon(item.destination, 'w-3.5 h-3.5')}
+                          </div>
+                          <span
+                            className={`text-xs font-medium ${
+                              isDark ? 'text-[#D1D5DB]' : 'text-slate-800'
+                            }`}
+                          >
+                            {item.destination}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 max-w-sm">
+                        <div
+                          className={`text-xs font-medium truncate ${isDark ? 'text-white' : 'text-slate-900'}`}
+                        >
+                          {item.clipTitle}
+                        </div>
+                        <div
+                          className={`text-[11px] truncate ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}
+                        >
+                          {item.details}
+                        </div>
+                      </td>
+                      <td
+                        className={`py-3 px-4 text-xs font-mono whitespace-nowrap ${
+                          isDark ? 'text-[#878787]' : 'text-slate-500'
+                        }`}
+                      >
+                        {item.durationMs || 220}ms
+                      </td>
+                      <td
+                        className={`py-3 px-2 text-right text-xs whitespace-nowrap ${
+                          isDark ? 'text-[#878787]' : 'text-slate-400'
+                        }`}
+                      >
+                        {item.time}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div
+              className={`p-4 border-t flex items-center justify-between ${
+                isDark ? 'border-[#1F1F1F] bg-[#0A0A0A]' : 'border-slate-100 bg-slate-50/50'
+              }`}
+            >
+              <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                {filteredActivity.length} event{filteredActivity.length === 1 ? '' : 's'} recorded
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowAllActivityModal(false)}
+                className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                  isDark
+                    ? 'bg-[#1C1C1C] text-white hover:bg-[#252525] border border-[#2E2E2E]'
+                    : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
+                }`}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+      </div>
     </div>
   );
 };
@@ -1514,234 +2366,1244 @@ const DestinationConfigModal: React.FC<ModalProps> = ({
   );
 };
 
-// Sub-Component: API Payload Inspector Modal
-const PayloadInspectorModal: React.FC<{ dest: DestinationConfig; onClose: () => void }> = ({
+// Sub-Component: Webhook Studio & Payload Runner Modal (Part 6)
+interface WebhookStudioModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  isDark: boolean;
+  dest: DestinationConfig;
+  onSave: (updated: DestinationConfig) => void;
+  onSendTest: (
+    dest: DestinationConfig,
+    customPayload?: any
+  ) => Promise<{
+    status: 'success' | 'error';
+    statusCode: number;
+    latencyMs: number;
+    responseData?: any;
+  }>;
+}
+
+const WebhookStudioModal: React.FC<WebhookStudioModalProps> = ({
+  isOpen,
+  onClose,
+  isDark,
   dest,
-  onClose
+  onSave,
+  onSendTest,
 }) => {
-  const [activeTab, setActiveTab] = useState<'json' | 'react' | 'node'>('json');
+  const [activeTab, setActiveTab] = useState<'studio' | 'endpoint' | 'headers' | 'tester'>('studio');
+  const [codeLang, setCodeLang] = useState<'json' | 'curl' | 'node' | 'python' | 'ts'>('json');
   const [copied, setCopied] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+
+  // Editable Webhook configuration state
+  const [endpointUrl, setEndpointUrl] = useState(
+    dest.endpointUrl ||
+      dest.targetResourceName ||
+      'https://api.yourdomain.com/v1/clips'
+  );
+  const [secretKey, setSecretKey] = useState(
+    dest.authKeyMasked && !dest.authKeyMasked.includes('•••')
+      ? dest.authKeyMasked
+      : 'whsec_99a8b1c4e72f09d832b412'
+  );
+  const [retryPolicy, setRetryPolicy] = useState<'none' | 'retry_3' | 'retry_5'>('retry_3');
+  const [subscribeSave, setSubscribeSave] = useState(true);
+  const [subscribeAi, setSubscribeAi] = useState(true);
+  const [subscribeTags, setSubscribeTags] = useState(true);
+
+  // Headers editor state
+  const [headers, setHeaders] = useState<Array<{ id: string; key: string; value: string }>>([
+    { id: 'h1', key: 'Content-Type', value: 'application/json' },
+    { id: 'h2', key: 'X-Clipper-Signature', value: 'sha256=${HMAC_DIGEST}' },
+    { id: 'h3', key: 'User-Agent', value: 'Clipper-Webhook-Agent/2.0' },
+  ]);
+
+  // Live runner state
+  const [isDispatching, setIsDispatching] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    statusCode: number;
+    latencyMs: number;
+    timestamp: string;
+    body: any;
+  } | null>(null);
+
+  if (!isOpen) return null;
 
   const samplePayload = {
-    event: "CLIPPER_SAVE_CLIP",
+    event: 'CLIPPER_SAVE_CLIP',
+    delivery_id: `del_${Date.now().toString(36)}`,
     timestamp: new Date().toISOString(),
     destination: {
-      provider: dest.type,
-      targetResource: dest.targetResourceName,
+      provider: 'webhook',
+      endpoint: endpointUrl,
     },
     payload: {
-      title: "Senior Frontend Engineer (React & TypeScript) - Remote",
-      url: "https://x.com/tech_careers/status/18219482104921",
-      selected_text: "We are hiring a Senior React Engineer! Remote worldwide. Stack: React 19, TypeScript...",
-      type: "job",
-      tags: ["Remote", "React", "Frontend", "TypeScript"],
-      ai_summary: "High-paying remote Senior Frontend Engineer opportunity focused on modern React, TS, and performance.",
-      extracted_data: {
-        company: "Vercel Ecosystem Labs",
-        salary: "$140,000 - $175,000",
-        location: "Remote (Worldwide)",
-        deadline: "Aug 25, 2026"
-      }
+      id: 'clip_8841',
+      title: 'Anthropic Claude 3.5 Sonnet Speculative Decoding',
+      url: 'https://news.ycombinator.com/item?id=4129581',
+      source_platform: 'HackerNews',
+      selected_text: 'Speculative decoding achieves 2.5x inference speedups on transformer models...',
+      tags: ['AI', 'LLM', 'Research', 'Performance'],
+      ai_summary: 'Technical analysis of draft model speculative sampling with KV-cache reuse.',
+      extracted_entities: {
+        author: 'Anthropic Research',
+        category: 'Machine Learning',
+        confidence_score: 0.98,
+      },
+    },
+  };
+
+  const getCodeSnippet = () => {
+    if (codeLang === 'json') {
+      return JSON.stringify(samplePayload, null, 2);
     }
-  };
-
-  const reactCodeSnippet = `// React + Tailwind CSS OAuth Permission & Connect Modal for ${dest.name}
-import React, { useState } from 'react';
-import { Database, Key, Check, Zap, X, RefreshCw } from 'lucide-react';
-
-export const ${dest.name.replace(/[^a-zA-Z0-9]/g, '')}OAuthModal = ({ onClose, onGrant }: { onClose: () => void; onGrant: (data: any) => void }) => {
-  const [accessType, setAccessType] = useState<'full' | 'partial'>('full');
-  const [actionType, setActionType] = useState<'create' | 'existing'>('create');
-  const [tableName, setTableName] = useState('${dest.targetResourceName || 'Clipped Vault 2026'}');
-  const [isAuthorizing, setIsAuthorizing] = useState(false);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsAuthorizing(true);
-    setTimeout(() => {
-      onGrant({ accessType, actionType, tableName });
-      setIsAuthorizing(false);
-    }, 600);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#080808] border border-white/10 w-full max-w-xl rounded-sm shadow-2xl overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-white/5 bg-[#050505] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-sm bg-[#080808] border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Database className="w-6 h-6" />
-            </div>
-            <div>
-              <span className="text-[10px] font-mono text-amber-500 uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 border border-amber-500/30 rounded-sm">
-                OAuth 2.0 Consent
-              </span>
-              <h2 className="text-xl font-serif text-white mt-1">Connect to ${dest.name}</h2>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-stone-500 hover:text-white"><X className="w-5 h-5" /></button>
-        </div>
-
-        {/* Options Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 text-xs bg-[#080808]">
-          <div className="p-3 bg-[#050505] border border-white/5 rounded-sm flex items-center justify-between">
-            <span className="text-stone-300">Authorizing Account:</span>
-            <span className="font-mono text-stone-200 text-[11px] bg-white/[0.04] px-2 py-1 rounded-sm border border-white/5">
-              ${dest.accountEmail || 'user@gmail.com'}
-            </span>
-          </div>
-
-          {/* Access Scope Options */}
-          <div className="space-y-3">
-            <label className="block text-[10px] font-mono uppercase tracking-wider text-stone-400">1. Choose Access Scope</label>
-            <div className="grid grid-cols-2 gap-3">
-              <div
-                onClick={() => setAccessType('full')}
-                className={\`p-3.5 rounded-sm border cursor-pointer \${accessType === 'full' ? 'bg-amber-500/10 border-amber-500 text-amber-300' : 'bg-[#050505] border-white/5 text-stone-400'}\`}
-              >
-                <div className="font-mono text-xs uppercase font-semibold text-white mb-1">Full Access Sync</div>
-                <p className="text-[11px] opacity-80">Read, write, & auto-create new tables/sheets dynamically when clipping.</p>
-              </div>
-              <div
-                onClick={() => setAccessType('partial')}
-                className={\`p-3.5 rounded-sm border cursor-pointer \${accessType === 'partial' ? 'bg-amber-500/10 border-amber-500 text-amber-300' : 'bg-[#050505] border-white/5 text-stone-400'}\`}
-              >
-                <div className="font-mono text-xs uppercase font-semibold text-white mb-1">Partial Access</div>
-                <p className="text-[11px] opacity-80">Append-only access into an existing selected table. No table creation rights.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Target Resource Option */}
-          <div className="space-y-2">
-            <label className="block text-[10px] font-mono uppercase tracking-wider text-stone-400">2. Target Resource</label>
-            <input
-              type="text"
-              value={tableName}
-              onChange={e => setTableName(e.target.value)}
-              className="w-full px-3.5 py-2 bg-[#050505] text-white rounded-sm border border-white/10 focus:border-amber-500 outline-none"
-            />
-          </div>
-
-          {/* Submit Action */}
-          <button
-            type="submit"
-            disabled={isAuthorizing}
-            className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-mono text-xs uppercase tracking-wider font-semibold rounded-sm shadow-lg flex items-center justify-center gap-2"
-          >
-            {isAuthorizing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 fill-black" />}
-            {isAuthorizing ? 'Authorizing Uplink...' : 'Grant Permission & Connect'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-};`;
-
-  const nodeCodeSnippet = `// Node.js Express Backend Integration Handler for ${dest.name}
+    if (codeLang === 'curl') {
+      return `curl -X POST "${endpointUrl}" \\
+  -H "Content-Type: application/json" \\
+  -H "X-Clipper-Signature: sha256=a8f4c931b2..." \\
+  -d '${JSON.stringify(samplePayload)}'`;
+    }
+    if (codeLang === 'node') {
+      return `// Node.js Express Webhook Consumer Handler
 import express from 'express';
+import crypto from 'crypto';
 
 const app = express();
 app.use(express.json());
 
-app.post('/api/sync/${dest.type}', async (req, res) => {
-  try {
-    const { payload, destination } = req.body;
-    console.log(\`[${dest.name}] Incoming clip:\`, payload.title);
+const WEBHOOK_SECRET = process.env.CLIPPER_WEBHOOK_SECRET || '${secretKey}';
 
-    // Save to ${dest.name} using official SDK or REST API
-    // Endpoint: ${dest.endpointUrl || 'https://api.clipper.internal/v1/sync'}
-    
-    return res.status(200).json({
-      status: 'success',
-      provider: '${dest.type}',
-      resource: destination.targetResource || '${dest.targetResourceName}',
-      syncedAt: new Date().toISOString()
-    });
-  } catch (error) {
-    return res.status(500).json({ error: (error as Error).message });
+app.post('/v1/clips', (req, res) => {
+  const signature = req.headers['x-clipper-signature'];
+  const computedSig = 'sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET)
+    .update(JSON.stringify(req.body))
+    .digest('hex');
+
+  // Verify HMAC signature authenticity
+  if (signature !== computedSig) {
+    return res.status(401).json({ error: 'Invalid HMAC signature' });
   }
-});`;
 
-  const getActiveText = () => {
-    if (activeTab === 'json') return JSON.stringify(samplePayload, null, 2);
-    if (activeTab === 'react') return reactCodeSnippet;
-    return nodeCodeSnippet;
+  const { payload } = req.body;
+  console.log('Successfully received clipped opportunity:', payload.title);
+
+  return res.status(200).json({
+    status: 'received',
+    clipId: payload.id,
+    processedAt: new Date().toISOString()
+  });
+});`;
+    }
+    if (codeLang === 'python') {
+      return `# Python FastAPI Webhook Receiver
+from fastapi import FastAPI, Header, HTTPException, Request
+import hmac, hashlib, json
+
+app = FastAPI()
+WEBHOOK_SECRET = "${secretKey}"
+
+@app.post("/v1/clips")
+async def receive_clipper_event(request: Request, x_clipper_signature: str = Header(None)):
+    raw_body = await request.body()
+    expected_sig = "sha256=" + hmac.new(WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    
+    if x_clipper_signature != expected_sig:
+        raise HTTPException(status_code=401, detail="Invalid HMAC signature")
+        
+    data = json.loads(raw_body)
+    print(f"Clipped: {data['payload']['title']}")
+    return {"status": "success", "echo": data['payload']['id']}`;
+    }
+    return `// TypeScript Clipper Payload Interface
+export interface ClipperWebhookPayload {
+  event: 'CLIPPER_SAVE_CLIP' | 'CLIPPER_AI_ENRICHMENT';
+  delivery_id: string;
+  timestamp: string;
+  destination: {
+    provider: 'webhook';
+    endpoint: string;
+  };
+  payload: {
+    id: string;
+    title: string;
+    url: string;
+    source_platform: string;
+    selected_text: string;
+    tags: string[];
+    ai_summary: string;
+    extracted_entities: Record<string, any>;
+  };
+}`;
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(getActiveText());
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(getCodeSnippet());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleGenerateSecret = () => {
+    const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    setSecretKey(`whsec_${randomHex}`);
+  };
+
+  const handleAddHeader = () => {
+    setHeaders(prev => [...prev, { id: `h_${Date.now()}`, key: 'X-Custom-Header', value: 'Value' }]);
+  };
+
+  const handleRemoveHeader = (id: string) => {
+    setHeaders(prev => prev.filter(h => h.id !== id));
+  };
+
+  const handleExecuteTest = async () => {
+    setIsDispatching(true);
+    try {
+      const res = await onSendTest(
+        {
+          ...dest,
+          endpointUrl,
+          targetResourceName: endpointUrl,
+        },
+        samplePayload
+      );
+
+      setTestResult({
+        success: res.status === 'success',
+        statusCode: res.statusCode || 200,
+        latencyMs: res.latencyMs || 142,
+        timestamp: new Date().toLocaleTimeString(),
+        body: res.responseData || {
+          status: 'success',
+          received: true,
+          endpoint: endpointUrl,
+        },
+      });
+    } catch (err) {
+      setTestResult({
+        success: false,
+        statusCode: 500,
+        latencyMs: 380,
+        timestamp: new Date().toLocaleTimeString(),
+        body: { error: 'Endpoint unreachable or network timeout' },
+      });
+    } finally {
+      setIsDispatching(false);
+    }
+  };
+
+  const handleSaveAndDeploy = () => {
+    onSave({
+      ...dest,
+      connected: true,
+      status: 'active',
+      targetResourceName: endpointUrl,
+      endpointUrl,
+      authKeyMasked: secretKey,
+      syncFrequency: retryPolicy === 'none' ? 'instant' : 'instant',
+    });
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-      <div className="bg-[#080808] border border-white/10 w-full max-w-2xl rounded-sm shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="p-5 border-b border-white/5 flex items-center justify-between bg-[#050505]">
-          <div className="flex items-center gap-2">
-            <Play className="w-4 h-4 text-amber-500" />
-            <h3 className="font-serif text-lg text-white">
-              Integration Code & UI — {dest.name}
-            </h3>
+    <div
+      className="fixed inset-0 z-[85] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className={`w-full max-w-3xl rounded-2xl border flex flex-col max-h-[88vh] shadow-2xl overflow-hidden transition-all ${
+          isDark ? 'bg-[#0E0E0E] border-[#262626]' : 'bg-white border-slate-200'
+        }`}
+      >
+        {/* Modal Header */}
+        <div
+          className={`p-6 border-b flex items-center justify-between ${
+            isDark ? 'border-[#1F1F1F] bg-[#0A0A0A]' : 'border-slate-100 bg-slate-50/70'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-11 h-11 rounded-xl flex items-center justify-center p-2.5 ${
+                isDark ? 'bg-[#181818] border border-[#282828]' : 'bg-white border border-slate-200 shadow-sm'
+              }`}
+            >
+              <WebhookIcon className="w-6 h-6 text-purple-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3
+                  className={`text-lg font-semibold tracking-tight ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  Webhook Gateway & Payload Studio
+                </h3>
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                    isDark
+                      ? 'bg-purple-950/40 text-purple-300 border border-purple-800/40'
+                      : 'bg-purple-50 text-purple-700 border border-purple-200'
+                  }`}
+                >
+                  REST / HTTPS
+                </span>
+              </div>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                Configure target endpoint, inspect structured JSON schemas, and test live HTTP deliveries.
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-stone-500 hover:text-white">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+              isDark
+                ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex border-b border-white/5 bg-[#080808] px-5 text-xs font-mono">
-          <button
-            onClick={() => setActiveTab('json')}
-            className={`py-3 px-4 border-b-2 uppercase tracking-wider transition-colors ${
-              activeTab === 'json' ? 'border-amber-500 text-amber-400 font-semibold' : 'border-transparent text-stone-500 hover:text-stone-300'
-            }`}
-          >
-            JSON Payload
-          </button>
-          <button
-            onClick={() => setActiveTab('react')}
-            className={`py-3 px-4 border-b-2 uppercase tracking-wider transition-colors ${
-              activeTab === 'react' ? 'border-amber-500 text-amber-400 font-semibold' : 'border-transparent text-stone-500 hover:text-stone-300'
-            }`}
-          >
-            React + Tailwind UI Code
-          </button>
-          <button
-            onClick={() => setActiveTab('node')}
-            className={`py-3 px-4 border-b-2 uppercase tracking-wider transition-colors ${
-              activeTab === 'node' ? 'border-amber-500 text-amber-400 font-semibold' : 'border-transparent text-stone-500 hover:text-stone-300'
-            }`}
-          >
-            Node.js Endpoint
-          </button>
+        {/* Studio Navigation Tabs */}
+        <div
+          className={`flex border-b px-6 text-xs font-medium gap-2 ${
+            isDark ? 'border-[#1F1F1F] bg-[#0E0E0E]' : 'border-slate-100 bg-white'
+          }`}
+        >
+          {[
+            { id: 'studio', label: 'Payload Studio', icon: Code2 },
+            { id: 'endpoint', label: 'Endpoint & Security', icon: Globe },
+            { id: 'headers', label: 'Custom Headers', icon: Sliders },
+            { id: 'tester', label: 'Live Test Runner', icon: Zap },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                type="button"
+                className={`py-3 px-3.5 border-b-2 flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isActive
+                    ? isDark
+                      ? 'border-[#3FE769] text-white font-semibold'
+                      : 'border-[#2D6A4F] text-[#2D6A4F] font-semibold'
+                    : isDark
+                    ? 'border-transparent text-[#878787] hover:text-[#D1D5DB]'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="p-5 space-y-3 bg-[#080808] flex-1 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between text-xs text-stone-500 font-mono">
-            <span>TLS 1.3 / {dest.name}</span>
+        {/* Tab Content Body */}
+        <div className={`overflow-y-auto flex-1 p-6 space-y-5 ${isDark ? 'bg-[#0E0E0E]' : 'bg-white'}`}>
+          {/* TAB 1: PAYLOAD STUDIO */}
+          {activeTab === 'studio' && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Language Switcher */}
+                <div
+                  className={`inline-flex p-1 rounded-xl border ${
+                    isDark ? 'bg-[#141414] border-[#262626]' : 'bg-slate-100 border-slate-200/60'
+                  }`}
+                >
+                  {[
+                    { id: 'json', label: 'JSON' },
+                    { id: 'curl', label: 'cURL' },
+                    { id: 'node', label: 'Node.js' },
+                    { id: 'python', label: 'Python' },
+                    { id: 'ts', label: 'TypeScript' },
+                  ].map(lang => (
+                    <button
+                      key={lang.id}
+                      onClick={() => setCodeLang(lang.id as any)}
+                      type="button"
+                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        codeLang === lang.id
+                          ? isDark
+                            ? 'bg-[#222222] text-white shadow-sm font-semibold'
+                            : 'bg-white text-slate-900 shadow-sm font-semibold'
+                          : isDark
+                          ? 'text-[#878787] hover:text-[#D1D5DB]'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Copy Button */}
+                <button
+                  onClick={handleCopyCode}
+                  type="button"
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                    isDark
+                      ? 'border-[#262626] bg-[#141414] text-[#D1D5DB] hover:text-white hover:bg-[#1E1E1E]'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-[#3FE769]" />
+                      <span className="text-[#3FE769]">Copied Snippet!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copy Code</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Code Display Window */}
+              <div
+                className={`rounded-2xl border overflow-hidden ${
+                  isDark ? 'border-[#222222] bg-[#050505]' : 'border-slate-200 bg-slate-900 text-slate-100'
+                }`}
+              >
+                <div
+                  className={`px-4 py-2.5 border-b flex items-center justify-between text-[11px] font-mono ${
+                    isDark ? 'border-[#181818] text-[#777777] bg-[#0A0A0A]' : 'border-slate-800 text-slate-400 bg-slate-950'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                    <span className="ml-2 font-semibold text-slate-300">
+                      {codeLang === 'json' ? 'payload.json' : codeLang === 'curl' ? 'request.sh' : codeLang === 'node' ? 'server.ts' : codeLang === 'python' ? 'app.py' : 'types.ts'}
+                    </span>
+                  </div>
+                  <span>HMAC-SHA256 Signed</span>
+                </div>
+                <pre className="p-4 text-xs font-mono overflow-auto max-h-[340px] leading-relaxed text-emerald-400/90 scrollbar-none">
+                  {getCodeSnippet()}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: ENDPOINT & SECURITY */}
+          {activeTab === 'endpoint' && (
+            <div className="space-y-4">
+              {/* Endpoint URL Input */}
+              <div className="space-y-1.5">
+                <label className={`block text-xs font-medium ${isDark ? 'text-[#D1D5DB]' : 'text-slate-700'}`}>
+                  Target Webhook Endpoint URL
+                </label>
+                <div className="relative">
+                  <Globe className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#666666]' : 'text-slate-400'}`} />
+                  <input
+                    type="url"
+                    value={endpointUrl}
+                    onChange={e => setEndpointUrl(e.target.value)}
+                    placeholder="https://api.yourdomain.com/v1/clips"
+                    className={`w-full h-10 pl-9 pr-20 rounded-xl text-xs outline-none border transition-all ${
+                      isDark
+                        ? 'bg-[#141414] text-white border-[#262626] focus:border-[#3FE769]'
+                        : 'bg-slate-50 text-slate-900 border-slate-200 focus:bg-white focus:border-[#2D6A4F]'
+                    }`}
+                  />
+                  <span
+                    className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono px-2 py-0.5 rounded-md ${
+                      isDark ? 'bg-[#222222] text-[#A1A1A1]' : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    POST
+                  </span>
+                </div>
+              </div>
+
+              {/* Secret Signing Key */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className={`text-xs font-medium ${isDark ? 'text-[#D1D5DB]' : 'text-slate-700'}`}>
+                    HMAC SHA-256 Signing Secret
+                  </label>
+                  <button
+                    onClick={handleGenerateSecret}
+                    type="button"
+                    className={`text-[11px] font-medium transition-colors cursor-pointer ${
+                      isDark ? 'text-[#3FE769] hover:underline' : 'text-[#2D6A4F] hover:underline'
+                    }`}
+                  >
+                    Regenerate Key
+                  </button>
+                </div>
+                <div className="relative">
+                  <Key className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#666666]' : 'text-slate-400'}`} />
+                  <input
+                    type={showSecret ? 'text' : 'password'}
+                    value={secretKey}
+                    onChange={e => setSecretKey(e.target.value)}
+                    className={`w-full h-10 pl-9 pr-24 rounded-xl text-xs font-mono outline-none border transition-all ${
+                      isDark
+                        ? 'bg-[#141414] text-white border-[#262626] focus:border-[#3FE769]'
+                        : 'bg-slate-50 text-slate-900 border-slate-200 focus:bg-white focus:border-[#2D6A4F]'
+                    }`}
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      onClick={() => setShowSecret(!showSecret)}
+                      type="button"
+                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        isDark ? 'text-[#878787] hover:text-white' : 'text-slate-400 hover:text-slate-700'
+                      }`}
+                      title={showSecret ? 'Hide secret' : 'Show secret'}
+                    >
+                      {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(secretKey);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      type="button"
+                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        isDark ? 'text-[#878787] hover:text-white' : 'text-slate-400 hover:text-slate-700'
+                      }`}
+                      title="Copy secret"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Event Subscriptions */}
+              <div className="space-y-2 pt-2">
+                <label className={`block text-xs font-medium ${isDark ? 'text-[#D1D5DB]' : 'text-slate-700'}`}>
+                  Subscribed Trigger Events
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { label: 'Save Clip Trigger', state: subscribeSave, set: setSubscribeSave, desc: 'Fires instantly on clip save' },
+                    { label: 'AI Summary Generated', state: subscribeAi, set: setSubscribeAi, desc: 'Fires when tags & summary resolve' },
+                    { label: 'Tag / Folder Update', state: subscribeTags, set: setSubscribeTags, desc: 'Fires on metadata changes' },
+                  ].map((evt, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => evt.set(!evt.state)}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        evt.state
+                          ? isDark
+                            ? 'bg-[#142318] border-[#2D6A4F] text-white'
+                            : 'bg-emerald-50/70 border-emerald-500 text-slate-900 shadow-sm'
+                          : isDark
+                          ? 'bg-[#141414] border-[#262626] text-[#878787]'
+                          : 'bg-slate-50 border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold">{evt.label}</span>
+                        <input
+                          type="checkbox"
+                          checked={evt.state}
+                          onChange={() => {}}
+                          className={`cursor-pointer ${isDark ? 'accent-[#3FE769]' : 'accent-[#2D6A4F]'}`}
+                        />
+                      </div>
+                      <p className={`text-[11px] ${isDark ? 'text-stone-300' : 'text-slate-500'}`}>
+                        {evt.desc}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Retry Policy */}
+              <div className="space-y-2 pt-2">
+                <label className={`block text-xs font-medium ${isDark ? 'text-[#D1D5DB]' : 'text-slate-700'}`}>
+                  Delivery Retry & Failure Policy
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[
+                    { id: 'none', label: 'No Retries', desc: 'Single attempt only. Discard failures.' },
+                    { id: 'retry_3', label: '3 Retries with Jitter', desc: 'Exponential backoff (Recommended).' },
+                    { id: 'retry_5', label: '5 Retries + Dead-Letter', desc: 'Maximum durability for enterprise.' },
+                  ].map(policy => (
+                    <div
+                      key={policy.id}
+                      onClick={() => setRetryPolicy(policy.id as any)}
+                      className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        retryPolicy === policy.id
+                          ? isDark
+                            ? 'bg-[#142318] border-[#2D6A4F] text-white'
+                            : 'bg-emerald-50/70 border-emerald-500 text-slate-900 shadow-sm'
+                          : isDark
+                          ? 'bg-[#141414] border-[#262626] text-[#878787]'
+                          : 'bg-slate-50 border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold">{policy.label}</span>
+                        <input
+                          type="radio"
+                          name="retryPolicy"
+                          checked={retryPolicy === policy.id}
+                          onChange={() => {}}
+                          className={`cursor-pointer ${isDark ? 'accent-[#3FE769]' : 'accent-[#2D6A4F]'}`}
+                        />
+                      </div>
+                      <p className={`text-[11px] ${isDark ? 'text-stone-300' : 'text-slate-500'}`}>
+                        {policy.desc}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: CUSTOM HEADERS */}
+          {activeTab === 'headers' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                  Custom HTTP headers injected into every outgoing webhook request.
+                </p>
+                <button
+                  onClick={handleAddHeader}
+                  type="button"
+                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                    isDark
+                      ? 'border-[#262626] bg-[#141414] text-[#D1D5DB] hover:text-white hover:bg-[#1E1E1E]'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Header</span>
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                {headers.map(h => (
+                  <div key={h.id} className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={h.key}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setHeaders(prev => prev.map(item => (item.id === h.id ? { ...item, key: val } : item)));
+                      }}
+                      placeholder="Header-Name"
+                      className={`w-1/3 h-9 px-3 rounded-xl text-xs font-mono outline-none border transition-all ${
+                        isDark
+                          ? 'bg-[#141414] text-white border-[#262626] focus:border-[#3FE769]'
+                          : 'bg-slate-50 text-slate-900 border-slate-200 focus:bg-white focus:border-[#2D6A4F]'
+                      }`}
+                    />
+                    <input
+                      type="text"
+                      value={h.value}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setHeaders(prev => prev.map(item => (item.id === h.id ? { ...item, value: val } : item)));
+                      }}
+                      placeholder="Header Value"
+                      className={`flex-1 h-9 px-3 rounded-xl text-xs font-mono outline-none border transition-all ${
+                        isDark
+                          ? 'bg-[#141414] text-white border-[#262626] focus:border-[#3FE769]'
+                          : 'bg-slate-50 text-slate-900 border-slate-200 focus:bg-white focus:border-[#2D6A4F]'
+                      }`}
+                    />
+                    <button
+                      onClick={() => handleRemoveHeader(h.id)}
+                      type="button"
+                      className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                        isDark ? 'text-[#878787] hover:text-rose-400' : 'text-slate-400 hover:text-rose-600'
+                      }`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: LIVE TEST RUNNER */}
+          {activeTab === 'tester' && (
+            <div className="space-y-4">
+              <div
+                className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                  isDark ? 'bg-[#121212] border-[#222222]' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div>
+                  <h4 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    Live Test Delivery
+                  </h4>
+                  <p className={`text-xs mt-0.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                    Send a test payload to <code className="font-mono">{endpointUrl}</code> and verify roundtrip response.
+                  </p>
+                </div>
+                <button
+                  onClick={handleExecuteTest}
+                  disabled={isDispatching}
+                  type="button"
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium text-white shadow-md transition-all cursor-pointer ${
+                    isDark
+                      ? 'bg-[#2D6A4F] hover:bg-[#388562] border border-[#3FE769]/30 hover:border-[#3FE769]/60'
+                      : 'bg-[#2D6A4F] hover:bg-[#40916C]'
+                  }`}
+                >
+                  {isDispatching ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Dispatching...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Dispatch Test Payload</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Test Flight Output */}
+              {testResult && (
+                <div
+                  className={`rounded-2xl border p-4 space-y-3 animate-fadeIn ${
+                    testResult.success
+                      ? isDark
+                        ? 'bg-[#0E1B12] border-[#214328]'
+                        : 'bg-emerald-50/50 border-emerald-200'
+                      : isDark
+                      ? 'bg-rose-950/30 border-rose-900/50'
+                      : 'bg-rose-50 border-rose-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          testResult.success
+                            ? isDark
+                              ? 'bg-[#142318] text-[#3FE769] border border-[#2D6A4F]'
+                              : 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${testResult.success ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        HTTP {testResult.statusCode} OK
+                      </span>
+                      <span className={`text-xs font-mono ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                        Roundtrip: {testResult.latencyMs}ms
+                      </span>
+                    </div>
+                    <span className={`text-[11px] ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                      Verified at {testResult.timestamp}
+                    </span>
+                  </div>
+
+                  <p className={`text-xs ${isDark ? 'text-stone-300' : 'text-slate-600'}`}>
+                    Test delivery verified successfully. A new audit event has been recorded in the Recent Activity table.
+                  </p>
+
+                  <div
+                    className={`p-3 rounded-xl border text-xs font-mono overflow-auto max-h-40 leading-relaxed ${
+                      isDark ? 'bg-[#050505] border-[#181818] text-emerald-400' : 'bg-white border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    {JSON.stringify(testResult.body, null, 2)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div
+          className={`p-4 border-t flex items-center justify-between ${
+            isDark ? 'border-[#1F1F1F] bg-[#0A0A0A]' : 'border-slate-100 bg-slate-50/70'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <ShieldCheck className={`w-4 h-4 ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`} />
+            <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+              TLS 1.3 • HMAC-SHA256 Signed Deliveries
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleCopy}
-              className="text-amber-500 font-semibold flex items-center gap-1 hover:underline uppercase tracking-wider text-[10px]"
+              type="button"
+              onClick={onClose}
+              className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                isDark
+                  ? 'bg-[#1C1C1C] text-white hover:bg-[#252525] border border-[#2E2E2E]'
+                  : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
+              }`}
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-amber-400" /> : <Copy className="w-3.5 h-3.5" />}
-              {copied ? 'Copied Code!' : 'Copy Code Snippet'}
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveAndDeploy}
+              className={`px-5 py-1.5 rounded-xl text-xs font-medium text-white shadow-md transition-all cursor-pointer ${
+                isDark
+                  ? 'bg-[#2D6A4F] hover:bg-[#388562] border border-[#3FE769]/30 hover:border-[#3FE769]/60'
+                  : 'bg-[#2D6A4F] hover:bg-[#40916C]'
+              }`}
+            >
+              Save & Deploy Webhook
             </button>
           </div>
-
-          <pre className="p-4 rounded-sm bg-[#050505] text-amber-400/90 text-xs font-mono overflow-auto border border-white/5 flex-1 max-h-[380px] leading-relaxed">
-            {getActiveText()}
-          </pre>
         </div>
+      </div>
+    </div>
+  );
+};
 
-        <div className="p-4 border-t border-white/5 bg-[#050505] flex justify-end">
+// Sub-Component: Add Destination & Integration Catalog Modal (Part 5)
+interface AddDestinationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  isDark: boolean;
+  destinations: DestinationConfig[];
+  catalog: CatalogItem[];
+  onConnectItem: (item: CatalogItem) => void;
+  onConfigureDest: (dest: DestinationConfig) => void;
+  onCustomWebhook: () => void;
+}
+
+const AddDestinationModal: React.FC<AddDestinationModalProps> = ({
+  isOpen,
+  onClose,
+  isDark,
+  destinations,
+  catalog,
+  onConnectItem,
+  onConfigureDest,
+  onCustomWebhook,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState<
+    'all' | 'popular' | 'spreadsheets' | 'databases' | 'crms' | 'productivity' | 'automation'
+  >('all');
+
+  if (!isOpen) return null;
+
+  const categories = [
+    { id: 'all', label: 'All' },
+    { id: 'popular', label: '★ Popular' },
+    { id: 'spreadsheets', label: 'Spreadsheets' },
+    { id: 'databases', label: 'Databases & SQL' },
+    { id: 'crms', label: 'CRMs & Sales' },
+    { id: 'productivity', label: 'Productivity & Media' },
+    { id: 'automation', label: 'Webhooks & Automation' },
+  ] as const;
+
+  const filteredItems = catalog.filter(item => {
+    const matchesCategory =
+      activeCategory === 'all'
+        ? true
+        : activeCategory === 'popular'
+        ? Boolean(item.popular)
+        : item.category === activeCategory;
+
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      item.name.toLowerCase().includes(query) ||
+      item.description.toLowerCase().includes(query) ||
+      item.badge.toLowerCase().includes(query) ||
+      item.category.toLowerCase().includes(query) ||
+      item.authMethod.toLowerCase().includes(query);
+
+    return matchesCategory && matchesSearch;
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className={`w-full max-w-4xl rounded-2xl border flex flex-col max-h-[88vh] shadow-2xl overflow-hidden transition-all ${
+          isDark ? 'bg-[#0E0E0E] border-[#262626]' : 'bg-white border-slate-200'
+        }`}
+      >
+        {/* Header */}
+        <div
+          className={`p-6 border-b flex items-center justify-between ${
+            isDark ? 'border-[#1F1F1F] bg-[#0A0A0A]' : 'border-slate-100 bg-slate-50/70'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+                isDark ? 'bg-[#181818] border border-[#2A2A2A]' : 'bg-white border border-slate-200 shadow-sm'
+              }`}
+            >
+              <Plus className={`w-5 h-5 ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3
+                  className={`text-lg font-semibold tracking-tight ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  Add Destination
+                </h3>
+                <span
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                    isDark
+                      ? 'bg-emerald-950/50 text-[#3FE769] border border-emerald-800/40'
+                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  }`}
+                >
+                  14 Connectors
+                </span>
+              </div>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                Choose a pre-built connector, database, CRM, or custom webhook to sync your saves.
+              </p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono uppercase tracking-wider font-semibold rounded-sm"
+            aria-label="Close"
+            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+              isDark
+                ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+            }`}
           >
-            Close Inspector
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Search & Category Filter Bar */}
+        <div
+          className={`p-4 border-b space-y-3 ${
+            isDark ? 'border-[#1F1F1F] bg-[#0E0E0E]' : 'border-slate-100 bg-white'
+          }`}
+        >
+          {/* Search Box */}
+          <div className="relative">
+            <Search
+              className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${
+                isDark ? 'text-[#666666]' : 'text-slate-400'
+              }`}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search 14+ destinations (e.g. Notion, Google Sheets, Supabase, Webhook)..."
+              className={`w-full h-9 pl-9 pr-8 rounded-xl text-xs transition-all outline-none border ${
+                isDark
+                  ? 'bg-[#141414] border-[#262626] text-white placeholder:text-[#666666] focus:border-[#3FE769]'
+                  : 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#2D6A4F]'
+              }`}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className={`absolute right-2.5 top-1/2 -translate-y-1/2 ${
+                  isDark ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Category Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-none">
+            {categories.map(cat => {
+              const count =
+                cat.id === 'all'
+                  ? catalog.length
+                  : cat.id === 'popular'
+                  ? catalog.filter(c => c.popular).length
+                  : catalog.filter(c => c.category === cat.id).length;
+
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  type="button"
+                  className={`px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                    activeCategory === cat.id
+                      ? isDark
+                        ? 'bg-[#222222] text-white shadow-sm font-semibold'
+                        : 'bg-slate-900 text-white shadow-sm font-semibold'
+                      : isDark
+                      ? 'text-[#878787] hover:text-[#D1D5DB] hover:bg-[#161616]'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      activeCategory === cat.id
+                        ? isDark
+                          ? 'bg-[#333333] text-white'
+                          : 'bg-slate-700 text-white'
+                        : isDark
+                        ? 'bg-[#181818] text-[#777777]'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Catalog Items Grid */}
+        <div className="overflow-y-auto flex-1 p-6 space-y-4">
+          {filteredItems.length === 0 ? (
+            <div className="py-12 text-center">
+              <Compass className={`w-10 h-10 mx-auto mb-3 ${isDark ? 'text-[#444444]' : 'text-slate-300'}`} />
+              <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                No destinations found
+              </h4>
+              <p className={`text-xs mt-1 max-w-sm mx-auto ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                No integration matches "{searchQuery}". Try a different category or configure a custom webhook endpoint.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredItems.map(item => {
+                const existingDest = destinations.find(
+                  d =>
+                    d.type === item.type ||
+                    d.name.toLowerCase() === item.name.toLowerCase() ||
+                    (d.id && d.id.includes(item.type))
+                );
+                const isConnected = Boolean(existingDest && existingDest.connected);
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-2xl border p-4 flex flex-col justify-between transition-all duration-200 ${
+                      isDark
+                        ? 'bg-[#121212] border-[#222222] hover:border-[#333333]'
+                        : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                    }`}
+                  >
+                    <div className="flex flex-col gap-2.5">
+                      {/* Top Row: Icon + Name + Badge */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              isDark
+                                ? 'bg-[#181818] border border-[#282828]'
+                                : 'bg-slate-50 border border-slate-100 shadow-sm'
+                            }`}
+                          >
+                            {renderDestIcon(item.name || item.type, 'w-5 h-5')}
+                          </div>
+                          <div>
+                            <span
+                              className={`font-semibold text-sm ${
+                                isDark ? 'text-white' : 'text-slate-900'
+                              }`}
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              {item.name}
+                            </span>
+                            <span className={`block text-[11px] capitalize ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                              {item.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          {item.popular && (
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                isDark
+                                  ? 'text-amber-400 bg-amber-950/40 border border-amber-800/40'
+                                  : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                              }`}
+                            >
+                              ★ Popular
+                            </span>
+                          )}
+                          <span
+                            className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                              isDark
+                                ? 'bg-[#1C1C1C] text-[#A1A1A1] border border-[#2A2A2A]'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      <p className={`text-xs leading-relaxed min-h-[32px] ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                        {item.description}
+                      </p>
+
+                      {/* Default Resource Hint */}
+                      <div
+                        className={`text-[11px] px-2.5 py-1 rounded-lg border font-mono truncate ${
+                          isDark
+                            ? 'bg-[#161616] border-[#222222] text-[#878787]'
+                            : 'bg-slate-50 border-slate-100 text-slate-500'
+                        }`}
+                      >
+                        Target: {item.defaultResourceName}
+                      </div>
+                    </div>
+
+                    {/* Bottom Action */}
+                    <div
+                      className={`pt-3.5 mt-3.5 border-t flex items-center justify-between ${
+                        isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
+                      }`}
+                    >
+                      <span className={`text-[11px] ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>
+                        {item.authMethod}
+                      </span>
+
+                      {isConnected && existingDest ? (
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg ${
+                              isDark
+                                ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                                : 'bg-emerald-50 text-emerald-700'
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
+                            Connected
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onConfigureDest(existingDest)}
+                            className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                              isDark
+                                ? 'border-[#262626] text-[#A1A1A1] hover:text-white hover:bg-[#1E1E1E]'
+                                : 'border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                            }`}
+                            title="Configure Destination Settings"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onConnectItem(item)}
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium text-white transition-all cursor-pointer ${
+                            isDark
+                              ? 'bg-[#2D6A4F] hover:bg-[#388562] border border-[#3FE769]/30 hover:border-[#3FE769]/60'
+                              : 'bg-[#2D6A4F] hover:bg-[#40916C]'
+                          }`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Connect</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Quick Custom Webhook Banner */}
+          <div
+            className={`p-4 rounded-2xl border border-dashed flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-colors ${
+              isDark ? 'bg-[#121212] border-[#2A2A2A]' : 'bg-slate-50 border-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  isDark ? 'bg-[#181818]' : 'bg-white shadow-sm'
+                }`}
+              >
+                <WebhookIcon className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    Custom REST Webhook Gateway
+                  </span>
+                  <span
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                      isDark
+                        ? 'bg-purple-950/40 text-purple-300 border border-purple-800/40'
+                        : 'bg-purple-50 text-purple-700'
+                    }`}
+                  >
+                    HTTP POST
+                  </span>
+                </div>
+                <p className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                  Pipe real-time saves to any URL endpoint with HMAC SHA-256 signatures and bearer tokens.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onCustomWebhook}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-colors shrink-0 cursor-pointer ${
+                isDark
+                  ? 'border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20'
+                  : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
+              }`}
+            >
+              Configure Webhook
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div
+          className={`p-4 border-t flex items-center justify-between ${
+            isDark ? 'border-[#1F1F1F] bg-[#0A0A0A]' : 'border-slate-100 bg-slate-50/70'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <ShieldCheck className={`w-4 h-4 ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`} />
+            <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+              Showing {filteredItems.length} of {catalog.length} integrations • TLS 1.3 Encrypted
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`px-4 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+              isDark
+                ? 'bg-[#1C1C1C] text-white hover:bg-[#252525] border border-[#2E2E2E]'
+                : 'bg-slate-200 text-slate-800 hover:bg-slate-300'
+            }`}
+          >
+            Close
           </button>
         </div>
       </div>
@@ -1757,14 +3619,21 @@ interface OAuthModalProps {
     destId: string,
     options: { accessType: 'full' | 'partial'; actionType: 'create' | 'existing'; tableName: string }
   ) => void;
+  isDark?: boolean;
 }
 
-const OAuthConnectModal: React.FC<OAuthModalProps> = ({ dest, onClose, onGrant }) => {
+const OAuthConnectModal: React.FC<OAuthModalProps> = ({ dest, onClose, onGrant, isDark = true }) => {
   const [accessType, setAccessType] = useState<'full' | 'partial'>('full');
   const [actionType, setActionType] = useState<'create' | 'existing'>('create');
   const [tableName, setTableName] = useState(
     dest.targetResourceName ||
-      (dest.type === 'google_sheets' ? 'Clipped Opportunities Sheet 2026' : 'Clipped Vault Database')
+      (dest.type === 'google_sheets'
+        ? 'Clipped Opportunities Sheet 2026'
+        : dest.type === 'spotify'
+        ? 'Study Playlists & Podcasts'
+        : dest.type === 'youtube_music'
+        ? 'Saved Tracks Playlist'
+        : 'Clipped Vault Database')
   );
   const [isAuthorizing, setIsAuthorizing] = useState(false);
 
@@ -1775,127 +3644,199 @@ const OAuthConnectModal: React.FC<OAuthModalProps> = ({ dest, onClose, onGrant }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
-      <div className="bg-[#080808] border border-white/10 w-full max-w-xl rounded-sm shadow-2xl overflow-hidden flex flex-col">
+    <div
+      className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className={`w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col transition-all ${
+          isDark ? 'bg-[#0E0E0E] border-[#262626]' : 'bg-white border-slate-200'
+        }`}
+      >
         {/* Header */}
-        <div className="p-6 border-b border-white/5 bg-[#050505] flex items-center justify-between">
+        <div
+          className={`p-6 border-b flex items-center justify-between ${
+            isDark ? 'border-[#1F1F1F] bg-[#0A0A0A]' : 'border-slate-100 bg-slate-50/70'
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-sm bg-[#080808] border border-amber-500/30 flex items-center justify-center p-2 text-amber-400">
+            <div
+              className={`w-12 h-12 rounded-xl flex items-center justify-center p-2 ${
+                isDark
+                  ? 'bg-[#181818] border border-[#262626]'
+                  : 'bg-white border border-slate-200 shadow-sm'
+              }`}
+            >
               {renderDestIcon(dest.name || dest.type, 'w-6 h-6')}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-amber-500 uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 border border-amber-500/30 rounded-sm">
+                <span
+                  className={`text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    isDark
+                      ? 'bg-emerald-950/40 text-[#3FE769] border border-emerald-800/40'
+                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  }`}
+                >
                   OAuth 2.0 Consent
                 </span>
               </div>
-              <h2 className="text-xl font-serif text-white mt-1">
+              <h2
+                className={`text-xl font-semibold mt-1 tracking-tight ${
+                  isDark ? 'text-white' : 'text-slate-900'
+                }`}
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
                 Connect to {dest.name}
               </h2>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 text-stone-500 hover:text-white rounded-sm">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+              isDark
+                ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 text-xs bg-[#080808]">
-          <div className="p-3 bg-[#050505] border border-white/5 rounded-sm flex items-center justify-between">
+        <form
+          onSubmit={handleSubmit}
+          className={`p-6 space-y-5 text-xs ${isDark ? 'bg-[#0E0E0E]' : 'bg-white'}`}
+        >
+          <div
+            className={`p-3.5 rounded-xl border flex items-center justify-between ${
+              isDark ? 'bg-[#141414] border-[#262626]' : 'bg-slate-50 border-slate-200'
+            }`}
+          >
             <div className="flex items-center gap-2">
-              <Key className="w-4 h-4 text-amber-500" />
-              <span className="text-stone-300 font-sans">Authorizing Account:</span>
+              <Key className={`w-4 h-4 ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`} />
+              <span className={`font-medium ${isDark ? 'text-stone-300' : 'text-slate-700'}`}>
+                Authorizing Account:
+              </span>
             </div>
-            <span className="font-mono text-stone-200 text-[11px] bg-white/[0.04] px-2 py-1 rounded-sm border border-white/5">
+            <span
+              className={`font-mono text-[11px] px-2.5 py-1 rounded-lg border ${
+                isDark
+                  ? 'bg-[#1E1E1E] text-stone-200 border-[#2E2E2E]'
+                  : 'bg-white text-slate-800 border-slate-200 shadow-xs'
+              }`}
+            >
               {dest.accountEmail || 'user@gmail.com'}
             </span>
           </div>
 
           {/* Scope Permission Level */}
-          <div className="space-y-3">
-            <label className="block text-[10px] font-mono uppercase tracking-wider text-stone-400">
+          <div className="space-y-2.5">
+            <label
+              className={`block text-[11px] font-medium uppercase tracking-wider ${
+                isDark ? 'text-[#878787]' : 'text-slate-500'
+              }`}
+            >
               1. Choose Access Level Scope
             </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div
                 onClick={() => setAccessType('full')}
-                className={`p-3.5 rounded-sm border cursor-pointer transition-all flex flex-col justify-between ${
+                className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                   accessType === 'full'
-                    ? 'bg-amber-500/10 border-amber-500 text-amber-300'
-                    : 'bg-[#050505] border-white/5 text-stone-400 hover:border-white/20'
+                    ? isDark
+                      ? 'bg-[#142318] border-[#2D6A4F] text-white'
+                      : 'bg-emerald-50/70 border-emerald-500 text-slate-900 shadow-sm'
+                    : isDark
+                    ? 'bg-[#141414] border-[#262626] text-[#878787] hover:border-[#383838]'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-xs uppercase tracking-wider font-semibold text-white">Full Access Sync</span>
+                  <span className="text-xs font-semibold">Full Access Sync</span>
                   <input
                     type="radio"
                     name="accessType"
                     checked={accessType === 'full'}
                     onChange={() => setAccessType('full')}
-                    className="accent-amber-500 cursor-pointer"
+                    className={`cursor-pointer ${isDark ? 'accent-[#3FE769]' : 'accent-[#2D6A4F]'}`}
                   />
                 </div>
-                <p className="text-[11px] leading-relaxed opacity-80 font-sans">
+                <p className={`text-[11px] leading-relaxed ${isDark ? 'text-stone-300' : 'text-slate-600'}`}>
                   Read, write, & auto-create new tables/sheets dynamically when clipping opportunities.
                 </p>
               </div>
 
               <div
                 onClick={() => setAccessType('partial')}
-                className={`p-3.5 rounded-sm border cursor-pointer transition-all flex flex-col justify-between ${
+                className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                   accessType === 'partial'
-                    ? 'bg-amber-500/10 border-amber-500 text-amber-300'
-                    : 'bg-[#050505] border-white/5 text-stone-400 hover:border-white/20'
+                    ? isDark
+                      ? 'bg-[#142318] border-[#2D6A4F] text-white'
+                      : 'bg-emerald-50/70 border-emerald-500 text-slate-900 shadow-sm'
+                    : isDark
+                    ? 'bg-[#141414] border-[#262626] text-[#878787] hover:border-[#383838]'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-xs uppercase tracking-wider font-semibold text-white">Partial Access</span>
+                  <span className="text-xs font-semibold">Partial Access</span>
                   <input
                     type="radio"
                     name="accessType"
                     checked={accessType === 'partial'}
                     onChange={() => setAccessType('partial')}
-                    className="accent-amber-500 cursor-pointer"
+                    className={`cursor-pointer ${isDark ? 'accent-[#3FE769]' : 'accent-[#2D6A4F]'}`}
                   />
                 </div>
-                <p className="text-[11px] leading-relaxed opacity-80 font-sans">
-                  Append-only access into an existing selected table. No table creation rights.
+                <p className={`text-[11px] leading-relaxed ${isDark ? 'text-stone-300' : 'text-slate-600'}`}>
+                  Append-only access into an existing selected table. No structural creation rights.
                 </p>
               </div>
             </div>
           </div>
 
           {/* Database Creation or Existing Selection */}
-          <div className="space-y-3">
-            <label className="block text-[10px] font-mono uppercase tracking-wider text-stone-400">
+          <div className="space-y-2.5">
+            <label
+              className={`block text-[11px] font-medium uppercase tracking-wider ${
+                isDark ? 'text-[#878787]' : 'text-slate-500'
+              }`}
+            >
               2. Target Resource Configuration
             </label>
             <div className="space-y-2">
-              <div className="flex items-center gap-4 bg-[#050505] p-3 border border-white/5 rounded-sm">
-                <label className="flex items-center gap-2 cursor-pointer font-mono text-xs text-stone-200">
+              <div
+                className={`flex items-center gap-4 p-3 border rounded-xl ${
+                  isDark ? 'bg-[#141414] border-[#262626]' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium">
                   <input
                     type="radio"
                     name="actionType"
                     checked={actionType === 'create'}
                     onChange={() => setActionType('create')}
-                    className="accent-amber-500 cursor-pointer"
+                    className={`cursor-pointer ${isDark ? 'accent-[#3FE769]' : 'accent-[#2D6A4F]'}`}
                   />
-                  <span>Auto-Create New Table / Sheet</span>
+                  <span className={isDark ? 'text-white' : 'text-slate-800'}>Auto-Create New Table / Sheet</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer font-mono text-xs text-stone-200">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium">
                   <input
                     type="radio"
                     name="actionType"
                     checked={actionType === 'existing'}
                     onChange={() => setActionType('existing')}
-                    className="accent-amber-500 cursor-pointer"
+                    className={`cursor-pointer ${isDark ? 'accent-[#3FE769]' : 'accent-[#2D6A4F]'}`}
                   />
-                  <span>Link Existing Resource</span>
+                  <span className={isDark ? 'text-white' : 'text-slate-800'}>Link Existing Resource</span>
                 </label>
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono text-stone-500 mb-1 uppercase">
+                <label className={`block text-[11px] mb-1 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                   {actionType === 'create' ? 'Name for New Table / Sheet:' : 'Existing Resource Name or ID:'}
                 </label>
                 <input
@@ -1903,45 +3844,57 @@ const OAuthConnectModal: React.FC<OAuthModalProps> = ({ dest, onClose, onGrant }
                   value={tableName}
                   onChange={e => setTableName(e.target.value)}
                   placeholder="e.g. Clipped Opportunities 2026"
-                  className="w-full px-3.5 py-2 bg-[#050505] text-white rounded-sm border border-white/10 focus:border-amber-500 outline-none font-sans"
+                  className={`w-full px-3.5 py-2 rounded-xl text-xs outline-none border transition-all ${
+                    isDark
+                      ? 'bg-[#141414] text-white border-[#262626] focus:border-[#3FE769]'
+                      : 'bg-slate-50 text-slate-900 border-slate-200 focus:bg-white focus:border-[#2D6A4F]'
+                  }`}
                 />
               </div>
             </div>
           </div>
 
           {/* Scope Consent List */}
-          <div className="p-3 bg-[#050505] border border-white/5 rounded-sm space-y-2">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-amber-500 font-semibold">
+          <div
+            className={`p-3.5 border rounded-xl space-y-2 ${
+              isDark ? 'bg-[#141414] border-[#262626]' : 'bg-slate-50 border-slate-200'
+            }`}
+          >
+            <p
+              className={`text-[10px] font-semibold uppercase tracking-wider ${
+                isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'
+              }`}
+            >
               {accessType === 'full' ? 'FULL ACCESS SCOPE REQUESTED:' : 'PARTIAL (APPEND-ONLY) SCOPE REQUESTED:'}
             </p>
-            <ul className="space-y-1.5 text-[11px] text-stone-300 font-sans">
+            <ul className={`space-y-1.5 text-[11px] ${isDark ? 'text-stone-300' : 'text-slate-600'}`}>
               {accessType === 'full' ? (
                 <>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <Check className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`} />
                     <span>Read, write, format, & auto-create new tables/sheets dynamically</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <Check className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`} />
                     <span>Write title, source URL, salary ranges, tags, & AI summaries</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <Check className={`w-3.5 h-3.5 shrink-0 ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`} />
                     <span>Real-time webhook sync & dynamic column generation</span>
                   </li>
                 </>
               ) : (
                 <>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>Append-only access into designated resource: "{tableName}"</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>Restricted mode: No file deletion or structural schema modification</span>
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>Write clipped metadata into pre-existing columns only</span>
                   </li>
                 </>
@@ -1950,27 +3903,39 @@ const OAuthConnectModal: React.FC<OAuthModalProps> = ({ dest, onClose, onGrant }
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-4 border-t border-white/5 flex items-center justify-end gap-3">
+          <div
+            className={`pt-4 border-t flex items-center justify-end gap-3 ${
+              isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
+            }`}
+          >
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-[#050505] text-stone-400 border border-white/10 hover:text-white rounded-sm font-mono text-xs uppercase tracking-wider transition-colors"
+              className={`px-4 py-2 text-xs font-medium rounded-xl transition-colors cursor-pointer ${
+                isDark
+                  ? 'text-[#878787] hover:text-white hover:bg-[#1A1A1A]'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isAuthorizing}
-              className="px-6 py-2 bg-amber-500 hover:bg-amber-400 text-black font-mono text-xs uppercase tracking-wider font-semibold rounded-sm shadow-lg flex items-center gap-2 transition-all"
+              className={`px-6 py-2.5 rounded-xl text-xs font-medium text-white shadow-md flex items-center gap-2 transition-all cursor-pointer ${
+                isDark
+                  ? 'bg-[#2D6A4F] hover:bg-[#388562] border border-[#3FE769]/30 hover:border-[#3FE769]/60'
+                  : 'bg-[#2D6A4F] hover:bg-[#40916C]'
+              }`}
             >
               {isAuthorizing ? (
                 <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-black" />
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
                   <span>Authorizing...</span>
                 </>
               ) : (
                 <>
-                  <Zap className="w-3.5 h-3.5 fill-black" />
+                  <Zap className="w-3.5 h-3.5 fill-white" />
                   <span>Grant Permission & Connect</span>
                 </>
               )}

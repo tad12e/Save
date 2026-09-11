@@ -1,8 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=gambetta@400,401,500,501,600,601,700,701&display=swap');
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-display: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-gambetta: "Gambetta", "Playfair Display", Georgia, serif;
+}
+
+.font-gambetta {
+  font-family: 'Gambetta', 'Playfair Display', Georgia, Cambria, 'Times New Roman', Times, serif;
 }
 
 /* Stitch light (default) + Vercel dark tokens. App.tsx toggles

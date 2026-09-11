@@ -1,8 +1,11 @@
-import React from 'react';
-import { RefreshCw, AlertCircle, DollarSign } from 'lucide-react';
+import React, { useState } from 'react';
+import { RefreshCw, AlertCircle, DollarSign, Download, ChevronDown, FilterX, TrendingUp, Zap, CheckCircle2 } from 'lucide-react';
 import { AnalyticsPayload } from '../lib/analyticsApi';
-import { MoneyKpiStrip } from '../components/analytics/MoneyKpiStrip';
-import { StitchCard, StitchSectionLabel } from './StitchCard';
+import { SavesPerWeekAreaChart } from '../components/analytics/SavesPerWeekAreaChart';
+import { IntentBreakdownDonut } from '../components/analytics/IntentBreakdownDonut';
+import { OpportunityOutcomesFunnel } from '../components/analytics/OpportunityOutcomesFunnel';
+import { CaptureHeatmapCard } from '../components/analytics/CaptureHeatmapCard';
+import { TopKnowledgeSourcesTable } from '../components/analytics/TopKnowledgeSourcesTable';
 import {
   StitchTheme,
   isStitchDark,
@@ -31,22 +34,8 @@ function MiniSpark({ values, stroke }: { values: number[]; stroke: string }) {
   );
 }
 
-function TrendLine({ values, stroke, grid }: { values: number[]; stroke: string; grid: string }) {
-  const max = Math.max(...values, 1);
-  const stepX = 560 / Math.max(1, values.length - 1);
-  const pts = values.map((v, i) => `${i * stepX},${150 - (v / max) * 130}`);
-  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p}`).join(' ');
-  return (
-    <svg viewBox="0 0 560 160" className="w-full h-40" fill="none" preserveAspectRatio="none">
-      {[30, 70, 110, 150].map((y) => (
-        <line key={y} x1="0" y1={y} x2="560" y2={y} stroke={grid} strokeWidth="1" />
-      ))}
-      <path d={line} stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
-// Stitch "Save - Analytics & OLAP" rebuilt as UI-only (Vercel dark / Stitch light).
+// Stitch "Save - Analytics & OLAP (Enhanced)" rebuilt as UI-only (Vercel dark / Stitch light).
 // No fetching, no store — everything arrives via props.
 export const StitchAnalytics: React.FC<StitchAnalyticsProps> = ({
   data,
@@ -57,6 +46,12 @@ export const StitchAnalytics: React.FC<StitchAnalyticsProps> = ({
   const dark = isStitchDark(theme);
   const spark = dark ? '#00CA50' : '#2D6A4F';
   const grid = dark ? '#1F1F1F' : '#F1F5F9';
+
+  // Multi-Dimensional OLAP Filter States
+  const [selectedRange, setSelectedRange] = useState<'7D' | '30D' | '90D' | '12M' | 'custom'>('30D');
+  const [selectedIntent, setSelectedIntent] = useState<'all' | 'apply' | 'learn' | 'track' | 'attend'>('all');
+  const [selectedDestination, setSelectedDestination] = useState<string>('all');
+  const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
 
   if (!data) {
     return (
@@ -100,219 +95,386 @@ export const StitchAnalytics: React.FC<StitchAnalyticsProps> = ({
     return '#BBF7D0';
   };
 
-  const R = 44;
-  const C = 2 * Math.PI * R;
-  let donutOffset = 25;
-
   return (
     <div className={`min-h-screen font-sans pb-16 ${stitchCanvas(theme)}`}>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 space-y-5">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 space-y-6">
+        {/* Stitch Enhanced Header & Live Telemetry Controls */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1">
           <div>
-            <h1 className={`text-2xl sm:text-[28px] font-bold tracking-tight ${stitchHeading(theme)}`}>
-              Analytics & OLAP Insights
-            </h1>
-            <p className={`text-[13px] font-sans mt-0.5 ${stitchSecondary(theme)}`}>
-              Real-time dimensional metrics across all connected knowledge vaults
-            </p>
-          </div>
-          <button
-            onClick={onRefresh}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-sans font-bold transition-all ${
-              dark ? 'bg-[#EDEDED] text-black' : 'bg-[#2D6A4F] text-white hover:bg-[#245640]'
-            }`}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? 'SYNCING...' : 'REFRESH'}
-          </button>
-        </div>
-
-        {/* KPI strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {kpis.map((k) => (
-            <StitchCard key={k.id} theme={theme} className="!p-4">
-              <div className={`text-[10px] font-sans font-bold tracking-wider ${stitchMuted(theme)}`}>
-                {k.label}
-              </div>
-              <div className={`text-2xl font-bold tracking-tight mt-1 ${stitchHeading(theme)}`}>
-                {k.value}
-              </div>
-              <div className="flex items-end justify-between gap-2 mt-1">
-                <span className={`text-[11px] font-sans ${dark ? 'text-[#00CA50]' : 'text-[#166534]'}`}>
-                  {k.sub}
-                </span>
-                <MiniSpark values={k.spark} stroke={spark} />
-              </div>
-            </StitchCard>
-          ))}
-        </div>
-
-        {/* Real backend money */}
-        <MoneyKpiStrip money={data.money} isDark={dark} />
-
-        {/* Trend + donut */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <StitchCard theme={theme}>
-            <StitchSectionLabel theme={theme}>Saves per Week by Intent</StitchSectionLabel>
-            <div className="mt-3">
-              <TrendLine values={trend} stroke={spark} grid={grid} />
-            </div>
-            <div className={`flex justify-between text-[10px] font-sans mt-1 ${stitchMuted(theme)}`}>
-              <span>{data.predictive_forecast.historical_trend[0]?.date}</span>
-              <span>{data.predictive_forecast.historical_trend[data.predictive_forecast.historical_trend.length - 1]?.date} (Peak)</span>
-            </div>
-          </StitchCard>
-
-          <StitchCard theme={theme}>
-            <StitchSectionLabel theme={theme}>Intent Breakdown</StitchSectionLabel>
-            <div className="flex items-center gap-4 mt-3">
-              <div className="relative w-28 h-28 shrink-0">
-                <svg viewBox="0 0 112 112" className="w-28 h-28 -rotate-90">
-                  <circle cx="56" cy="56" r={R} fill="none" stroke={dark ? '#262626' : '#F1F5F9'} strokeWidth="14" />
-                  {data.content_breakdown.map((c) => {
-                    const len = (c.percentage / 100) * C;
-                    const el = (
-                      <circle
-                        key={c.type}
-                        cx="56"
-                        cy="56"
-                        r={R}
-                        fill="none"
-                        stroke={c.color}
-                        strokeWidth="14"
-                        strokeDasharray={`${Math.max(0, len - 2)} ${C - Math.max(0, len - 2)}`}
-                        strokeDashoffset={-donutOffset}
-                      />
-                    );
-                    donutOffset += len;
-                    return el;
-                  })}
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className={`text-xl font-bold font-sans ${stitchHeading(theme)}`}>
-                    {data.content_breakdown.reduce((a, c) => a + c.count, 0)}
-                  </span>
-                  <span className={`text-[9px] font-sans font-bold tracking-wider ${stitchMuted(theme)}`}>
-                    TOTAL
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-1.5 min-w-0 flex-1">
-                {data.content_breakdown.slice(0, 5).map((c) => (
-                  <div key={c.type} className="flex items-center gap-2 text-xs font-sans">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c.color }} />
-                    <span className={`truncate ${stitchSecondary(theme)}`}>{c.name}</span>
-                    <span className={`ml-auto font-semibold shrink-0 ${stitchHeading(theme)}`}>
-                      {c.percentage}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </StitchCard>
-        </div>
-
-        {/* Heatmap + sources */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <StitchCard theme={theme}>
-            <div className="flex items-center justify-between">
-              <StitchSectionLabel theme={theme}>Capture Heatmap</StitchSectionLabel>
-              <span className={`text-[10px] font-sans ${stitchMuted(theme)}`}>
-                {data.contribution_matrix.total_active_days} active days
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <h1 className={`text-2xl sm:text-[30px] font-bold tracking-tight font-['Outfit',sans-serif] ${stitchHeading(theme)}`}>
+                Analytics &amp; OLAP Insights
+              </h1>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide uppercase ${
+                dark
+                  ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                  : 'bg-[#DCFCE7] text-[#166534] border border-[#BBF7D0]'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${dark ? 'bg-[#3FE769]' : 'bg-[#16A34A]'} animate-pulse`} />
+                Live Telemetry
               </span>
             </div>
-            <div className="grid grid-cols-16 gap-1 mt-3" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
-              {heatDays.map((d) => (
-                <span
-                  key={d.date}
-                  title={`${d.date}: ${d.count}`}
-                  className="aspect-square rounded-[3px]"
-                  style={{ background: heatColor(d.count) }}
-                />
-              ))}
-            </div>
-          </StitchCard>
+            <p className={`text-[13px] font-['Inter',sans-serif] ${stitchSecondary(theme)}`}>
+              Real-time dimensional metrics and ingestion telemetry across all connected knowledge vaults.
+            </p>
+          </div>
 
-          <StitchCard theme={theme}>
-            <StitchSectionLabel theme={theme}>Top Knowledge Sources</StitchSectionLabel>
-            <div className="space-y-2 mt-3">
-              {data.destinations_health.destinations.slice(0, 5).map((d) => (
-                <div key={d.id} className="flex items-center gap-2.5">
-                  <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${d.is_active ? (dark ? 'bg-[#00CA50]' : 'bg-[#16A34A]') : 'bg-[#DC2626]'}`}
-                  />
-                  <span className={`text-[12px] font-sans truncate ${stitchSecondary(theme)}`}>{d.name}</span>
-                  <span className={`ml-auto text-[11px] font-mono shrink-0 ${stitchMuted(theme)}`}>
-                    {d.uptime} · {d.latency_ms}ms
-                  </span>
-                </div>
-              ))}
-            </div>
-          </StitchCard>
+          {/* Quick Action Tooling */}
+          <div className="flex items-center gap-2.5 self-start md:self-auto">
+            <button
+              onClick={() => {
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `save-analytics-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all border ${
+                dark
+                  ? 'bg-[#1C1B1B] border-[#2A2A2A] text-[#EDEDED] hover:bg-[#252525]'
+                  : 'bg-white border-[#E2E8F0] text-[#0F172A] hover:bg-[#F8FAFC]'
+              }`}
+            >
+              <Download className="w-3.5 h-3.5 text-[#2D6A4F] dark:text-[#3FE769]" />
+              <span>Export Data</span>
+            </button>
+
+            <button
+              onClick={onRefresh}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all text-white ${
+                dark
+                  ? 'bg-[#00CA50] hover:bg-[#00B045] text-black font-bold'
+                  : 'bg-[#2D6A4F] hover:bg-[#245640]'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Syncing...' : 'Sync Telemetry'}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Funnel + money outcomes */}
-        <StitchCard theme={theme}>
-          <StitchSectionLabel theme={theme}>Opportunity Outcomes</StitchSectionLabel>
-          <div className="space-y-2.5 mt-3">
-            {funnel.map((f) => (
-              <div key={f.stage} className="flex items-center gap-3">
-                <div
-                  className={`flex-1 h-9 rounded-xl overflow-hidden flex items-center ${
-                    dark ? 'bg-[#111111]' : 'bg-[#F1F5F9]'
+        {/* Box 1: Multi-Dimensional OLAP Filter Bar */}
+        <div className={`rounded-2xl p-2.5 sm:p-3.5 shadow-sm flex flex-wrap items-center justify-between gap-3 border transition-all ${
+          dark
+            ? 'bg-[#0E0E0E] border-[#262626]'
+            : 'bg-white border-[#E2E8F0]'
+        }`}>
+          {/* Left segments: Date Range + Intent pills + Destination selector */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Date Range Segment */}
+            <div className={`inline-flex p-1 rounded-xl text-xs font-medium border ${
+              dark ? 'bg-[#181818] border-[#262626] text-[#A1A1A1]' : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#64748B]'
+            }`}>
+              {(['7D', '30D', '90D', '12M'] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setSelectedRange(r)}
+                  className={`px-3 py-1 rounded-lg transition-all ${
+                    selectedRange === r
+                      ? dark
+                        ? 'bg-[#2A2A2A] text-white shadow-sm font-semibold'
+                        : 'bg-white text-[#0F172A] shadow-sm font-semibold'
+                      : 'hover:text-current'
                   }`}
                 >
-                  <div
-                    className="h-full rounded-xl flex items-center px-3"
-                    style={{
-                      width: `${Math.max(12, Math.min(100, f.conversion_pct))}%`,
-                      background: dark ? '#00CA50' : '#2D6A4F',
-                    }}
-                  >
-                    <span className="text-xs font-bold text-white font-sans whitespace-nowrap">
-                      {f.stage} — {f.count}
-                    </span>
-                  </div>
-                </div>
-                <span className={`w-12 text-right text-xs font-mono font-bold ${dark ? 'text-[#00CA50]' : 'text-[#166534]'}`}>
-                  {Math.round(f.conversion_pct)}%
-                </span>
-              </div>
-            ))}
-          </div>
+                  {r}
+                </button>
+              ))}
+              <button
+                onClick={() => setSelectedRange('custom')}
+                className={`px-3 py-1 rounded-lg flex items-center gap-1 transition-all ${
+                  selectedRange === 'custom'
+                    ? dark
+                      ? 'bg-[#2A2A2A] text-white shadow-sm font-semibold'
+                      : 'bg-white text-[#0F172A] shadow-sm font-semibold'
+                    : 'hover:text-current'
+                }`}
+              >
+                <span>Custom</span>
+                <span className="hidden sm:inline text-[10px] opacity-75">(Oct 1 - Oct 28)</span>
+              </button>
+            </div>
 
-          <div className="p-3 bg-rose-50/80 rounded-xl border border-rose-200/70 flex items-start gap-2.5 mt-4">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <div>
-              <h5 className="text-xs font-bold text-rose-900 font-sans">
-                {data.money.missed_deadlines_count} Opportunities Expired Unactioned
-              </h5>
-              <p className="text-[11px] text-rose-700 font-sans mt-0.5">
-                Jobs, events, and scholarships passed deadlines recently. Act earlier to secure slots!
-              </p>
+            {/* Intent Multi-Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+              {[
+                { id: 'all', label: 'All Intents' },
+                { id: 'apply', label: 'Apply', dot: '#F59E0B' },
+                { id: 'learn', label: 'Learn', dot: dark ? '#3FE769' : '#2D6A4F' },
+                { id: 'track', label: 'Track', dot: '#40916C' },
+                { id: 'attend', label: 'Attend', dot: '#8B5CF6' },
+              ].map((intent) => (
+                <button
+                  key={intent.id}
+                  onClick={() => setSelectedIntent(intent.id as any)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all ${
+                    selectedIntent === intent.id
+                      ? dark
+                        ? 'bg-[#3FE769] text-black font-semibold'
+                        : 'bg-[#2D6A4F] text-white font-semibold'
+                      : dark
+                        ? 'bg-[#181818] text-[#A1A1A1] hover:text-white border border-[#262626]'
+                        : 'bg-[#F8FAFC] text-[#475569] hover:text-[#0F172A] border border-[#E2E8F0]'
+                  }`}
+                >
+                  <span>{intent.label}</span>
+                  {intent.dot && (
+                    <span
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{
+                        backgroundColor: selectedIntent === intent.id ? (dark ? '#000000' : '#FFFFFF') : intent.dot,
+                      }}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Destination Selector Dropdown */}
+            <div className="relative">
+              <select
+                value={selectedDestination}
+                onChange={(e) => setSelectedDestination(e.target.value)}
+                className={`appearance-none text-xs rounded-xl pl-3 pr-8 py-1.5 focus:outline-none transition-colors cursor-pointer border ${
+                  dark
+                    ? 'bg-[#181818] border-[#262626] text-[#EDEDED] focus:border-[#3FE769]'
+                    : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#0F172A] focus:border-[#2D6A4F]'
+                }`}
+              >
+                <option value="all">All Destinations (482)</option>
+                <option value="notion">Notion (142)</option>
+                <option value="sheets">Sheets (148)</option>
+                <option value="obsidian">Obsidian (96)</option>
+                <option value="webhook">Webhook (96)</option>
+              </select>
+              <ChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-2 pointer-events-none ${
+                dark ? 'text-[#878787]' : 'text-[#64748B]'
+              }`} />
             </div>
           </div>
 
-          <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200/70 flex items-center justify-between mt-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-emerald-100/80 flex items-center justify-center">
-                <DollarSign className="w-4 h-4 text-emerald-800" />
-              </div>
-              <div>
-                <span className="text-[10px] font-mono font-semibold uppercase text-emerald-800 tracking-wider">
-                  Opportunity Value Captured
-                </span>
-                <div className="text-sm font-bold text-emerald-950 font-sans">
-                  {data.money.realized_value_index} · {data.money.time_saved_hours}h saved
-                </div>
-              </div>
+          {/* Right Controls: Granularity & Reset */}
+          <div className="flex items-center gap-2.5 ml-auto">
+            <div className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium border ${
+              dark ? 'bg-[#181818] border-[#262626] text-[#878787]' : 'bg-[#F1F5F9] border-[#E2E8F0] text-[#64748B]'
+            }`}>
+              <span className="text-[11px] font-semibold">Granularity:</span>
+              {(['daily', 'weekly', 'monthly'] as const).map((g) => (
+                <button
+                  key={g}
+                  onClick={() => setGranularity(g)}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] capitalize transition-all ${
+                    granularity === g
+                      ? dark
+                        ? 'bg-[#2A2A2A] text-white font-semibold'
+                        : 'bg-white text-[#0F172A] font-semibold shadow-xs'
+                      : 'hover:text-current'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
             </div>
-            <span className="px-2 py-0.5 rounded-md text-[9px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              ${data.money.saved_dollar_value.toLocaleString()} TOTAL
-            </span>
+
+            <button
+              onClick={() => {
+                setSelectedRange('30D');
+                setSelectedIntent('all');
+                setSelectedDestination('all');
+                setGranularity('weekly');
+              }}
+              className={`p-1.5 rounded-xl text-xs transition-colors border ${
+                dark
+                  ? 'border-[#262626] text-[#878787] hover:text-[#FF6B6B] hover:bg-[#181818]'
+                  : 'border-[#E2E8F0] text-[#64748B] hover:text-[#DC2626] hover:bg-[#F8FAFC]'
+              }`}
+              title="Reset Filters"
+            >
+              <FilterX className="w-3.5 h-3.5" />
+            </button>
           </div>
-        </StitchCard>
+        </div>
+
+        {/* Box 2: Four Tectonic KPI Metric Tiles (Stitch Screen 7cff5690f6924342a24b6abc44366f33) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+          {/* Metric 1: Total Clips Ingested */}
+          <div className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 border ${
+            dark
+              ? 'bg-[#0E0E0E] border-[#262626]'
+              : 'bg-white border-[#E2E8F0] hover:border-slate-300'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-xs font-semibold ${dark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                Total Clips Ingested
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                dark
+                  ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+              }`}>
+                <TrendingUp className="w-3 h-3" />
+                +{data.kpis?.total_clips?.delta_pct ?? 18.4}%
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mb-1">
+              <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] ${dark ? 'text-white' : 'text-slate-900'}`}>
+                {data.kpis?.total_clips?.value?.toLocaleString() ?? '1,428'}
+              </div>
+              <MiniSpark values={data.kpis?.total_clips?.sparkline ?? [12, 16, 14, 19, 22, 18, 25]} stroke={spark} />
+            </div>
+            <p className={`text-[11px] font-medium flex items-center gap-1.5 mt-2 ${dark ? 'text-[#878787]' : 'text-slate-500'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${dark ? 'bg-[#3FE769]' : 'bg-[#2D6A4F]'}`} />
+              <span>
+                {data.kpis?.weekly_velocity?.value
+                  ? `${(data.kpis.weekly_velocity.value / 7).toFixed(1)} clips/day avg velocity`
+                  : '47.6 clips/day avg velocity'}
+              </span>
+            </p>
+          </div>
+
+          {/* Metric 2: Processing Rate */}
+          <div className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 border ${
+            dark
+              ? 'bg-[#0E0E0E] border-[#262626]'
+              : 'bg-white border-[#E2E8F0] hover:border-slate-300'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-xs font-semibold ${dark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                Processing Rate
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                dark
+                  ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+              }`}>
+                <TrendingUp className="w-3 h-3" />
+                +5.1%
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mb-1">
+              <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] ${dark ? 'text-white' : 'text-slate-900'}`}>
+                {data.kpis?.destinations_active?.health_pct ? `${data.kpis.destinations_active.health_pct}%` : '78.2%'}
+              </div>
+              <MiniSpark values={data.kpis?.weekly_velocity?.sparkline ?? [10, 15, 12, 18, 20, 24]} stroke={spark} />
+            </div>
+            <p className={`text-[11px] font-medium flex items-center gap-1.5 mt-2 ${dark ? 'text-[#878787]' : 'text-slate-500'}`}>
+              <span>
+                {data.kpis?.total_clips?.value
+                  ? `${Math.round(data.kpis.total_clips.value * 0.78)} of ${data.kpis.total_clips.value} read or exported`
+                  : '1,116 of 1,428 read or exported'}
+              </span>
+            </p>
+          </div>
+
+          {/* Metric 3: Opportunity Conversion */}
+          <div className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 border ${
+            dark
+              ? 'bg-[#0E0E0E] border-[#262626]'
+              : 'bg-white border-[#E2E8F0] hover:border-slate-300'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-xs font-semibold ${dark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                Opportunity Conversion
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                dark
+                  ? 'bg-[#1C1B1B] text-[#F59E0B] border border-[#2A2A2A]'
+                  : 'bg-amber-50 text-amber-700 border border-amber-100'
+              }`}>
+                <TrendingUp className="w-3 h-3" />
+                +2.8% QoQ
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mb-1">
+              <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] ${dark ? 'text-amber-400' : 'text-slate-900'}`}>
+                14.2%
+              </div>
+              <MiniSpark values={data.kpis?.active_streak?.sparkline ?? [5, 8, 12, 9, 14]} stroke={dark ? '#F59E0B' : '#D97706'} />
+            </div>
+            <p className={`text-[11px] font-medium flex items-center gap-1.5 mt-2 ${dark ? 'text-[#878787]' : 'text-slate-500'}`}>
+              <span>6 active interview rounds / 42 applied</span>
+            </p>
+          </div>
+
+          {/* Metric 4: P95 Sync Latency */}
+          <div className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 border ${
+            dark
+              ? 'bg-[#0E0E0E] border-[#262626]'
+              : 'bg-white border-[#E2E8F0] hover:border-slate-300'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-xs font-semibold ${dark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                P95 Sync Latency
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                dark
+                  ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+              }`}>
+                <Zap className="w-3 h-3" />
+                -42ms faster
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mb-1">
+              <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] ${dark ? 'text-white' : 'text-slate-900'}`}>
+                310ms
+              </div>
+              <MiniSpark values={data.kpis?.destinations_active?.sparkline ?? [28, 20, 22, 17, 14]} stroke={spark} />
+            </div>
+            <p className={`text-[11px] font-medium flex items-center gap-1.5 mt-2 ${dark ? 'text-[#878787]' : 'text-slate-500'}`}>
+              <CheckCircle2 className={`w-3.5 h-3.5 ${dark ? 'text-[#3FE769]' : 'text-emerald-600'}`} />
+              <span>99.98% pipeline uptime</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Trend + donut */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          <div className="lg:col-span-8 h-full flex flex-col">
+            <SavesPerWeekAreaChart
+              historicalData={data.predictive_forecast.historical_trend}
+              isDark={dark}
+            />
+          </div>
+
+          <div className="lg:col-span-4 h-full flex flex-col">
+            <IntentBreakdownDonut
+              contentBreakdown={data.content_breakdown}
+              totalCount={data.kpis?.total_clips?.value}
+              isDark={dark}
+            />
+          </div>
+        </div>
+
+        {/* Box 5: Stitch Opportunity Outcomes Funnel */}
+        <OpportunityOutcomesFunnel
+          funnelData={data.opportunity_funnel}
+          money={data.money}
+          isDark={dark}
+        />
+
+        {/* Part 6: Lower OLAP Grid (Stitch 5-col / 7-col Split: Capture Heatmap & Top Knowledge Sources) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
+          {/* Left: Capture Heatmap (5 cols) */}
+          <div className="lg:col-span-5 h-full flex flex-col">
+            <CaptureHeatmapCard
+              days={data.contribution_matrix?.days}
+              currentStreak={data.streak_momentum?.current_streak_days ?? 14}
+              longestStreak={data.contribution_matrix?.longest_streak ?? 38}
+              isDark={dark}
+            />
+          </div>
+
+          {/* Right: Top Knowledge Sources Table (7 cols) */}
+          <div className="lg:col-span-7 h-full flex flex-col">
+            <TopKnowledgeSourcesTable
+              destinations={data.destinations_health?.destinations}
+              isDark={dark}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

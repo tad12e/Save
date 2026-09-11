@@ -194,6 +194,8 @@ const TOP_TAGS = [
 const STREAK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const STREAK_ON = [true, true, true, true, true, false, false];
 
+export const FONT_GAMBETTA = "'Gambetta', 'Playfair Display', Georgia, Cambria, 'Times New Roman', Times, serif";
+
 const cardClass =
   'bg-white border border-slate-200 rounded-2xl shadow-sm';
 
@@ -225,7 +227,20 @@ function useCountUp(target: number, duration = 700) {
   return val;
 }
 
-function badgeClass(badge: BadgeKind, amber?: boolean): string {
+function badgeClass(badge: BadgeKind, amber?: boolean, isDark?: boolean): string {
+  if (isDark) {
+    if (amber) return 'bg-[#2A1715] text-[#F87171] border-[#4A1E1C]';
+    switch (badge) {
+      case 'LEARN':
+        return 'bg-[#12231A] text-[#3FE769] border-[#1C3E2D]';
+      case 'APPLY':
+        return 'bg-[#2A1715] text-[#F87171] border-[#4A1E1C]';
+      case 'TRACK':
+        return 'bg-[#181818] text-[#A1A1A1] border-[#262626]';
+      case 'HIRE':
+        return 'bg-[#16221B] text-[#3FE769] border-[#23422F]';
+    }
+  }
   if (amber) return 'bg-amber-100 text-amber-800 border-amber-200/60';
   switch (badge) {
     case 'LEARN':
@@ -239,26 +254,29 @@ function badgeClass(badge: BadgeKind, amber?: boolean): string {
   }
 }
 
-function GoalRing({ pct }: { pct: number }) {
+function GoalRing({ pct, isDark }: { pct: number; isDark?: boolean }) {
   const R = 26;
   const C = 2 * Math.PI * R;
   return (
     <div className="relative w-[72px] h-[72px] shrink-0">
       <svg viewBox="0 0 72 72" className="w-[72px] h-[72px] -rotate-90">
-        <circle cx="36" cy="36" r={R} fill="none" stroke="#E2E8F0" strokeWidth="8" />
+        <circle cx="36" cy="36" r={R} fill="none" stroke={isDark ? '#262626' : '#E2E8F0'} strokeWidth="8" />
         <circle
           cx="36"
           cy="36"
           r={R}
           fill="none"
-          stroke="#2D6A4F"
+          stroke={isDark ? '#3FE769' : '#2D6A4F'}
           strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={`${(pct / 100) * C} ${C}`}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[15px] font-bold text-[#0F172A] leading-none" style={{ fontFamily: 'Outfit, sans-serif' }}>
+        <span
+          className={`text-[15px] font-bold leading-none ${isDark ? 'text-white' : 'text-[#0F172A]'}`}
+          style={{ fontFamily: FONT_GAMBETTA }}
+        >
           7/10
         </span>
       </div>
@@ -267,7 +285,11 @@ function GoalRing({ pct }: { pct: number }) {
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
-  const { onOpenManualAddModal, onRefreshSync, isRefreshing = false } = props;
+  const { onOpenManualAddModal, onRefreshSync, isRefreshing = false, theme = 'dark' } = props;
+  const isDark = theme === 'dark' || theme === 'terminal';
+  const cardClass = isDark
+    ? 'bg-[#0E0E0E] border border-[#262626] rounded-2xl shadow-xs'
+    : 'bg-white border border-slate-200 rounded-2xl shadow-sm';
   const [activeFilter, setActiveFilter] = useState('All');
   const [filterQuery, setFilterQuery] = useState('');
   const [starred, setStarred] = useState<Set<string>>(new Set(['c2']));
@@ -359,7 +381,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
   const visibleClips = showEmpty ? [] : STATIC_CLIPS.filter((c) => matchesFilter(c) && matchesQuery(c));
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-14">
+    <div
+      className={`min-h-screen font-gambetta antialiased pb-14 transition-colors duration-200 ${
+        isDark ? 'bg-[#000000] text-[#EDEDED]' : 'bg-[#F8FAFC] text-slate-900'
+      }`}
+      style={{ fontFamily: FONT_GAMBETTA }}
+    >
       <div className="w-full px-8 py-8">
         <AnimatePresence>
           {openClip && (
@@ -371,7 +398,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 exit={{ opacity: 0 }}
                 transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
                 onClick={() => setOpenClip(null)}
-                className="fixed inset-0 z-40 bg-slate-900/30"
+                className={`fixed inset-0 z-40 ${isDark ? 'bg-black/75 backdrop-blur-xs' : 'bg-slate-900/30'}`}
               />
               <motion.aside
                 key="reader-panel"
@@ -379,13 +406,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 animate={reduceMotion ? { opacity: 1 } : { x: 0 }}
                 exit={reduceMotion ? { opacity: 0 } : { x: '100%' }}
                 transition={reduceMotion ? { duration: 0 } : { ...SPRING }}
-                className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white border-l border-slate-200 shadow-2xl flex flex-col"
+                className={`fixed right-0 top-0 bottom-0 z-50 w-full max-w-md shadow-2xl flex flex-col border-l ${
+                  isDark ? 'bg-[#0E0E0E] border-[#1F1F1F] text-[#EDEDED]' : 'bg-white border-slate-200'
+                }`}
               >
                 <div className="flex items-center gap-2 p-6 pb-0">
                   <span
                     className={`px-2.5 py-0.5 rounded-full border text-[11px] leading-[14px] font-semibold tracking-wide ${badgeClass(
                       openClip.badge,
-                      openClip.amber
+                      openClip.amber,
+                      isDark
                     )}`}
                   >
                     {openClip.badge}
@@ -393,33 +423,45 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   </span>
                   <button
                     onClick={() => setOpenClip(null)}
-                    className="ml-auto h-9 w-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                    className={`ml-auto h-9 w-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                      isDark
+                        ? 'text-[#878787] hover:text-white hover:bg-[#181818]'
+                        : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
                     title="Close (Esc)"
                   >
                     <X className="w-[18px] h-[18px]" />
                   </button>
                 </div>
                 <div className="p-6 pt-3 overflow-y-auto">
-                  <div className="text-[11px] leading-[14px] text-slate-400 font-mono">
+                  <div className={`text-[11px] leading-[14px] font-mono ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
                     {openClip.domain} · {openClip.time}
                   </div>
                   <h2
-                    className="text-[22px] leading-[30px] font-semibold text-slate-900 mt-2"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    className={`text-[22px] leading-[30px] font-semibold mt-2 ${isDark ? 'text-white' : 'text-slate-900'}`}
+                    style={{ fontFamily: FONT_GAMBETTA }}
                   >
                     {openClip.title}
                   </h2>
-                  <p className="text-[14px] leading-[22px] text-slate-600 mt-3">{openClip.excerpt}</p>
+                  <p className={`text-[14px] leading-[22px] mt-3 ${isDark ? 'text-[#A1A1A1]' : 'text-slate-600'}`}>
+                    {openClip.excerpt}
+                  </p>
                   <div className="flex items-center flex-wrap gap-1.5 mt-4">
                     {openClip.tags.map((t) => (
                       <span
                         key={t}
-                        className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-medium text-[11px] leading-[14px]"
+                        className={`px-2 py-1 rounded-full font-medium text-[11px] leading-[14px] ${
+                          isDark ? 'bg-[#181818] text-[#A1A1A1]' : 'bg-slate-100 text-slate-600'
+                        }`}
                       >
                         {t}
                       </span>
                     ))}
-                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[11px] leading-[14px] font-medium">
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] leading-[14px] font-medium ${
+                        isDark ? 'bg-[#1C1B1B] text-[#3FE769]' : 'bg-emerald-50 text-emerald-600'
+                      }`}
+                    >
                       <RefreshCw className="w-3.5 h-3.5" />
                       {openClip.sync}
                     </span>
@@ -428,7 +470,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     <motion.button
                       onClick={() => copyClipLink(openClip)}
                       whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                      className="flex-1 h-10 rounded-xl bg-[#2D6A4F] text-white hover:bg-[#245640] transition-colors font-medium text-[13px] leading-[20px] flex items-center justify-center gap-2"
+                      className={`flex-1 h-10 rounded-xl transition-colors font-medium text-[13px] leading-[20px] flex items-center justify-center gap-2 cursor-pointer ${
+                        isDark
+                          ? 'bg-[#1C1B1B] border border-[#2A2A2A] text-[#3FE769] hover:bg-[#222222]'
+                          : 'bg-[#2D6A4F] text-white hover:bg-[#245640]'
+                      }`}
                     >
                       {copied ? (
                         <Check className="w-4 h-4" />
@@ -440,9 +486,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     <motion.button
                       onClick={() => toggleStar(openClip.id)}
                       whileTap={reduceMotion ? undefined : { scale: 0.9 }}
-                      className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors ${
+                      className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors cursor-pointer ${
                         starred.has(openClip.id)
-                          ? 'text-amber-500 border-amber-200 bg-amber-50'
+                          ? isDark
+                            ? 'text-amber-400 border-amber-500/40 bg-[#261E14]'
+                            : 'text-amber-500 border-amber-200 bg-amber-50'
+                          : isDark
+                          ? 'text-[#878787] border-[#262626] hover:text-amber-400 hover:border-amber-500/40'
                           : 'text-slate-400 border-slate-200 hover:text-amber-500 hover:border-amber-200'
                       }`}
                       title="Star clip"
@@ -453,7 +503,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                       />
                     </motion.button>
                   </div>
-                  <p className="text-[11px] leading-[14px] text-slate-400 mt-4">
+                  <p className={`text-[11px] leading-[14px] mt-4 ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>
                     Press Esc or click outside to close
                   </p>
                 </div>
@@ -467,153 +517,194 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-3">
                 <h1
-                  className="text-[32px] leading-[40px] tracking-[-0.02em] font-semibold text-slate-900"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  className={`text-[32px] leading-[40px] tracking-[-0.02em] font-semibold ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}
+                  style={{ fontFamily: FONT_GAMBETTA }}
                 >
                   Good morning, Alex
                 </h1>
-                <span className="inline-flex items-center px-2 py-1 rounded-full bg-[#a1f4c8] text-[#005236] text-[11px] leading-[14px] tracking-[0.02em] font-semibold shadow-sm border border-[#86d7ad]/30">
+                <span
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] leading-[14px] tracking-[0.02em] font-semibold shadow-sm border ${
+                    isDark
+                      ? 'bg-[#1C1B1B] text-[#3FE769] border-[#2A2A2A]'
+                      : 'bg-[#a1f4c8] text-[#005236] border-[#86d7ad]/30'
+                  }`}
+                >
                   PRO VAULT
                 </span>
               </div>
-              <p className="text-[14px] leading-[20px] text-slate-500 flex items-center gap-3">
+              <p className={`text-[14px] leading-[20px] flex items-center gap-3 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                 <span>148 clips synchronized across 6 active streams</span>
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-medium text-[13px] leading-[20px] text-slate-600 bg-slate-100 border border-slate-200">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#262626]' : 'bg-slate-300'}`}></span>
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium text-[13px] leading-[20px] border ${
+                    isDark
+                      ? 'text-[#EDEDED] bg-[#141414] border-[#262626]'
+                      : 'text-slate-600 bg-slate-100 border-slate-200'
+                  }`}
+                >
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3FE769] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#3FE769]"></span>
                   </span>
                   All systems nominal
                 </span>
               </p>
             </div>
             <div className="flex items-center gap-3 self-start md:self-auto">
-            <motion.button
-              onClick={onRefreshSync}
-              whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-              className="flex items-center gap-2 px-3 h-10 rounded-xl bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 transition-colors shadow-sm select-none group"
-            >
+              <motion.button
+                onClick={onRefreshSync}
+                whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                className={`flex items-center gap-2 px-3 h-10 rounded-xl border transition-colors shadow-sm select-none group cursor-pointer ${
+                  isDark
+                    ? 'bg-[#141414] text-[#EDEDED] border-[#262626] hover:bg-[#1E1E1E]'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
                 <RefreshCw
-                  className={`text-[18px] w-[18px] h-[18px] text-slate-500 group-hover:rotate-180 transition-transform duration-500 ${isRefreshing ? 'animate-spin' : ''}`}
+                  className={`text-[18px] w-[18px] h-[18px] group-hover:rotate-180 transition-transform duration-500 ${
+                    isDark ? 'text-[#3FE769]' : 'text-slate-500'
+                  } ${isRefreshing ? 'animate-spin' : ''}`}
                 />
                 <span className="font-medium text-[13px] leading-[20px]">Sync Now</span>
-                <span className="text-slate-400 text-[11px] leading-[14px] ml-0.5">
+                <span className={`text-[11px] leading-[14px] ml-0.5 ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>
                   {isRefreshing ? 'Syncing...' : 'Just now'}
                 </span>
               </motion.button>
-            <motion.button
-              onClick={onOpenManualAddModal}
-              whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-              className="relative flex items-center gap-2 px-4 h-10 rounded-xl bg-[#2D6A4F] text-white hover:bg-[#245640] transition-colors shadow-sm select-none overflow-hidden group"
-            >
+              <motion.button
+                onClick={onOpenManualAddModal}
+                whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+                className={`relative flex items-center gap-2 px-4 h-10 rounded-xl transition-colors shadow-sm select-none overflow-hidden group cursor-pointer ${
+                  isDark
+                    ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A] hover:bg-[#222222]'
+                    : 'bg-[#2D6A4F] text-white hover:bg-[#245640]'
+                }`}
+              >
                 <div className="absolute inset-x-0 top-0 h-px bg-white/20"></div>
                 <Plus className="text-[18px] w-[18px] h-[18px] relative z-10" />
                 <span className="font-medium text-[13px] leading-[20px] tracking-wide relative z-10">
                   Save Clip
                 </span>
-                <kbd className="ml-1 px-1.5 py-0.5 rounded bg-black/20 text-white/90 text-[11px] leading-[14px] font-mono relative z-10 border border-white/10 shadow-inner">
+                <kbd
+                  className={`ml-1 px-1.5 py-0.5 rounded text-[11px] leading-[14px] font-mono relative z-10 border shadow-inner ${
+                    isDark
+                      ? 'bg-[#111111] text-[#3FE769] border-[#262626]'
+                      : 'bg-black/20 text-white/90 border-white/10'
+                  }`}
+                >
                   N
                 </kbd>
               </motion.button>
             </div>
           </div>
-
           {/* KPI cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
             <motion.div
               initial={{ opacity: 0, y: ENTER_Y }}
               animate={{ opacity: 1, y: 0 }}
               transition={enter}
-              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300`}
+              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all ${
+                isDark ? 'hover:border-[#383838]' : 'hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300'
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-                    <Bookmark className="w-[18px] h-[18px] text-emerald-600" />
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-[#1C1B1B] text-[#3FE769]' : 'bg-emerald-50 text-emerald-600'}`}>
+                    <Bookmark className="w-[18px] h-[18px]" />
                   </div>
-                  <span className="font-medium text-[13px] leading-[20px] text-slate-500">Total Clips</span>
+                  <span className={`font-medium text-[13px] leading-[20px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>Total Clips</span>
                 </div>
-                <span className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] leading-[14px] font-medium border border-emerald-100">
+                <span className={`inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-[11px] leading-[14px] font-medium border ${
+                  isDark ? 'bg-[#1C1B1B] text-[#3FE769] border-[#2A2A2A]' : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                }`}>
                   <TrendingUp className="w-3 h-3" />
                   +12% mo
                 </span>
               </div>
               <div className="mt-4 flex items-baseline justify-between">
                 <span
-                  className="text-[36px] leading-[44px] text-slate-900 tracking-tight font-semibold"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  className={`text-[36px] leading-[44px] tracking-tight font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                  style={{ fontFamily: FONT_GAMBETTA }}
                 >
                   {totalCount}
                 </span>
-                <svg className="w-24 h-8 text-emerald-500" fill="none" viewBox="0 0 80 28">
+                <svg className={`w-24 h-8 ${isDark ? 'text-[#3FE769]' : 'text-emerald-500'}`} fill="none" viewBox="0 0 80 28">
                   <path d="M1 22L14 19L28 23L42 14L56 16L70 6L79 9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
-                  <path d="M1 22L14 19L28 23L42 14L56 16L70 6L79 9V28H1V22Z" fill="currentColor" fillOpacity="0.1"></path>
+                  <path d="M1 22L14 19L28 23L42 14L56 16L70 6L79 9V28H1V22Z" fill="currentColor" fillOpacity={isDark ? "0.15" : "0.1"}></path>
                 </svg>
               </div>
-              <p className="mt-2 text-[11px] leading-[14px] text-slate-500">42 saved this week</p>
+              <p className={`mt-2 text-[11px] leading-[14px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>42 saved this week</p>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0, y: ENTER_Y }}
               animate={{ opacity: 1, y: 0 }}
               transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.03 }}
-              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300`}
+              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all ${
+                isDark ? 'hover:border-[#383838]' : 'hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300'
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
-                    <CalendarDays className="w-[18px] h-[18px] text-amber-600" />
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-[#2A1715] text-[#F87171]' : 'bg-amber-50 text-amber-600'}`}>
+                    <CalendarDays className="w-[18px] h-[18px]" />
                   </div>
-                  <span className="font-medium text-[13px] leading-[20px] text-slate-500">Apply Deadlines</span>
+                  <span className={`font-medium text-[13px] leading-[20px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>Apply Deadlines</span>
                 </div>
-                <span className="inline-flex items-center px-2 py-1 rounded-full bg-amber-50 text-amber-700 text-[11px] leading-[14px] font-medium border border-amber-100">
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] leading-[14px] font-medium border ${
+                  isDark ? 'bg-[#2A1715] text-[#F87171] border-[#4A1E1C]' : 'bg-amber-50 text-amber-700 border-amber-100'
+                }`}>
                   &lt;48h left
                 </span>
               </div>
               <div className="mt-4 flex items-baseline gap-2">
                 <span
-                  className="text-[36px] leading-[44px] text-amber-600 tracking-tight font-semibold"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  className={`text-[36px] leading-[44px] tracking-tight font-semibold ${isDark ? 'text-[#F87171]' : 'text-amber-600'}`}
+                  style={{ fontFamily: FONT_GAMBETTA }}
                 >
                   {expiringCount}
                 </span>
-                <span className="text-[15px] leading-[22px] text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                <span className={`text-[15px] leading-[22px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`} style={{ fontFamily: FONT_GAMBETTA }}>
                   Expiring
                 </span>
               </div>
-              <p className="mt-2 text-[11px] leading-[14px] text-slate-500 truncate">YC W25 &amp; NSF SBIR Grant</p>
+              <p className={`mt-2 text-[11px] leading-[14px] truncate ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>YC W25 &amp; NSF SBIR Grant</p>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0, y: ENTER_Y }}
               animate={{ opacity: 1, y: 0 }}
               transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.06 }}
-              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300`}
+              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all ${
+                isDark ? 'hover:border-[#383838]' : 'hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300'
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                    <GraduationCap className="w-[18px] h-[18px] text-blue-600" />
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-[#141B26] text-[#60A5FA]' : 'bg-blue-50 text-blue-600'}`}>
+                    <GraduationCap className="w-[18px] h-[18px]" />
                   </div>
-                  <span className="font-medium text-[13px] leading-[20px] text-slate-500">Learn Backlog</span>
+                  <span className={`font-medium text-[13px] leading-[20px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>Learn Backlog</span>
                 </div>
-                <span className="inline-flex items-center px-2 py-1 rounded-full bg-slate-50 text-slate-600 text-[11px] leading-[14px] font-medium border border-slate-200">
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] leading-[14px] font-medium border ${
+                  isDark ? 'bg-[#141414] text-[#878787] border-[#262626]' : 'bg-slate-50 text-slate-600 border-slate-200'
+                }`}>
                   Avg 4m read
                 </span>
               </div>
               <div className="mt-4 flex items-baseline gap-2">
                 <span
-                  className="text-[36px] leading-[44px] text-slate-900 tracking-tight font-semibold"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  className={`text-[36px] leading-[44px] tracking-tight font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                  style={{ fontFamily: FONT_GAMBETTA }}
                 >
                   {backlogCount}
                 </span>
-                <span className="text-[15px] leading-[22px] text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                <span className={`text-[15px] leading-[22px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`} style={{ fontFamily: FONT_GAMBETTA }}>
                   Clips
                 </span>
               </div>
-              <p className="mt-2 text-[11px] leading-[14px] text-blue-600 font-medium truncate">
+              <p className={`mt-2 text-[11px] leading-[14px] font-medium truncate ${isDark ? 'text-[#60A5FA]' : 'text-blue-600'}`}>
                 8 flagged high relevance
               </p>
             </motion.div>
@@ -622,32 +713,34 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
               initial={{ opacity: 0, y: ENTER_Y }}
               animate={{ opacity: 1, y: 0 }}
               transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.09 }}
-              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300`}
+              className={`${cardClass} p-6 flex flex-col justify-between relative transition-all ${
+                isDark ? 'hover:border-[#383838]' : 'hover:shadow-[0_8px_24px_-4px_rgba(15,23,42,0.06)] hover:border-slate-300'
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                    <Network className="w-[18px] h-[18px] text-slate-600" />
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-[#1C1B1B] text-[#3FE769]' : 'bg-slate-100 text-slate-600'}`}>
+                    <Network className="w-[18px] h-[18px]" />
                   </div>
-                  <span className="font-medium text-[13px] leading-[20px] text-slate-500">Active Syncs</span>
+                  <span className={`font-medium text-[13px] leading-[20px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>Active Syncs</span>
                 </div>
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3FE769] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#3FE769]"></span>
                 </span>
               </div>
               <div className="mt-4 flex items-baseline gap-2">
                 <span
-                  className="text-[36px] leading-[44px] text-slate-900 tracking-tight font-semibold"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  className={`text-[36px] leading-[44px] tracking-tight font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                  style={{ fontFamily: FONT_GAMBETTA }}
                 >
                   {liveCount}
                 </span>
-                <span className="text-[15px] leading-[22px] text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                <span className={`text-[15px] leading-[22px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`} style={{ fontFamily: FONT_GAMBETTA }}>
                   Live
                 </span>
               </div>
-              <p className="mt-2 text-[11px] leading-[14px] text-slate-500 truncate">
+              <p className={`mt-2 text-[11px] leading-[14px] truncate ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                 Notion, Sheets, Obsidian, Webhook
               </p>
             </motion.div>
@@ -663,19 +756,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     key={f.label}
                     onClick={() => setActiveFilter(f.label)}
                     whileTap={reduceMotion ? undefined : { scale: 0.95 }}
-                    className={`relative flex items-center gap-2 px-4 h-9 rounded-full font-medium text-[13px] leading-[20px] transition-colors shrink-0 ${
+                    className={`relative flex items-center gap-2 px-4 h-9 rounded-full font-medium text-[13px] leading-[20px] transition-colors shrink-0 cursor-pointer ${
                       isActive
                         ? 'text-white'
+                        : isDark
+                        ? 'bg-[#111111] text-[#A1A1A1] hover:text-white hover:bg-[#181818] border border-[#262626]'
                         : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200'
                     }`}
                   >
                     {isActive &&
                       (reduceMotion ? (
-                        <span className="absolute inset-0 bg-[#2D6A4F] rounded-full shadow-sm" />
+                        <span
+                          className={`absolute inset-0 rounded-full shadow-sm ${
+                            isDark ? 'bg-[#1C1B1B] border border-[#262626]' : 'bg-[#2D6A4F]'
+                          }`}
+                        />
                       ) : (
                         <motion.span
                           layoutId="filter-pill"
-                          className="absolute inset-0 bg-[#2D6A4F] rounded-full shadow-sm"
+                          className={`absolute inset-0 rounded-full shadow-sm ${
+                            isDark ? 'bg-[#1C1B1B] border border-[#262626]' : 'bg-[#2D6A4F]'
+                          }`}
                           transition={{ ...SPRING }}
                         />
                       ))}
@@ -685,7 +786,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     <span className="relative z-10">{f.label}</span>
                     <span
                       className={`relative z-10 px-2 py-0.5 rounded-full text-[11px] leading-[14px] ${
-                        isActive ? 'bg-white/20 text-white' : 'text-slate-400 bg-slate-100'
+                        isActive
+                          ? isDark
+                            ? 'bg-white/10 text-white'
+                            : 'bg-white/20 text-white'
+                          : isDark
+                          ? 'text-[#878787] bg-[#1C1B1B]'
+                          : 'text-slate-400 bg-slate-100'
                       }`}
                     >
                       {f.count}
@@ -699,22 +806,38 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 <input
                   value={filterQuery}
                   onChange={(e) => setFilterQuery(e.target.value)}
-                  className="h-9 pl-9 pr-3 bg-white border border-slate-200 text-slate-700 text-[13px] leading-[20px] rounded-xl placeholder:text-slate-400 focus:outline-none focus:border-[#2D6A4F] focus:ring-2 focus:ring-[#2D6A4F]/10 transition-all shadow-sm w-48"
+                  className={`h-9 pl-9 pr-3 text-[13px] leading-[20px] rounded-xl focus:outline-none transition-all shadow-sm w-48 ${
+                    isDark
+                      ? 'bg-[#111111] border border-[#262626] text-white placeholder:text-[#666666] focus:border-[#3FE769] focus:ring-2 focus:ring-[#3FE769]/15'
+                      : 'bg-white border border-slate-200 text-slate-700 placeholder:text-slate-400 focus:border-[#2D6A4F] focus:ring-2 focus:ring-[#2D6A4F]/10'
+                  }`}
                   placeholder="Filter current view..."
                   type="text"
                 />
-                <ListFilter className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
+                <ListFilter className={`absolute left-2.5 top-2.5 w-4 h-4 pointer-events-none ${isDark ? 'text-[#666666]' : 'text-slate-400'}`} />
               </div>
-              <div className="h-5 w-px bg-slate-200 mx-0.5"></div>
-              <button className="h-9 px-3 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1 font-medium text-[13px] leading-[20px] transition-colors shadow-sm">
+              <div className={`h-5 w-px mx-0.5 ${isDark ? 'bg-[#262626]' : 'bg-slate-200'}`}></div>
+              <button
+                className={`h-9 px-3 rounded-xl border flex items-center gap-1 font-medium text-[13px] leading-[20px] transition-colors shadow-sm cursor-pointer ${
+                  isDark
+                    ? 'bg-[#111111] border-[#262626] text-[#A1A1A1] hover:text-white hover:bg-[#181818]'
+                    : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
                 <ArrowUpDown className="w-4 h-4" />
                 <span>Newest First</span>
               </button>
-              <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+              <div className={`flex p-0.5 rounded-xl border ${isDark ? 'bg-[#111111] border-[#262626]' : 'bg-slate-100 border-slate-200'}`}>
                 <button
                   onClick={() => setGridView(false)}
-                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-                    !gridView ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                    !gridView
+                      ? isDark
+                        ? 'bg-[#1C1B1B] shadow-sm text-white'
+                        : 'bg-white shadow-sm text-slate-900'
+                      : isDark
+                      ? 'text-[#666666] hover:text-white'
+                      : 'text-slate-500 hover:text-slate-900'
                   }`}
                   title="List View"
                 >
@@ -722,8 +845,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 </button>
                 <button
                   onClick={() => setGridView(true)}
-                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-                    gridView ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-900'
+                  className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
+                    gridView
+                      ? isDark
+                        ? 'bg-[#1C1B1B] shadow-sm text-white'
+                        : 'bg-white shadow-sm text-slate-900'
+                      : isDark
+                      ? 'text-[#666666] hover:text-white'
+                      : 'text-slate-500 hover:text-slate-900'
                   }`}
                   title="Grid View"
                 >
@@ -740,18 +869,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-baseline gap-2">
                   <h2
-                    className="text-[22px] leading-[28px] tracking-[-0.015em] font-semibold text-slate-900"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    className={`text-[22px] leading-[28px] tracking-[-0.015em] font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                    style={{ fontFamily: FONT_GAMBETTA }}
                   >
                     Recent Clips
                   </h2>
-                  <span className="text-[13px] leading-[20px] text-slate-500">
+                  <span className={`text-[13px] leading-[20px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                     Showing {visibleClips.length} of 148 clips
                   </span>
                 </div>
                 <button
                   onClick={() => setShowEmpty((v) => !v)}
-                  className="text-[#2D6A4F] text-[11px] leading-[14px] font-medium hover:underline flex items-center gap-1 h-11 px-2"
+                  className={`text-[11px] leading-[14px] font-medium hover:underline flex items-center gap-1 h-11 px-2 cursor-pointer ${
+                    isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'
+                  }`}
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>Toggle Empty State</span>
@@ -764,56 +895,88 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     <article
                       key={clip.id}
                       onClick={() => setOpenClip(clip)}
-                      className={`p-6 hover:bg-[#F8FAFC] transition-colors group flex flex-col sm:flex-row gap-4 justify-between items-start border-b border-slate-100 last:border-b-0 cursor-pointer ${
-                        clip.amber ? 'bg-amber-50/30 hover:bg-amber-50/60' : ''
-                      } ${clip.amber ? 'border-amber-100' : ''}`}
+                      className={`p-6 transition-colors group flex flex-col sm:flex-row gap-4 justify-between items-start border-b last:border-b-0 cursor-pointer ${
+                        clip.amber
+                          ? isDark
+                            ? 'bg-[#1C120C]/40 hover:bg-[#1C120C]/70 border-b-[#381F14]'
+                            : 'bg-amber-50/30 hover:bg-amber-50/60 border-b-amber-100'
+                          : isDark
+                          ? 'hover:bg-[#141414] border-b-[#1F1F1F]'
+                          : 'hover:bg-[#F8FAFC] border-b-slate-100'
+                      }`}
                     >
                       <div className="flex items-start gap-5 min-w-0 flex-1">
                         <div
                           className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 shadow-sm ${
                             clip.amber
-                              ? 'bg-amber-100 border-amber-200/50'
-                              : 'bg-slate-50 border-slate-100'
+                              ? isDark
+                                ? 'bg-[#2A1715] border-[#4A1E1C] text-[#F87171]'
+                                : 'bg-amber-100 border-amber-200/50 text-amber-700'
+                              : isDark
+                              ? 'bg-[#141414] border-[#262626] text-[#A1A1A1]'
+                              : 'bg-slate-50 border-slate-100 text-slate-500'
                           }`}
                         >
-                          <Link2 className={`w-5 h-5 ${clip.amber ? 'text-amber-700' : 'text-slate-500'}`} />
+                          <Link2 className="w-5 h-5" />
                         </div>
                         <div className="flex flex-col gap-2 min-w-0 flex-1">
                           <div className="flex items-center flex-wrap gap-2 mb-1">
                             <span
                               className={`px-2.5 py-0.5 rounded-full border text-[11px] leading-[14px] font-semibold tracking-wide ${badgeClass(
                                 clip.badge,
-                                clip.amber
+                                clip.amber,
+                                isDark
                               )}`}
                             >
                               {clip.badge}
                               {clip.badgeExtra ? ` • ${clip.badgeExtra}` : ''}
                             </span>
-                            <span className="text-[11px] leading-[14px] text-slate-500 font-mono tracking-tight bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                            <span
+                              className={`text-[11px] leading-[14px] font-mono tracking-tight px-1.5 py-0.5 rounded border ${
+                                isDark
+                                  ? 'bg-[#141414] text-[#878787] border-[#262626]'
+                                  : 'text-slate-500 bg-slate-50 border-slate-100'
+                              }`}
+                            >
                               {clip.domain}
                             </span>
-                            <span className="inline-block w-1 h-1 rounded-full bg-slate-300"></span>
-                            <span className="text-[11px] leading-[14px] text-slate-400">{clip.time}</span>
+                            <span className={`inline-block w-1 h-1 rounded-full ${isDark ? 'bg-[#262626]' : 'bg-slate-300'}`}></span>
+                            <span className={`text-[11px] leading-[14px] ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>
+                              {clip.time}
+                            </span>
                           </div>
-                          <span className="text-[16px] leading-[24px] font-semibold text-slate-900 hover:text-[#2D6A4F] transition-colors line-clamp-1 cursor-pointer">
+                          <span
+                            className={`text-[16px] leading-[24px] font-semibold transition-colors line-clamp-1 cursor-pointer ${
+                              isDark ? 'text-[#EDEDED] hover:text-[#3FE769]' : 'text-slate-900 hover:text-[#2D6A4F]'
+                            }`}
+                          >
                             {clip.title}
                           </span>
-                          <p className="text-[14px] leading-[22px] text-slate-600 line-clamp-2 pr-4">
+                          <p className={`text-[14px] leading-[22px] line-clamp-2 pr-4 ${isDark ? 'text-[#A1A1A1]' : 'text-slate-600'}`}>
                             {clip.excerpt}
                           </p>
                           <div className="flex items-center flex-wrap gap-3 pt-2">
-                            <div className="flex items-center gap-1.5 text-[11px] leading-[14px] text-slate-500">
+                            <div className="flex items-center gap-1.5 text-[11px] leading-[14px]">
                               {clip.tags.map((t) => (
-                                <span key={t} className="px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
+                                <span
+                                  key={t}
+                                  className={`px-2 py-1 rounded-full font-medium ${
+                                    isDark ? 'bg-[#181818] text-[#A1A1A1]' : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
                                   {t}
                                 </span>
                               ))}
                             </div>
-                            <span className="inline-block w-1 h-1 rounded-full bg-slate-300"></span>
+                            <span className={`inline-block w-1 h-1 rounded-full ${isDark ? 'bg-[#262626]' : 'bg-slate-300'}`}></span>
                             <div
                               className={`flex items-center gap-1 text-[11px] leading-[14px] px-2 py-1 rounded-full ${
                                 clip.amber
-                                  ? 'text-amber-700 bg-amber-100/50'
+                                  ? isDark
+                                    ? 'text-[#F87171] bg-[#2A1715]'
+                                    : 'text-amber-700 bg-amber-100/50'
+                                  : isDark
+                                  ? 'text-[#3FE769] bg-[#1C1B1B]'
                                   : 'text-emerald-600 bg-emerald-50'
                               }`}
                             >
@@ -833,9 +996,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                             e.stopPropagation();
                             toggleStar(clip.id);
                           }}
-                          className={`h-9 w-9 flex items-center justify-center rounded-lg border border-transparent transition-all ${
+                          className={`h-9 w-9 flex items-center justify-center rounded-lg border border-transparent transition-all cursor-pointer ${
                             starred.has(clip.id)
                               ? 'text-amber-500'
+                              : isDark
+                              ? 'text-[#878787] hover:text-amber-400 hover:bg-[#181818] hover:border-[#262626]'
                               : 'text-slate-400 hover:text-amber-500 hover:bg-white hover:border-slate-200 hover:shadow-sm'
                           }`}
                           title="Bookmark"
@@ -850,14 +1015,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                             e.stopPropagation();
                             copyClipLink(clip);
                           }}
-                          className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-[#2D6A4F] rounded-lg hover:bg-white border border-transparent hover:border-slate-200 hover:shadow-sm transition-all"
+                          className={`h-9 w-9 flex items-center justify-center rounded-lg border border-transparent transition-all cursor-pointer ${
+                            isDark
+                              ? 'text-[#878787] hover:text-[#3FE769] hover:bg-[#181818] hover:border-[#262626]'
+                              : 'text-slate-400 hover:text-[#2D6A4F] hover:bg-white hover:border-slate-200 hover:shadow-sm'
+                          }`}
                           title="Copy URL"
                         >
                           <Copy className="w-[18px] h-[18px]" />
                         </button>
                         <button
                           onClick={(e) => e.stopPropagation()}
-                          className="h-9 w-9 flex items-center justify-center text-slate-400 hover:text-slate-900 rounded-lg hover:bg-white border border-transparent hover:border-slate-200 hover:shadow-sm transition-all"
+                          className={`h-9 w-9 flex items-center justify-center rounded-lg border border-transparent transition-all cursor-pointer ${
+                            isDark
+                              ? 'text-[#878787] hover:text-white hover:bg-[#181818] hover:border-[#262626]'
+                              : 'text-slate-400 hover:text-slate-900 hover:bg-white hover:border-slate-200 hover:shadow-sm'
+                          }`}
                           title="More options"
                         >
                           <MoreHorizontal className="w-[18px] h-[18px]" />
@@ -870,42 +1043,60 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
 
               {showEmpty && (
                 <div className={`${cardClass} p-8 flex-col items-center justify-center text-center flex`}>
-                  <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-[#2D6A4F] mb-4 shadow-sm">
+                  <div
+                    className={`w-16 h-16 rounded-2xl border flex items-center justify-center mb-4 shadow-sm ${
+                      isDark ? 'bg-[#141414] border-[#262626] text-[#3FE769]' : 'bg-slate-50 border-slate-100 text-[#2D6A4F]'
+                    }`}
+                  >
                     <Bookmark className="w-8 h-8" />
                   </div>
                   <h3
-                    className="text-[22px] leading-[28px] tracking-[-0.015em] font-semibold text-slate-900 mb-2"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    className={`text-[22px] leading-[28px] tracking-[-0.015em] font-semibold mb-2 ${
+                      isDark ? 'text-white' : 'text-slate-900'
+                    }`}
+                    style={{ fontFamily: FONT_GAMBETTA }}
                   >
                     Vault Preview Mode: Clean Slate
                   </h3>
-                  <p className="text-[14px] leading-[20px] text-slate-600 max-w-md mb-6">
+                  <p className={`text-[14px] leading-[20px] max-w-md mb-6 ${isDark ? 'text-[#A1A1A1]' : 'text-slate-600'}`}>
                     No clips in this view. Test out the starter template or sync your bookmarks directly
                     from your browser.
                   </p>
-                  <div className="p-5 bg-slate-50 border border-slate-200 rounded-xl w-full max-w-sm text-left mb-6">
+                  <div
+                    className={`p-5 border rounded-xl w-full max-w-sm text-left mb-6 ${
+                      isDark ? 'bg-[#141414] border-[#262626]' : 'bg-slate-50 border-slate-200'
+                    }`}
+                  >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-[13px] leading-[20px] text-slate-900">
+                      <span className={`font-medium text-[13px] leading-[20px] ${isDark ? 'text-white' : 'text-slate-900'}`}>
                         Starter: YC Application Template
                       </span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] leading-[14px] font-medium border border-emerald-200/60">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[11px] leading-[14px] font-medium border ${
+                          isDark ? 'bg-[#1C1B1B] text-[#3FE769] border-[#2A2A2A]' : 'bg-emerald-100 text-emerald-800 border-emerald-200/60'
+                        }`}
+                      >
                         Ready
                       </span>
                     </div>
-                    <p className="text-[11px] leading-[14px] text-slate-500 leading-relaxed">
+                    <p className={`text-[11px] leading-[14px] leading-relaxed ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                       Includes default rubric, evaluation criteria, and pitch deck clip markers.
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <button
                       onClick={onOpenManualAddModal}
-                      className="px-5 h-10 rounded-xl bg-[#2D6A4F] text-white font-medium text-[13px] leading-[20px] hover:bg-[#245640] transition-colors shadow-sm"
+                      className={`px-5 h-10 rounded-xl font-medium text-[13px] leading-[20px] transition-colors shadow-sm cursor-pointer ${
+                        isDark ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A] hover:bg-[#222222]' : 'bg-[#2D6A4F] text-white hover:bg-[#245640]'
+                      }`}
                     >
                       Import Bookmarks
                     </button>
                     <button
                       onClick={() => setShowEmpty(false)}
-                      className="px-5 h-10 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium text-[13px] leading-[20px] transition-colors shadow-sm"
+                      className={`px-5 h-10 rounded-xl font-medium text-[13px] leading-[20px] transition-colors shadow-sm border cursor-pointer ${
+                        isDark ? 'bg-[#141414] border-[#262626] text-white hover:bg-[#1E1E1E]' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
                     >
                       Return to Feed
                     </button>
@@ -918,12 +1109,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
             <div className="lg:col-span-3 flex flex-col gap-6">
               <div className="flex items-baseline gap-2 px-1">
                 <h2
-                  className="text-[22px] leading-[28px] tracking-[-0.015em] font-semibold text-slate-900"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  className={`text-[22px] leading-[28px] tracking-[-0.015em] font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                  style={{ fontFamily: FONT_GAMBETTA }}
                 >
                   This Week
                 </h2>
-                <span className="text-[13px] leading-[20px] text-slate-500">Digest & goals</span>
+                <span className={`text-[13px] leading-[20px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>Digest &amp; goals</span>
               </div>
 
               <motion.div
@@ -932,20 +1123,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 transition={enter}
                 className={`${cardClass} p-6`}
               >
-                <span className="text-[11px] leading-[14px] tracking-[0.02em] font-medium text-slate-500 uppercase">
+                <span className={`text-[11px] leading-[14px] tracking-[0.02em] font-medium uppercase ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                   Week Digest
                 </span>
                 <div
-                  className="text-[30px] leading-[38px] font-semibold text-slate-900 tracking-tight tabular-nums mt-2"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  className={`text-[30px] leading-[38px] font-semibold tracking-tight tabular-nums mt-2 ${isDark ? 'text-white' : 'text-slate-900'}`}
+                  style={{ fontFamily: FONT_GAMBETTA }}
                 >
-                  {digestCount} <span className="text-[14px] font-sans font-medium text-slate-500">saves</span>
+                  {digestCount} <span className={`text-[14px] font-medium ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>saves</span>
                 </div>
-                <p className="text-[12px] leading-[18px] text-slate-500 mt-1 line-clamp-3">
+                <p className={`text-[12px] leading-[18px] mt-1 line-clamp-3 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                   Top story: Anthropic Claude 3.5 Sonnet Speculative Decoding. 2 opportunities
                   expiring soon.
                 </p>
-                <button className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-[#2D6A4F] hover:underline">
+                <button className={`mt-2 inline-flex items-center gap-1 text-[12px] font-medium hover:underline cursor-pointer ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`}>
                   View digest
                   <ArrowUpRight className="w-3 h-3" />
                 </button>
@@ -957,28 +1148,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.03 }}
                 className={`${cardClass} p-6`}
               >
-                <span className="text-[11px] leading-[14px] tracking-[0.02em] font-medium text-slate-500 uppercase inline-flex items-center gap-1.5">
+                <span className={`text-[11px] leading-[14px] tracking-[0.02em] font-medium uppercase inline-flex items-center gap-1.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                   <Flame className="w-3.5 h-3.5 text-[#EA580C]" />
                   Save Streak
                 </span>
                 <div
-                  className="text-[30px] leading-[38px] font-semibold text-slate-900 tracking-tight tabular-nums mt-2"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  className={`text-[30px] leading-[38px] font-semibold tracking-tight tabular-nums mt-2 ${isDark ? 'text-white' : 'text-slate-900'}`}
+                  style={{ fontFamily: FONT_GAMBETTA }}
                 >
-                  {streakCount} <span className="text-[14px] font-sans font-medium text-slate-500">days</span>
+                  {streakCount} <span className={`text-[14px] font-medium ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>days</span>
                 </div>
                 <div className="flex items-center gap-1 mt-2">
                   {STREAK_DAYS.map((d, i) => (
                     <span key={i} className="flex flex-col items-center gap-1">
                       <span
                         className={`w-4 h-4 rounded-full ${
-                          STREAK_ON[i] ? 'bg-[#EA580C]' : 'bg-slate-100 border border-slate-200'
+                          STREAK_ON[i]
+                            ? 'bg-[#EA580C]'
+                            : isDark
+                            ? 'bg-[#181818] border border-[#262626]'
+                            : 'bg-slate-100 border border-slate-200'
                         }`}
                       />
-                      <span className="text-[8.5px] font-sans text-slate-400">{d}</span>
+                      <span className={`text-[8.5px] font-sans ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>{d}</span>
                     </span>
                   ))}
-                  <span className="ml-auto text-[11px] font-sans text-slate-500">Best 26d</span>
+                  <span className={`ml-auto text-[11px] font-sans ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>Best 26d</span>
                 </div>
               </motion.div>
 
@@ -988,14 +1183,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.06 }}
                 className={`${cardClass} p-6 flex items-center gap-3`}
               >
-                <GoalRing pct={70} />
+                <GoalRing pct={70} isDark={isDark} />
                 <div className="min-w-0">
-                  <span className="text-[11px] leading-[14px] tracking-[0.02em] font-medium text-slate-500 uppercase">
+                  <span className={`text-[11px] leading-[14px] tracking-[0.02em] font-medium uppercase ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                     Daily Goal
                   </span>
-                  <div className="text-[14px] font-medium text-slate-900 mt-0.5">7 of 10 today</div>
-                  <div className="h-1.5 rounded-full bg-slate-100 mt-2 overflow-hidden">
-                    <div className="h-full w-[70%] rounded-full bg-[#2D6A4F]" />
+                  <div className={`text-[14px] font-medium mt-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>7 of 10 today</div>
+                  <div className={`h-1.5 rounded-full mt-2 overflow-hidden ${isDark ? 'bg-[#1F1F1F]' : 'bg-slate-100'}`}>
+                    <div className={`h-full w-[70%] rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-[#2D6A4F]'}`} />
                   </div>
                 </div>
               </motion.div>
@@ -1006,21 +1201,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.09 }}
                 className={`${cardClass} p-6`}
               >
-                <span className="text-[11px] leading-[14px] tracking-[0.02em] font-medium text-slate-500 uppercase">
+                <span className={`text-[11px] leading-[14px] tracking-[0.02em] font-medium uppercase ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                   Top Tags
                 </span>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {TOP_TAGS.map((t) => (
                     <span
                       key={t.tag}
-                      className="inline-flex items-center gap-1 text-[11px] leading-[14px] font-medium bg-[#DCFCE7] text-[#166534] rounded-full px-2 py-0.5"
+                      className={`inline-flex items-center gap-1 text-[11px] leading-[14px] font-medium rounded-full px-2 py-0.5 ${
+                        isDark
+                          ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                          : 'bg-[#DCFCE7] text-[#166534]'
+                      }`}
                     >
                       {t.tag}
                       <span className="font-bold tabular-nums">{t.count}</span>
                     </span>
                   ))}
                 </div>
-                <p className="text-[11px] leading-[14px] text-slate-500 mt-2">148 clips this month</p>
+                <p className={`text-[11px] leading-[14px] mt-2 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>148 clips this month</p>
               </motion.div>
             </div>
 
@@ -1035,8 +1234,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
               >
                 <div className="flex items-center justify-between">
                   <h3
-                    className="text-[15px] leading-[22px] font-semibold text-slate-900"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                    className={`text-[15px] leading-[22px] font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                    style={{ fontFamily: FONT_GAMBETTA }}
                   >
                     Intent Distribution
                   </h3>
@@ -1044,62 +1243,74 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 <div className="flex items-center justify-center py-3">
                   <div className="relative w-44 h-44 flex items-center justify-center group cursor-default">
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                      {DONUT.map((s, idx) => (
-                        <circle
-                          key={s.name}
-                          cx="50"
-                          cy="50"
-                          fill="none"
-                          r="40"
-                          stroke={s.color}
-                          strokeDasharray={`${s.dash} 241.4`}
-                          strokeDashoffset={s.offset}
-                          strokeLinecap="round"
-                          strokeWidth={activeDonut === idx ? 15 : 12}
-                          opacity={activeDonut === null || activeDonut === idx ? 1 : 0.3}
-                          onMouseEnter={() => setActiveDonut(idx)}
-                          onMouseLeave={() => setActiveDonut(null)}
-                          className="transition-all duration-150 cursor-pointer"
-                        />
-                      ))}
+                      {/* Track background */}
+                      <circle cx="50" cy="50" fill="none" r="40" stroke={isDark ? '#1F1F1F' : '#F1F5F9'} strokeWidth="12" />
+                      {DONUT.map((s, idx) => {
+                        const darkColors = ['#444444', '#777777', '#00CA50', '#86D7AD', '#555555', '#333333'];
+                        const segColor = isDark ? (darkColors[idx] || s.color) : s.color;
+                        return (
+                          <circle
+                            key={s.name}
+                            cx="50"
+                            cy="50"
+                            fill="none"
+                            r="40"
+                            stroke={segColor}
+                            strokeDasharray={`${s.dash} 241.4`}
+                            strokeDashoffset={s.offset}
+                            strokeLinecap="round"
+                            strokeWidth={activeDonut === idx ? 15 : 12}
+                            opacity={activeDonut === null || activeDonut === idx ? 1 : 0.3}
+                            onMouseEnter={() => setActiveDonut(idx)}
+                            onMouseLeave={() => setActiveDonut(null)}
+                            className="transition-all duration-150 cursor-pointer"
+                          />
+                        );
+                      })}
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                       <span
-                        className="text-[28px] leading-[36px] text-slate-900 tracking-tight font-semibold tabular-nums"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                        className={`text-[28px] leading-[36px] tracking-tight font-semibold tabular-nums ${isDark ? 'text-white' : 'text-slate-900'}`}
+                        style={{ fontFamily: FONT_GAMBETTA }}
                       >
                         {activeDonut !== null ? `${DONUT[activeDonut].pct}%` : '148'}
                       </span>
-                      <span className="text-[11px] leading-[14px] text-slate-500 uppercase tracking-wider font-medium mt-1">
+                      <span className={`text-[11px] leading-[14px] uppercase tracking-wider font-medium mt-1 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                         {activeDonut !== null ? DONUT[activeDonut].name : 'Total'}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-2">
-                  {DONUT.map((d, idx) => (
-                    <div
-                      key={d.name}
-                      onMouseEnter={() => setActiveDonut(idx)}
-                      onMouseLeave={() => setActiveDonut(null)}
-                      className={`flex items-center justify-between group cursor-pointer transition-opacity duration-150 ${
-                        activeDonut === null || activeDonut === idx ? '' : 'opacity-40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-sm"
-                          style={{ background: d.color }}
-                        ></span>
-                        <span className="text-[13px] text-slate-600 group-hover:text-slate-900 transition-colors">
-                          {d.name}
+                  {DONUT.map((d, idx) => {
+                    const darkColors = ['#444444', '#777777', '#00CA50', '#86D7AD', '#555555', '#333333'];
+                    const dotColor = isDark ? (darkColors[idx] || d.color) : d.color;
+                    return (
+                      <div
+                        key={d.name}
+                        onMouseEnter={() => setActiveDonut(idx)}
+                        onMouseLeave={() => setActiveDonut(null)}
+                        className={`flex items-center justify-between group cursor-pointer transition-opacity duration-150 ${
+                          activeDonut === null || activeDonut === idx ? '' : 'opacity-40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-2.5 h-2.5 rounded-full ring-2 shadow-sm ${isDark ? 'ring-[#1F1F1F]' : 'ring-white'}`}
+                            style={{ background: dotColor }}
+                          ></span>
+                          <span className={`text-[13px] transition-colors ${
+                            isDark ? 'text-[#A1A1A1] group-hover:text-white' : 'text-slate-600 group-hover:text-slate-900'
+                          }`}>
+                            {d.name}
+                          </span>
+                        </div>
+                        <span className={`text-[11px] leading-[14px] font-mono ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                          {d.pct}%
                         </span>
                       </div>
-                      <span className="text-[11px] leading-[14px] text-slate-400 font-mono">
-                        {d.pct}%
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </motion.div>
 
@@ -1112,17 +1323,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center">
-                      <AlarmClock className="w-4 h-4 text-[#EA580C]" />
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-[#2A1715] text-[#EA580C]' : 'bg-orange-50 text-[#EA580C]'}`}>
+                      <AlarmClock className="w-4 h-4" />
                     </div>
                     <h3
-                      className="text-[15px] leading-[22px] font-semibold text-slate-900"
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                      className={`text-[15px] leading-[22px] font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                      style={{ fontFamily: FONT_GAMBETTA }}
                     >
                       Urgent Deadlines
                     </h3>
                   </div>
-                  <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 text-[11px] leading-[14px] font-semibold border border-orange-200/50">
+                  <span className={`px-2 py-1 rounded-full text-[11px] leading-[14px] font-semibold border ${
+                    isDark
+                      ? 'bg-[#2A1715] text-[#EA580C] border-[#4A1E1C]'
+                      : 'bg-orange-100 text-orange-800 border-orange-200/50'
+                  }`}>
                     3 Actions
                   </span>
                 </div>
@@ -1135,47 +1350,65 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                           <div
                             className={`w-2 h-2 rounded-full mt-2 shrink-0 transition-colors ${
                               isDone
-                                ? 'bg-emerald-500'
+                                ? 'bg-[#3FE769]'
                                 : idx === 0
                                   ? 'bg-[#EA580C]'
                                   : idx === 1
                                     ? 'bg-amber-400'
-                                    : 'bg-slate-300'
+                                    : isDark ? 'bg-[#444444]' : 'bg-slate-300'
                             }`}
                           ></div>
                           <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
                               <span
                                 className={`font-medium text-[14px] truncate transition-colors ${
-                                  isDone ? 'text-slate-400 line-through' : 'text-slate-900'
+                                  isDone
+                                    ? isDark ? 'text-[#666666] line-through' : 'text-slate-400 line-through'
+                                    : isDark ? 'text-white' : 'text-slate-900'
                                 }`}
                               >
                                 {d.title}
                               </span>
                               {isDone ? (
-                                <span className="px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border bg-emerald-100 text-emerald-800 border-emerald-200/50">
+                                <span className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border ${
+                                  isDark
+                                    ? 'bg-[#12231A] text-[#3FE769] border-[#1C3E2D]'
+                                    : 'bg-emerald-100 text-emerald-800 border-emerald-200/50'
+                                }`}>
                                   Done
                                 </span>
                               ) : (
                                 <span
-                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border ${d.badgeClass}`}
+                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border ${
+                                    isDark
+                                      ? 'bg-[#1C1B1B] text-[#EDEDED] border-[#262626]'
+                                      : d.badgeClass
+                                  }`}
                                 >
                                   {deadlineBadge(d)}
                                 </span>
                               )}
                             </div>
-                            <span className="text-[13px] leading-[18px] text-slate-500">{d.sub}</span>
+                            <span className={`text-[13px] leading-[18px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>{d.sub}</span>
                             {!isDone && (
                               <span className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                                 <button
                                   onClick={() => toggleDone(d.title)}
-                                  className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60 rounded-full px-2 py-0.5 transition-colors"
+                                  className={`text-[11px] font-semibold rounded-full px-2 py-0.5 transition-colors cursor-pointer border ${
+                                    isDark
+                                      ? 'text-[#3FE769] bg-[#12231A] hover:bg-[#1A3326] border-[#1C3E2D]'
+                                      : 'text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border-emerald-200/60'
+                                  }`}
                                 >
                                   Mark done
                                 </button>
                                 <button
                                   onClick={() => snoozeDeadline(d.title)}
-                                  className="text-[11px] font-semibold text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-full px-2 py-0.5 transition-colors"
+                                  className={`text-[11px] font-semibold rounded-full px-2 py-0.5 transition-colors cursor-pointer border ${
+                                    isDark
+                                      ? 'text-[#A1A1A1] bg-[#181818] hover:bg-[#222222] border-[#262626]'
+                                      : 'text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border-transparent'
+                                  }`}
                                 >
                                   Snooze
                                 </button>
@@ -1183,7 +1416,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                             )}
                           </div>
                         </div>
-                        {idx < DEADLINES.length - 1 && <div className="h-px bg-slate-100 ml-5"></div>}
+                        {idx < DEADLINES.length - 1 && <div className={`h-px ml-5 ${isDark ? 'bg-[#1F1F1F]' : 'bg-slate-100'}`}></div>}
                       </React.Fragment>
                     );
                   })}
@@ -1199,24 +1432,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
-                      <Clock className="w-4 h-4 text-emerald-600" />
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-[#1C1B1B] text-[#3FE769]' : 'bg-emerald-50 text-emerald-600'}`}>
+                      <Clock className="w-4 h-4" />
                     </div>
                     <h3
-                      className="text-[15px] leading-[22px] font-semibold text-slate-900"
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                      className={`text-[15px] leading-[22px] font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}
+                      style={{ fontFamily: FONT_GAMBETTA }}
                     >
                       Sync Stream Health
                     </h3>
                   </div>
-                  <span className="text-[12px] text-emerald-600 font-semibold tracking-wide">
+                  <span className={`text-[12px] font-semibold tracking-wide ${isDark ? 'text-[#3FE769]' : 'text-emerald-600'}`}>
                     99.98% OK
                   </span>
                 </div>
                 <div className="relative flex flex-col gap-4 overflow-hidden">
                   {isRefreshing && !reduceMotion && (
                     <motion.div
-                      className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-emerald-200/50 to-transparent pointer-events-none"
+                      className={`absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent pointer-events-none ${
+                        isDark ? 'via-[#3FE769]/20' : 'via-emerald-200/50'
+                      } to-transparent`}
                       animate={{ x: ['-120%', '420%'] }}
                       transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }}
                     />
@@ -1228,29 +1463,37 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                           {r.live ? (
                             <>
                               <span
-                                className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                                className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#3FE769] opacity-75"
                                 style={r.delay ? { animationDelay: r.delay } : undefined}
                               ></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#3FE769]"></span>
                             </>
                           ) : (
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
+                            <span className={`relative inline-flex rounded-full h-2 w-2 ${isDark ? 'bg-[#333333]' : 'bg-slate-300'}`}></span>
                           )}
                         </span>
                         <div className="flex flex-col min-w-0">
-                          <span className="font-medium text-[14px] text-slate-900 truncate">
+                          <span className={`font-medium text-[14px] truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                             {r.name}
                           </span>
-                          <span className="text-[12px] text-slate-500">{r.detail}</span>
+                          <span className={`text-[12px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>{r.detail}</span>
                         </div>
                       </div>
-                      <span className="text-[11px] leading-[14px] text-slate-400 font-mono group-hover:text-slate-600 transition-colors">
+                      <span className={`text-[11px] leading-[14px] font-mono transition-colors ${
+                        isDark ? 'text-[#666666] group-hover:text-[#A1A1A1]' : 'text-slate-400 group-hover:text-slate-600'
+                      }`}>
                         {r.time}
                       </span>
                     </div>
                   ))}
                 </div>
-                <button className="mt-2 w-full h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors font-medium text-[13px] flex items-center justify-center gap-2 group">
+                <button
+                  className={`mt-2 w-full h-10 rounded-xl border transition-colors font-medium text-[13px] flex items-center justify-center gap-2 group cursor-pointer ${
+                    isDark
+                      ? 'bg-[#141414] border-[#262626] text-[#A1A1A1] hover:text-white hover:bg-[#1E1E1E]'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
                   <span>View Connection Metrics</span>
                   <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                 </button>

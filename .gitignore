@@ -40,4 +40,6 @@ celerybeat-schedule*
 opencode.json
 mcp_config.json
 .opencode/
-
+# Redis database dump files
+*.rdb
+dump.rdb
