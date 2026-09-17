@@ -120,3 +120,57 @@ class ApiKey(models.Model):
         except cls.DoesNotExist:
             return None
 
+
+class UserSettings(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        'CustomUser',
+        on_delete=models.CASCADE,
+        related_name='settings',
+        null=True,
+        blank=True,
+    )
+    # Save Confirmation Mode: 'auto', 'confirm', 'always_ask'
+    confirmation_mode = models.CharField(
+        max_length=20,
+        default='confirm',
+        choices=[
+            ('auto', 'Auto Mode'),
+            ('confirm', 'Confirm Mode'),
+            ('always_ask', 'Always Ask'),
+        ],
+    )
+    # Music Sub-Preferences
+    music_provider = models.CharField(
+        max_length=30,
+        default='spotify',
+        choices=[
+            ('spotify', 'Spotify'),
+            ('youtube_music', 'YouTube Music'),
+        ],
+    )
+    music_target_playlist_id = models.CharField(max_length=255, default='default', blank=True)
+    music_auto_add = models.BooleanField(default=True)
+    spotify_client_id = models.CharField(max_length=255, blank=True, default='')
+    spotify_client_secret = models.CharField(max_length=255, blank=True, default='')
+
+    # Privacy & AI Preferences
+    privacy_mode = models.BooleanField(default=False)
+    ai_extraction_prompt = models.TextField(
+        default='Extract core metadata strictly as valid JSON: {"title": "{page_title}", "company_or_author": "string", "published_date": "ISO8601", "summary_bullet_points": ["max 3 items"], "category": "auto-classified"}. Discard marketing cookies and affiliate query tags.',
+        blank=True,
+    )
+    theme = models.CharField(max_length=20, default='dark', blank=True)
+    extra_preferences = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'User Settings'
+        verbose_name_plural = 'User Settings'
+
+    def __str__(self):
+        user_label = self.user.email if self.user else 'Global / Guest'
+        return f"Settings for {user_label}"
+
