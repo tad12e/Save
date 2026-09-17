@@ -46,7 +46,10 @@ import {
   fetchCustomPagesBackend,
   createCustomPageBackend,
   deleteCustomPageBackend,
-  convertBackendPageToConfig
+  convertBackendPageToConfig,
+  fetchClipsBackend,
+  fetchClipsDashboardBackend,
+  type BackendDashboardData
 } from './lib/api';
 import { INITIAL_DIGEST } from './data/mockData';
 import { CheckCircle, Zap, X } from 'lucide-react';
@@ -101,6 +104,7 @@ export default function App() {
   const [selectedPageForNewClip, setSelectedPageForNewClip] = useState<string | undefined>(undefined);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [dashboardData, setDashboardData] = useState<BackendDashboardData | null>(null);
 
   // Storage State
   const [destinations, setDestinations] = useState<DestinationConfig[]>(() => getStoredDestinations());
@@ -110,47 +114,85 @@ export default function App() {
   const [boards, setBoards] = useState<SharedBoard[]>(() => getStoredBoards());
   const [customPages, setCustomPages] = useState<CustomPageConfig[]>(() => getStoredCustomPages());
 
-  // Fetch real destinations & custom pages from Django backend on mount
+  // Fetch real destinations, clips, custom pages & dashboard from Django backend on mount
   useEffect(() => {
     async function loadBackendData() {
-      const backendDestList = await fetchDestinationsBackend();
-      if (backendDestList && Array.isArray(backendDestList) && backendDestList.length > 0) {
-        // Find which destination the backend says is default (if any)
+      const [backendDestList, backendClips, backendPages, backendDashboard] = await Promise.all([
+        fetchDestinationsBackend(),
+        fetchClipsBackend(),
+        fetchCustomPagesBackend(),
+        fetchClipsDashboardBackend(),
+      ]);
+
+      if (backendDashboard) {
+        setDashboardData(backendDashboard);
+        if (backendDashboard.user?.email) {
+          setCurrentUser(prev => ({
+            name: backendDashboard.user?.name || prev?.name || backendDashboard.user?.email.split('@')[0] || 'User',
+            email: backendDashboard.user?.email || prev?.email || '',
+          }));
+        }
+      }
+
+      // Strictly use live database clips from Django backend
+      let liveClips: ClipItem[] = clips;
+      if (backendClips && Array.isArray(backendClips)) {
+        setClips(backendClips);
+        liveClips = backendClips;
+      }
+
+      // Sync destinations with true backend status and real clip counts
+      if (backendDestList && Array.isArray(backendDestList)) {
         const defaultBackend = backendDestList.find((b: any) => b.is_default);
 
         setDestinations(prev => {
           return prev.map(localDest => {
+            // Save Vault always uses exact count of active database clips
+            if (localDest.id === 'dest_save_vault' || localDest.type === 'custom_db') {
+              const match = backendDestList.find((b: any) => b.provider === 'custom_db' || b.id === localDest.id);
+              return {
+                ...localDest,
+                connected: true,
+                status: 'active',
+                isDefault: match ? Boolean(match.is_default) : true,
+                itemsSyncedCount: liveClips.length,
+              };
+            }
+
             const match = backendDestList.find((b: any) => 
               b.id === localDest.id || b.provider === localDest.type || b.name.toLowerCase() === localDest.name.toLowerCase()
             );
             if (match) {
               const isThisDefault = defaultBackend ? match.id === defaultBackend.id : match.is_default;
+              const syncedCount = liveClips.filter(c => c.syncedTo?.includes(match.provider)).length;
               return {
                 ...localDest,
                 id: match.id,
                 isDefault: Boolean(isThisDefault),
-                connected: match.is_active,
+                connected: Boolean(match.is_active),
                 status: match.is_active ? 'active' : 'disconnected',
+                itemsSyncedCount: syncedCount,
                 targetResourceName: match.config?.target_resource_name || localDest.targetResourceName
               };
             }
+
             return {
               ...localDest,
-              isDefault: false
+              isDefault: false,
+              connected: false,
+              status: 'disconnected',
+              itemsSyncedCount: 0,
             };
           });
         });
       }
 
       // Load custom pages/workspaces from backend
-      const backendPages = await fetchCustomPagesBackend();
       if (backendPages && Array.isArray(backendPages) && backendPages.length > 0) {
         const converted = backendPages.map(convertBackendPageToConfig);
         setCustomPages(prev => {
           const map = new Map<string, CustomPageConfig>();
-          // Start with existing/local pages
           prev.forEach(p => map.set(p.slug || p.id, p));
-          // Overlay or add backend persisted pages
           converted.forEach(p => map.set(p.slug || p.id, p));
           return Array.from(map.values());
         });
@@ -189,10 +231,47 @@ export default function App() {
   // Force Refresh Sync Action
   const handleRefreshSync = () => {
     setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      triggerToast('All connected storage destinations synchronized!');
-    }, 800);
+    Promise.all([
+      fetchClipsBackend(),
+      fetchDestinationsBackend(),
+      fetchCustomPagesBackend(),
+      fetchClipsDashboardBackend(),
+    ]).then(([backendClips, backendDestList, , backendDashboard]) => {
+      if (backendClips && Array.isArray(backendClips)) {
+        setClips(backendClips);
+      }
+      if (backendDashboard) {
+        setDashboardData(backendDashboard);
+      }
+      if (backendDestList && Array.isArray(backendDestList)) {
+        setDestinations(prev => {
+          return prev.map(localDest => {
+            if (localDest.id === 'dest_save_vault' || localDest.type === 'custom_db') {
+              return {
+                ...localDest,
+                connected: true,
+                status: 'active',
+                itemsSyncedCount: (backendClips || clips).length,
+              };
+            }
+            const match = backendDestList.find((b: any) => b.id === localDest.id || b.provider === localDest.type);
+            return {
+              ...localDest,
+              connected: match ? Boolean(match.is_active) : false,
+              status: match?.is_active ? 'active' : 'disconnected',
+              itemsSyncedCount: match ? (backendClips || clips).filter(c => c.syncedTo?.includes(match.provider)).length : 0,
+            };
+          });
+        });
+      }
+      triggerToast('All connected storage destinations and clips synchronized!');
+    }).catch(() => {
+      triggerToast('Synchronized local vault data!');
+    }).finally(() => {
+      setTimeout(() => {
+        setIsRefreshing(false);
+      }, 600);
+    });
   };
 
   // Handle Extension Save Clip Event
@@ -344,6 +423,10 @@ export default function App() {
     if (tokens.access) localStorage.setItem('clipper_access_token', tokens.access);
     if (tokens.refresh) localStorage.setItem('clipper_refresh_token', tokens.refresh);
     triggerToast(`Welcome, ${userData.name || userData.email}!`);
+    fetchClipsBackend().then(backendClips => {
+      if (backendClips && backendClips.length > 0) setClips(backendClips);
+    });
+    fetchDestinationsBackend();
   };
 
   const handleLogout = () => {
@@ -415,6 +498,8 @@ export default function App() {
               isRefreshing={isRefreshing}
               toggleExtensionWidget={() => setIsExtensionOpen(!isExtensionOpen)}
               theme={theme}
+              currentUser={currentUser}
+              dashboardData={dashboardData}
             />
           )}
 

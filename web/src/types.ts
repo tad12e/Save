@@ -4,6 +4,8 @@ export type ClipType = 'job' | 'education' | 'research' | 'book' | 'project' | '
 
 export type StorageMode = 'cloud' | 'local';
 
+export type GroupByDimension = 'intent' | 'source' | 'type' | 'custom';
+
 export interface CustomPageConfig {
   id: string;
   name: string;
@@ -16,6 +18,19 @@ export interface CustomPageConfig {
   aiGoalPrompt: string;
   createdAt: string;
   isSystemDefault?: boolean;
+}
+
+export interface CustomCategoryConfig {
+  id: string;
+  dimension: GroupByDimension;
+  name: string;
+  slug: string;
+  color: string;
+  bgColor?: string;
+  iconName?: string;
+  description?: string;
+  keywords?: string[];
+  createdAt?: string;
 }
 
 export interface FieldMapping {

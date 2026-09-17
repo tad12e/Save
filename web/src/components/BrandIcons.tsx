@@ -193,7 +193,123 @@ export const GitHubIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }
   </svg>
 );
 
-// ─── Unified Dynamic Icon Helper ───
+export const SubstackIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.539 8.242H1.46V5.406h21.08v2.836zM1.46 10.812V24L12 18.11 22.54 24V10.812H1.46zM22.54 0H1.46v2.836h21.08V0z" fill="#FF6719" />
+  </svg>
+);
+
+export const ArxivIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="4" fill="#B31B1B" />
+    <path d="M6 18L18 6M6 6l4.5 4.5M13.5 13.5L18 18" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const YCombinatorIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="4" fill="#FF6600" />
+    <path d="M7 6l4.5 8v5h2v-5l4.5-8h-2.2L12.5 12.5 9.2 6H7z" fill="#FFFFFF" />
+  </svg>
+);
+
+export const MediumIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path fillRule="evenodd" clipRule="evenodd" d="M13.54 12a6.8 6.8 0 0 1-6.77 6.82A6.8 6.8 0 0 1 0 12a6.8 6.8 0 0 1 6.77-6.82A6.8 6.8 0 0 1 13.54 12zm7.42 0c0 3.54-1.51 6.42-3.38 6.42-1.87 0-3.39-2.88-3.39-6.42s1.52-6.42 3.39-6.42 3.38 2.88 3.38 6.42M24 12c0 3.17-.53 5.75-1.19 5.75-.66 0-1.19-2.58-1.19-5.75s.53-5.75 1.19-5.75C23.47 6.25 24 8.83 24 12z" />
+  </svg>
+);
+
+export const StripeIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="5" fill="#635BFF" />
+    <path d="M13.976 9.15c0-.996-.81-1.38-2.146-1.38-1.91 0-4.327.585-6.222 1.62l-.65-4.04C7.03 4.415 9.774 4 12.19 4c4.618 0 7.828 2.227 7.828 6.463 0 6.29-8.665 5.286-8.665 8.006 0 1.173 1.026 1.554 2.473 1.554 2.188 0 4.966-.82 7.026-2.02l.654 4.04c-2.316 1.056-5.32 1.557-7.994 1.557C8.71 23.6 5.5 21.433 5.5 17.14c0-6.198 8.476-5.228 8.476-7.99z" fill="#FFFFFF" />
+  </svg>
+);
+
+export const VercelIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 1L24 22H0L12 1Z" />
+  </svg>
+);
+
+export const FigmaIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 24c2.209 0 4-1.791 4-4v-4H8c-2.209 0-4 1.791-4 4s1.791 4 4 4z" fill="#0ACF83" />
+    <path d="M4 12c0-2.209 1.791-4 4-4h4v8H8c-2.209 0-4-1.791-4-4z" fill="#A259FF" />
+    <path d="M4 4c0-2.209 1.791-4 4-4h4v8H8C5.791 8 4 6.209 4 4z" fill="#F24E1E" />
+    <path d="M12 0h4c2.209 0 4 1.791 4 4s-1.791 4-4 4h-4V0z" fill="#FF7262" />
+    <path d="M20 12c0 2.209-1.791 4-4 4s-4-1.791-4-4 1.791-4 4-4 4 1.791 4 4z" fill="#1ABCFE" />
+  </svg>
+);
+
+export const DockerIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M13 3h3v3h-3V3zm-4 4h3v3H9V7zm4 0h3v3h-3V7zm4 0h3v3h-3V7zM5 11h3v3H5v-3zm4 0h3v3H9v-3zm4 0h3v3h-3v-3zm4 0h3v3h-3v-3z" fill="#2496ED" />
+    <path d="M22.9 11.5c-.3-.2-1.3-.4-2.5.3-.4.2-.8.6-1.1.9-.3-.1-.8-.2-1.3-.2-.5 0-3.3.1-4.8 1.5-1.2-1.2-3.1-1-3.1-1-.8-.1-2.1.2-3.1 1.2-1.2.9-1.8 2.2-2.1 3.2-.8.3-2.1.9-2.9 2.4-.4.7-.6 1.5-.6 2.2 0 1.2.7 2 1.8 2H18c3.9 0 5.7-2.6 6-5.6.3-2.5-.5-5.5-1.1-6.9z" fill="#2496ED" />
+  </svg>
+);
+
+export const ReactIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="2" fill="#61DAFB" />
+    <ellipse cx="12" cy="12" rx="10" ry="4" stroke="#61DAFB" strokeWidth="1.2" />
+    <ellipse cx="12" cy="12" rx="10" ry="4" stroke="#61DAFB" strokeWidth="1.2" transform="rotate(60 12 12)" />
+    <ellipse cx="12" cy="12" rx="10" ry="4" stroke="#61DAFB" strokeWidth="1.2" transform="rotate(120 12 12)" />
+  </svg>
+);
+
+export const PythonIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M11.91 2c-5.04 0-4.72 2.18-4.72 2.18l.01 2.26h4.78v.68H5.25S2 6.75 2 11.83c0 5.08 2.84 4.9 2.84 4.9h1.7v-2.38s-.09-2.84 2.79-2.84h4.78s2.69.04 2.69-2.6V4.6S16.95 2 11.91 2zm-2.58 1.45c.48 0 .86.39.86.87 0 .48-.38.87-.86.87a.87.87 0 0 1-.87-.87c0-.48.39-.87.87-.87z" fill="#387EB8" />
+    <path d="M12.09 22c5.04 0 4.72-2.18 4.72-2.18l-.01-2.26h-4.78v-.68h6.73s3.25.37 3.25-4.71c0-5.08-2.84-4.9-2.84-4.9h-1.7v2.38s.09 2.84-2.79 2.84h-4.78s-2.69-.04-2.69 2.6v4.31S7.05 22 12.09 22zm2.58-1.45c-.48 0-.86-.39-.86-.87 0-.48.38-.87.86-.87.48 0 .87.39.87.87 0 .48-.39.87-.87.87z" fill="#FFE052" />
+  </svg>
+);
+
+export const OpenAIIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.28 10.1a5.6 5.6 0 0 0-.48-4.66 5.75 5.75 0 0 0-4.88-2.9 5.86 5.86 0 0 0-1.7.25A5.63 5.63 0 0 0 10.9.5a5.75 5.75 0 0 0-5.5 3.98 5.76 5.76 0 0 0-4.04 2.94 5.67 5.67 0 0 0 .68 6.55 5.6 5.6 0 0 0 .48 4.66 5.75 5.75 0 0 0 4.88 2.9c.57 0 1.14-.08 1.7-.25a5.63 5.63 0 0 0 4.32 2.29 5.75 5.75 0 0 0 5.5-3.98 5.76 5.76 0 0 0 4.04-2.94 5.67 5.67 0 0 0-.68-6.55zM12 14.73a2.73 2.73 0 1 1 2.73-2.73 2.73 2.73 0 0 1-2.73 2.73zm-6.22-4.07a4.2 4.2 0 0 1 2.45-2.28l1.77 1.02a2.82 2.82 0 0 0-.5 1.54 2.7 2.7 0 0 0 .07.57l-1.95 1.13a4.23 4.23 0 0 1-1.84-1.98zm1.09 5.86a4.2 4.2 0 0 1-.6-3.3l1.78 1.03a2.8 2.8 0 0 0 1.08 1.12c.3.17.65.26 1 .26v2.05a4.24 4.24 0 0 1-3.26-1.16zm5.83 3.44a4.23 4.23 0 0 1-3.08-1.34v-2.06c.36.21.78.33 1.2.33a2.75 2.75 0 0 0 1.4-.38l1.77 1.02a4.2 4.2 0 0 1-1.29 2.43zm4.56-2.58a4.22 4.22 0 0 1-2.45 2.28l-1.77-1.02a2.82 2.82 0 0 0 .5-1.54 2.7 2.7 0 0 0-.07-.57l1.95-1.13a4.23 4.23 0 0 1 1.84 1.98zm-1.09-5.86a4.2 4.2 0 0 1 .6 3.3l-1.78-1.03a2.8 2.8 0 0 0-1.08-1.12 2.65 2.65 0 0 0-1-.26V6.49a4.24 4.24 0 0 1 3.26 1.16zm-5.83-3.44a4.23 4.23 0 0 1 3.08 1.34v2.06a2.72 2.72 0 0 0-2.6 0L9.06 8.94a4.2 4.2 0 0 1 1.29-2.43z" />
+  </svg>
+);
+
+
+export const GoogleIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+  </svg>
+);
+
+export const DiscordIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333-.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" fill="#5865F2"/>
+  </svg>
+);
+
+export const WikipediaIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12.09 2C6.52 2 2 6.52 2 12.09s4.52 10.09 10.09 10.09 10.09-4.52 10.09-10.09S17.66 2 12.09 2zm4.33 14.53l-1.35-3.32-1.37 3.32h-1.4l-1.74-4.83-1.64 4.83H7.5l2.42-6.57h1.44l1.63 4.41 1.48-4.41h1.44l2.49 6.57h-1.98z"/>
+  </svg>
+);
+
+export const AnthropicIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect width="24" height="24" rx="5" fill="#D97706" />
+    <path d="M14.2 6.5l4.8 11.5h-2.5l-1-2.7h-4.8l-1 2.7H7.2l4.8-11.5h2.2zm-.8 2.5l-1.7 4.5h3.4l-1.7-4.5z" fill="#FFFFFF" />
+  </svg>
+);
+
+export const HuggingFaceIcon: React.FC<IconProps> = ({ className = 'w-5 h-5', style }) => (
+  <svg className={className} style={style} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="12" cy="12" r="10.5" fill="#FFD21E" />
+    <circle cx="8.5" cy="10" r="1.5" fill="#181818" />
+    <circle cx="15.5" cy="10" r="1.5" fill="#181818" />
+    <path d="M8 14.5c1.2 1.8 6.8 1.8 8 0" stroke="#181818" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
+// ─── Unified Dynamic Brand Icon Helper ───
 
 export const BrandIcon: React.FC<{ name: string; className?: string; style?: React.CSSProperties }> = ({
   name,
@@ -205,6 +321,9 @@ export const BrandIcon: React.FC<{ name: string; className?: string; style?: Rea
   // Exact service & catalog ID matching
   if (normalized.includes('gsheet') || normalized.includes('google_sheet') || normalized.includes('google sheets') || normalized === 'sheets') {
     return <GoogleSheetsIcon className={className} style={style} />;
+  }
+  if (normalized.includes('google')) {
+    return <GoogleIcon className={className} style={style} />;
   }
   if (normalized.includes('notion')) {
     return <NotionIcon className={className} style={style} />;
@@ -245,7 +364,7 @@ export const BrandIcon: React.FC<{ name: string; className?: string; style?: Rea
   if (normalized.includes('webhook') || normalized.includes('zapier') || normalized.includes('make')) {
     return <WebhookIcon className={className} style={style} />;
   }
-  if (normalized.includes('twitter') || normalized === 'x' || normalized === 'x_twitter') {
+  if (normalized.includes('twitter') || normalized === 'x' || normalized === 'x_twitter' || normalized === 'x.com') {
     return <XTwitterIcon className={className} style={style} />;
   }
   if (normalized.includes('linkedin')) {
@@ -266,6 +385,116 @@ export const BrandIcon: React.FC<{ name: string; className?: string; style?: Rea
   if (normalized.includes('github')) {
     return <GitHubIcon className={className} style={style} />;
   }
+  if (normalized.includes('substack')) {
+    return <SubstackIcon className={className} style={style} />;
+  }
+  if (normalized.includes('arxiv')) {
+    return <ArxivIcon className={className} style={style} />;
+  }
+  if (normalized.includes('ycombinator') || normalized.includes('hacker news') || normalized === 'yc' || normalized.includes('news.ycombinator')) {
+    return <YCombinatorIcon className={className} style={style} />;
+  }
+  if (normalized.includes('medium')) {
+    return <MediumIcon className={className} style={style} />;
+  }
+  if (normalized.includes('stripe')) {
+    return <StripeIcon className={className} style={style} />;
+  }
+  if (normalized.includes('vercel')) {
+    return <VercelIcon className={className} style={style} />;
+  }
+  if (normalized.includes('figma')) {
+    return <FigmaIcon className={className} style={style} />;
+  }
+  if (normalized.includes('docker')) {
+    return <DockerIcon className={className} style={style} />;
+  }
+  if (normalized.includes('react')) {
+    return <ReactIcon className={className} style={style} />;
+  }
+  if (normalized.includes('python')) {
+    return <PythonIcon className={className} style={style} />;
+  }
+  if (normalized.includes('openai') || normalized.includes('chatgpt')) {
+    return <OpenAIIcon className={className} style={style} />;
+  }
+  if (normalized.includes('anthropic') || normalized.includes('claude')) {
+    return <AnthropicIcon className={className} style={style} />;
+  }
+  if (normalized.includes('huggingface') || normalized.includes('hf.co')) {
+    return <HuggingFaceIcon className={className} style={style} />;
+  }
+  if (normalized.includes('discord')) {
+    return <DiscordIcon className={className} style={style} />;
+  }
+  if (normalized.includes('wikipedia')) {
+    return <WikipediaIcon className={className} style={style} />;
+  }
 
   return <SaveVaultIcon className={className} style={style} />;
 };
+
+// ─── Real Website Favicon & Iconify Component with Auto Fallback ───
+
+export const WebsiteIcon: React.FC<{
+  name?: string;
+  domain?: string;
+  url?: string;
+  className?: string;
+  style?: React.CSSProperties;
+}> = ({ name = '', domain = '', url = '', className = 'w-5 h-5', style }) => {
+  const [useFallbackCdn, setUseFallbackCdn] = React.useState(false);
+  const [imgFailed, setImgFailed] = React.useState(false);
+
+  // Extract clean domain
+  let d = (domain || name || '').toLowerCase().trim();
+  if (url && (!d || d === 'vault' || !d.includes('.'))) {
+    try {
+      d = new URL(url).hostname.toLowerCase();
+    } catch {}
+  }
+  d = d.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].trim();
+  if (d.startsWith('www.')) d = d.slice(4);
+
+  // Check known vectors in BrandIcon first
+  const knownTokens = [
+    'github', 'arxiv', 'twitter', 'x.com', 'spotify', 'youtube', 'notion',
+    'airtable', 'google', 'sheet', 'linkedin', 'reddit', 'substack', 'ycombinator',
+    'yc', 'medium', 'stripe', 'vercel', 'figma', 'docker', 'react', 'python',
+    'openai', 'chatgpt', 'anthropic', 'claude', 'huggingface', 'slack', 'linear',
+    'coda', 'supabase', 'postgres', 'snowflake', 'hubspot', 'salesforce', 'discord',
+    'wikipedia'
+  ];
+
+  const matchedToken = knownTokens.find((t) => d.includes(t) || name.toLowerCase().includes(t));
+  if (matchedToken) {
+    return <BrandIcon name={matchedToken} className={className} style={style} />;
+  }
+
+  // If real domain with a dot and not failed, load authentic 64px Google favicon or DuckDuckGo fallback
+  if (d && d !== 'vault' && d.includes('.') && !imgFailed) {
+    const src = useFallbackCdn
+      ? `https://icons.duckduckgo.com/ip3/${d}.ico`
+      : `https://www.google.com/s2/favicons?domain=${d}&sz=64`;
+
+    return (
+      <img
+        src={src}
+        alt={d}
+        className={`${className} object-contain rounded shrink-0`}
+        onError={() => {
+          if (!useFallbackCdn) {
+            setUseFallbackCdn(true);
+          } else {
+            setImgFailed(true);
+          }
+        }}
+        loading="lazy"
+        style={style}
+      />
+    );
+  }
+
+  return <BrandIcon name={d || name} className={className} style={style} />;
+};
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   Bookmark,
@@ -34,6 +34,7 @@ import {
   ConnectionSyncLog,
 } from '../../types';
 import { TabType } from '../layout/Sidebar';
+import { getClipIntent } from './ClipsPage';
 
 interface DashboardPageProps {
   clips: ClipItem[];
@@ -48,6 +49,8 @@ interface DashboardPageProps {
   isRefreshing?: boolean;
   toggleExtensionWidget: () => void;
   theme?: 'terminal' | 'dark' | 'light';
+  currentUser?: { name: string; email: string } | null;
+  dashboardData?: any;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,126 +76,6 @@ interface StaticClip {
   sync: string;
   amber?: boolean;
 }
-
-const STATIC_CLIPS: StaticClip[] = [
-  {
-    id: 'c1',
-    badge: 'LEARN',
-    domain: 'twitter.com',
-    time: '2h ago',
-    title: 'Anthropic Claude 3.5 Sonnet Speculative Decoding & MoE Architecture Deep Dive',
-    excerpt:
-      'Empirical throughput metrics show 2.4x inference gain using speculative draft tokens with specialized KV-cache pruning mechanisms.',
-    tags: ['#AI', '#LLMs', '#Benchmarks'],
-    sync: 'Notion, Sheets',
-  },
-  {
-    id: 'c2',
-    badge: 'APPLY',
-    badgeExtra: 'DUE OCT 28 (42h)',
-    domain: 'grants.gov',
-    time: '5h ago',
-    title: 'NSF SBIR Phase I Proposal — High-Throughput Genomic Assembly ($275k Seed Grant)',
-    excerpt:
-      'Executive summary and preliminary technical validation sections completed. Requires letters of support and budget narrative upload.',
-    tags: ['#Grants', '#DeepTech', '#BioTech'],
-    sync: 'Sheets',
-    amber: true,
-  },
-  {
-    id: 'c3',
-    badge: 'TRACK',
-    domain: 'github.com',
-    time: 'Yesterday',
-    title: 'vLLM multi-lora-orchestrator release v0.6.2 with CUDA Graph Optimization',
-    excerpt:
-      'Hot-swapping dynamic LoRA adapters without recreating engine instances. Benchmarked at 180 tokens/sec on 8x H100 SXM nodes.',
-    tags: ['#OpenSource', '#Inference', '#Rust'],
-    sync: 'Obsidian',
-  },
-  {
-    id: 'c4',
-    badge: 'HIRE',
-    domain: 'ycombinator.com',
-    time: '2 days ago',
-    title: 'YC Tech Companies 2026 Hiring & Founding Engineer Opportunities in AI Tooling',
-    excerpt:
-      'Curated index of 14 early-stage Series A startups building foundation model tooling, compiler infrastructure, and synthesis engines.',
-    tags: ['#Career', '#Founders'],
-    sync: 'Notion',
-  },
-  {
-    id: 'c5',
-    badge: 'LEARN',
-    domain: 'youtube.com',
-    time: '3 days ago',
-    title: 'Keynote: Building Production-Grade Vector Search with HNSW and pgvector at Scale',
-    excerpt:
-      'Deep architectural walkthrough on partition strategies, RAM footprint optimization, and hybrid full-text indexing inside PostgreSQL 17.',
-    tags: ['#Databases', '#Postgres'],
-    sync: 'Notion',
-  },
-];
-
-const FILTERS = [
-  { label: 'All', count: 148, dot: null as string | null },
-  { label: 'Apply', count: 18, dot: 'bg-amber-500' },
-  { label: 'Learn', count: 74, dot: null as string | null },
-  { label: 'Buy', count: 6, dot: null as string | null },
-  { label: 'Attend', count: 9, dot: null as string | null },
-  { label: 'Hire', count: 12, dot: null as string | null },
-  { label: 'Track', count: 29, dot: null as string | null },
-];
-
-const DONUT = [
-  { name: 'Learn', pct: 50, color: '#2D6A4F', dash: '119', offset: '-118.8' },
-  { name: 'Track', pct: 20, color: '#40916C', dash: '47.6', offset: '-71.2' },
-  { name: 'Apply', pct: 12, color: '#D97706', dash: '28.5', offset: '-42.7' },
-  { name: 'Hire', pct: 8, color: '#86D7AD', dash: '19', offset: '-23.7' },
-  { name: 'Attend', pct: 6, color: '#64748B', dash: '14.2', offset: '-9.5' },
-  { name: 'Buy', pct: 4, color: '#CBD5E1', dash: '9.5', offset: '0' },
-];
-
-const DEADLINES = [
-  {
-    title: 'NSF SBIR Phase I',
-    badge: '2 days (Oct 28)',
-    sub: 'Review final indirect cost calculations',
-    dot: 'bg-[#EA580C]',
-    badgeClass: 'bg-red-100 text-red-700 border-red-200/50',
-  },
-  {
-    title: 'OpenAI Resident Researcher',
-    badge: '5 days (Oct 31)',
-    sub: 'Submit publications portfolio & references',
-    dot: 'bg-amber-400',
-    badgeClass: 'bg-amber-100 text-amber-800 border-amber-200/50',
-  },
-  {
-    title: 'YC W25 Early Batch',
-    badge: '8 days (Nov 03)',
-    sub: 'Update 1-minute founder video link',
-    dot: 'bg-slate-300',
-    badgeClass: 'bg-slate-100 text-slate-600 border-slate-200/50',
-  },
-];
-
-const SYNC_ROWS = [
-  { name: 'Google Sheets', detail: '148 items synced • 280ms', time: '2m ago', live: true, delay: '' },
-  { name: 'Notion Workspace', detail: '142 items synced • 310ms', time: '12m ago', live: true, delay: '0.2s' },
-  { name: 'Obsidian Local Hook', detail: 'All 148 notes mirrored', time: '34m ago', live: false, delay: '' },
-  { name: 'Webhook Ingestion', detail: '96 payloads delivered', time: '1h ago', live: false, delay: '' },
-];
-
-const TOP_TAGS = [
-  { tag: '#LLM', count: 32 },
-  { tag: '#Grants', count: 18 },
-  { tag: '#Career', count: 15 },
-  { tag: '#Rust', count: 12 },
-];
-
-const STREAK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-const STREAK_ON = [true, true, true, true, true, false, false];
 
 export const FONT_GAMBETTA = "'Gambetta', 'Playfair Display', Georgia, Cambria, 'Times New Roman', Times, serif";
 
@@ -254,7 +137,7 @@ function badgeClass(badge: BadgeKind, amber?: boolean, isDark?: boolean): string
   }
 }
 
-function GoalRing({ pct, isDark }: { pct: number; isDark?: boolean }) {
+function GoalRing({ current, target, pct, isDark }: { current: number; target: number; pct: number; isDark?: boolean }) {
   const R = 26;
   const C = 2 * Math.PI * R;
   return (
@@ -277,22 +160,80 @@ function GoalRing({ pct, isDark }: { pct: number; isDark?: boolean }) {
           className={`text-[15px] font-bold leading-none ${isDark ? 'text-white' : 'text-[#0F172A]'}`}
           style={{ fontFamily: FONT_GAMBETTA }}
         >
-          7/10
+          {current}/{target}
         </span>
       </div>
     </div>
   );
 }
 
+function mapClipToStaticClip(c: ClipItem): StaticClip {
+  const intent = getClipIntent(c);
+  let badge: BadgeKind = 'LEARN';
+  if (intent === 'apply' || intent === 'attend') badge = 'APPLY';
+  else if (intent === 'hire') badge = 'HIRE';
+  else if (intent === 'track' || intent === 'buy') badge = 'TRACK';
+  else badge = 'LEARN';
+
+  let domain = 'web';
+  try {
+    if (c.url) {
+      domain = new URL(c.url).hostname.replace(/^www\./, '');
+    }
+  } catch {
+    domain = 'web';
+  }
+
+  let timeStr = 'Recently';
+  if (c.createdAt) {
+    const diffHours = (Date.now() - new Date(c.createdAt).getTime()) / (1000 * 60 * 60);
+    if (diffHours < 1) timeStr = 'Just now';
+    else if (diffHours < 24) timeStr = `${Math.floor(diffHours)}h ago`;
+    else if (diffHours < 48) timeStr = 'Yesterday';
+    else timeStr = `${Math.floor(diffHours / 24)}d ago`;
+  }
+
+  const deadline = c.extractedData?.deadline;
+  const badgeExtra = deadline ? `DUE ${deadline}` : undefined;
+
+  const syncDestinations = (c.syncedTo && c.syncedTo.length > 0)
+    ? c.syncedTo.map(s => String(s).replace(/_/g, ' ')).join(', ')
+    : 'Vault';
+
+  return {
+    id: c.id,
+    badge,
+    badgeExtra,
+    domain,
+    time: timeStr,
+    title: c.title || c.url || 'Untitled Clip',
+    excerpt: c.summary || c.selectedText || 'No excerpt available',
+    tags: (c.tags && c.tags.length > 0) ? c.tags.map(t => t.startsWith('#') ? t : `#${t}`) : ['#Knowledge'],
+    sync: syncDestinations,
+    amber: badge === 'APPLY',
+  };
+}
+
 export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
-  const { onOpenManualAddModal, onRefreshSync, isRefreshing = false, theme = 'dark' } = props;
+  const {
+    clips = [],
+    destinations = [],
+    onOpenManualAddModal,
+    onRefreshSync,
+    isRefreshing = false,
+    theme = 'dark',
+    currentUser,
+    dashboardData,
+  } = props;
   const isDark = theme === 'dark' || theme === 'terminal';
   const cardClass = isDark
     ? 'bg-[#0E0E0E] border border-[#262626] rounded-2xl shadow-xs'
     : 'bg-white border border-slate-200 rounded-2xl shadow-sm';
   const [activeFilter, setActiveFilter] = useState('All');
   const [filterQuery, setFilterQuery] = useState('');
-  const [starred, setStarred] = useState<Set<string>>(new Set(['c2']));
+  const [starred, setStarred] = useState<Set<string>>(() => {
+    return new Set(clips.filter(c => c.isFavorite).map(c => c.id));
+  });
   const [gridView, setGridView] = useState(false);
   const [showEmpty, setShowEmpty] = useState(false);
   const [openClip, setOpenClip] = useState<StaticClip | null>(null);
@@ -303,12 +244,300 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
   const reduceMotion = useReducedMotion();
   const enter = reduceMotion ? { duration: 0 } : { ...SPRING };
 
-  const totalCount = useCountUp(148);
-  const expiringCount = useCountUp(2);
-  const backlogCount = useCountUp(24);
-  const liveCount = useCountUp(4);
-  const digestCount = useCountUp(12);
-  const streakCount = useCountUp(14);
+  const userName = currentUser?.name?.split(' ')[0] || dashboardData?.user?.name?.split(' ')[0] || 'there';
+
+  // Dynamic clips strictly from live backend (empty array if no clips yet)
+  const dynamicClips: StaticClip[] = useMemo(() => {
+    if (clips && clips.length > 0) {
+      return clips.map(mapClipToStaticClip);
+    }
+    return [];
+  }, [clips]);
+
+  // Exact live breakdown using getClipIntent
+  const intentCounts = useMemo(() => {
+    const counts = { All: dynamicClips.length, Apply: 0, Learn: 0, Track: 0, Hire: 0 };
+    dynamicClips.forEach(c => {
+      if (c.badge === 'APPLY') counts.Apply++;
+      else if (c.badge === 'LEARN') counts.Learn++;
+      else if (c.badge === 'TRACK') counts.Track++;
+      else if (c.badge === 'HIRE') counts.Hire++;
+    });
+    return counts;
+  }, [dynamicClips]);
+
+  // Filter Pills (matching exact counts)
+  const filterCounts = useMemo(() => {
+    return [
+      { label: 'All', count: intentCounts.All, dot: null as string | null },
+      { label: 'Apply', count: intentCounts.Apply, dot: 'bg-amber-500' },
+      { label: 'Learn', count: intentCounts.Learn, dot: null as string | null },
+      { label: 'Track', count: intentCounts.Track, dot: null as string | null },
+      { label: 'Hire', count: intentCounts.Hire, dot: null as string | null },
+    ];
+  }, [intentCounts]);
+
+  // 1. Total Clips Card
+  const liveClipsCount = dynamicClips.length;
+  const savedThisWeekCount = useMemo(() => {
+    if (dashboardData?.stats?.saved_this_week !== undefined) {
+      return dashboardData.stats.saved_this_week;
+    }
+    if (!clips || clips.length === 0) return 0;
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return clips.filter(c => c.createdAt && new Date(c.createdAt).getTime() >= sevenDaysAgo).length;
+  }, [clips, dashboardData?.stats?.saved_this_week]);
+
+  // 2. Apply Deadlines Card: EXACTLY matches intentCounts.Apply
+  const liveExpiringCount = intentCounts.Apply;
+  const expiringSublabel = useMemo(() => {
+    const applyClips = dynamicClips.filter(c => c.badge === 'APPLY');
+    const withTitles = applyClips.filter(c => c.title && c.title !== c.domain);
+    if (withTitles.length >= 2) {
+      return `${withTitles[0].title.slice(0, 18)}... & ${withTitles[1].title.slice(0, 18)}...`;
+    } else if (withTitles.length === 1) {
+      return withTitles[0].title.slice(0, 36);
+    }
+    return applyClips.length > 0 ? `${applyClips.length} active opportunities` : 'All applications on track';
+  }, [dynamicClips]);
+
+  // 3. Learn Backlog Card: EXACTLY matches intentCounts.Learn
+  const liveBacklogCount = intentCounts.Learn;
+  const learnSublabel = useMemo(() => {
+    const learnClips = dynamicClips.filter(c => c.badge === 'LEARN');
+    const flagged = learnClips.filter(c => c.tags && c.tags.some(t => {
+      const lower = t.toLowerCase();
+      return lower.includes('ai') || lower.includes('high') || lower.includes('important') || lower.includes('read') || lower.includes('study');
+    }));
+    return flagged.length > 0 ? `${flagged.length} flagged high relevance` : `${learnClips.length} items in reading queue`;
+  }, [dynamicClips]);
+
+  // 4. Active Syncs Card: Live from destinations
+  const activeDestinations = useMemo(() => {
+    return destinations.filter(d => d.connected && d.status === 'active');
+  }, [destinations]);
+
+  const liveActiveSyncs = Math.max(1, activeDestinations.length);
+  const syncSublabel = useMemo(() => {
+    if (activeDestinations.length > 0) {
+      return activeDestinations.map(d => d.name).join(', ');
+    }
+    return 'Save Vault (Cloud)';
+  }, [activeDestinations]);
+
+  // Right Rail: Live Donut Breakdown from intentCounts
+  const dynamicDonut = useMemo(() => {
+    const total = Math.max(1, dynamicClips.length);
+    const slices = [
+      { name: 'Learn', count: intentCounts.Learn, color: '#2D6A4F' },
+      { name: 'Track', count: intentCounts.Track, color: '#40916C' },
+      { name: 'Apply', count: intentCounts.Apply, color: '#D97706' },
+      { name: 'Hire', count: intentCounts.Hire, color: '#EC4899' },
+    ];
+
+    const circumference = 251.327;
+    let accumulated = 0;
+
+    return slices.map((s) => {
+      const pct = Math.round((s.count / total) * 100);
+      const dash = ((s.count / total) * circumference).toFixed(1);
+      const offset = (-accumulated).toFixed(1);
+      accumulated += (s.count / total) * circumference;
+      return {
+        name: s.name,
+        count: s.count,
+        pct,
+        color: s.color,
+        dash,
+        offset,
+      };
+    });
+  }, [dynamicClips.length, intentCounts]);
+
+  // Right Rail: Live Top Tags from dynamicClips
+  const dynamicTopTags = useMemo(() => {
+    const tagFreq: Record<string, number> = {};
+    dynamicClips.forEach(c => {
+      (c.tags || []).forEach(raw => {
+        const clean = raw.trim();
+        if (!clean) return;
+        const tag = clean.startsWith('#') ? clean : `#${clean}`;
+        tagFreq[tag] = (tagFreq[tag] || 0) + 1;
+      });
+    });
+    return Object.entries(tagFreq)
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+  }, [dynamicClips]);
+
+  // Right Rail: Live top story title from latest clip
+  const topStoryTitle = useMemo(() => {
+    if (dynamicClips.length > 0 && dynamicClips[0].title) {
+      return dynamicClips[0].title.slice(0, 48) + (dynamicClips[0].title.length > 48 ? '...' : '');
+    }
+    return 'No saved opportunities yet';
+  }, [dynamicClips]);
+
+  // Right Rail: Live Urgent Deadlines from dynamicClips or backend upcoming_deadlines
+  const dynamicDeadlines = useMemo(() => {
+    if (dashboardData?.upcoming_deadlines && dashboardData.upcoming_deadlines.length > 0) {
+      return dashboardData.upcoming_deadlines.map((b: any) => {
+        const deadlineStr = b.deadline_date ? `Due ${b.deadline_date}` : 'Action Required';
+        return {
+          title: (b.title || b.url || 'Opportunity').slice(0, 44),
+          badge: deadlineStr,
+          sub: b.summary ? b.summary.slice(0, 64) + (b.summary.length > 64 ? '...' : '') : 'Opportunity review & submission checklist',
+          dot: 'bg-[#EA580C]',
+          badgeClass: 'bg-orange-100 text-orange-800 border-orange-200/50',
+        };
+      });
+    }
+
+    const candidateClips = dynamicClips.filter(c => c.badgeExtra || c.badge === 'APPLY');
+    if (candidateClips.length === 0) {
+      return [];
+    }
+
+    return candidateClips.slice(0, 4).map((c) => {
+      let badge = 'Open Action';
+      let badgeClass = 'bg-slate-100 text-slate-600 border-slate-200/50';
+      let dot = 'bg-amber-400';
+
+      if (c.badgeExtra) {
+        badge = c.badgeExtra.replace(/^DUE\s*/i, '');
+        badgeClass = 'bg-orange-100 text-orange-800 border-orange-200/50';
+        dot = 'bg-[#EA580C]';
+      }
+
+      return {
+        title: c.title.slice(0, 44),
+        badge,
+        sub: c.excerpt ? c.excerpt.slice(0, 64) + (c.excerpt.length > 64 ? '...' : '') : 'Opportunity review & submission checklist',
+        dot,
+        badgeClass,
+      };
+    });
+  }, [dashboardData?.upcoming_deadlines, dynamicClips]);
+
+  // Right Rail: Live Sync Stream Health from destinations
+  const dynamicSyncRows = useMemo(() => {
+    if (dashboardData?.destinations_status && dashboardData.destinations_status.length > 0) {
+      return dashboardData.destinations_status.map((d: any, idx: number) => {
+        const isConnected = Boolean(d.connected);
+        const count = d.items_synced ?? (isConnected ? liveClipsCount : 0);
+        const detail = isConnected ? `${count} items synced • Realtime` : 'Not configured';
+        const timeAgo = isConnected ? 'Active' : 'Offline';
+        return {
+          name: d.name,
+          detail,
+          time: timeAgo,
+          live: isConnected,
+          delay: idx === 1 ? '0.2s' : '',
+        };
+      });
+    }
+
+    if (destinations && destinations.length > 0) {
+      return destinations.map((d, idx) => {
+        const isVault = d.id === 'dest_save_vault' || d.type === 'custom_db';
+        const isConnected = d.connected && d.status === 'active';
+        const count = isVault ? liveClipsCount : (d.itemsSyncedCount || 0);
+        const detail = isConnected ? `${count} items synced • Realtime` : 'Not configured';
+        const timeAgo = isConnected ? 'Active' : 'Offline';
+        return {
+          name: d.name,
+          detail,
+          time: timeAgo,
+          live: isConnected,
+          delay: idx === 1 ? '0.2s' : '',
+        };
+      });
+    }
+
+    return [
+      { name: 'Save Vault (Cloud Database)', detail: `${liveClipsCount} items synced • Realtime`, time: 'Active', live: true, delay: '' },
+    ];
+  }, [dashboardData?.destinations_status, destinations, liveClipsCount]);
+
+  // Right Rail: Live Save Streak from clip timestamps
+  const { liveStreakDays, liveStreakOn, realStreakCount, bestStreak } = useMemo(() => {
+    const now = new Date();
+    const dayNames = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const currentDayOfWeek = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
+
+    const savedDates = new Set<string>();
+    clips.forEach(c => {
+      if (c.createdAt) {
+        try {
+          const d = new Date(c.createdAt).toISOString().split('T')[0];
+          savedDates.add(d);
+        } catch {}
+      }
+    });
+
+    const streakOn = [false, false, false, false, false, false, false];
+    for (let i = 0; i <= currentDayOfWeek; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - (currentDayOfWeek - i));
+      const dateStr = d.toISOString().split('T')[0];
+      if (savedDates.has(dateStr)) {
+        streakOn[i] = true;
+      }
+    }
+
+    let consecutive = 0;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      if (savedDates.has(dateStr)) {
+        consecutive++;
+      } else if (i > 0) {
+        break;
+      }
+    }
+
+    const calculatedStreak = consecutive;
+    const best = Math.max(calculatedStreak, savedDates.size);
+
+    return {
+      liveStreakDays: dayNames,
+      liveStreakOn: streakOn,
+      realStreakCount: calculatedStreak,
+      bestStreak: best,
+    };
+  }, [clips]);
+
+  // Right Rail: Live Daily Goal from clips saved today vs goal target 10
+  const { savedTodayCount, dailyGoalTarget, goalPct } = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayClips = clips.filter(c => {
+      if (!c.createdAt) return false;
+      try {
+        return new Date(c.createdAt).toISOString().split('T')[0] === todayStr;
+      } catch {
+        return false;
+      }
+    }).length;
+
+    const count = todayClips;
+    const target = 10;
+    const pct = Math.min(100, Math.round((count / target) * 100));
+
+    return {
+      savedTodayCount: count,
+      dailyGoalTarget: target,
+      goalPct: pct,
+    };
+  }, [clips]);
+
+  const totalCount = useCountUp(liveClipsCount);
+  const expiringCount = useCountUp(liveExpiringCount);
+  const backlogCount = useCountUp(liveBacklogCount);
+  const liveCount = useCountUp(liveActiveSyncs);
+  const digestCount = useCountUp(savedThisWeekCount);
+  const streakCount = useCountUp(realStreakCount);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -378,7 +607,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
     );
   };
 
-  const visibleClips = showEmpty ? [] : STATIC_CLIPS.filter((c) => matchesFilter(c) && matchesQuery(c));
+  const visibleClips = showEmpty ? [] : dynamicClips.filter((c) => matchesFilter(c) && matchesQuery(c));
 
   return (
     <div
@@ -522,7 +751,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   }`}
                   style={{ fontFamily: FONT_GAMBETTA }}
                 >
-                  Good morning, Alex
+                  Good morning, {userName}
                 </h1>
                 <span
                   className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] leading-[14px] tracking-[0.02em] font-semibold shadow-sm border ${
@@ -535,7 +764,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 </span>
               </div>
               <p className={`text-[14px] leading-[20px] flex items-center gap-3 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                <span>148 clips synchronized across 6 active streams</span>
+                <span>{totalCount} clips synchronized across {liveCount} active streams</span>
                 <span className={`inline-block w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#262626]' : 'bg-slate-300'}`}></span>
                 <span
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-medium text-[13px] leading-[20px] border ${
@@ -634,7 +863,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   <path d="M1 22L14 19L28 23L42 14L56 16L70 6L79 9V28H1V22Z" fill="currentColor" fillOpacity={isDark ? "0.15" : "0.1"}></path>
                 </svg>
               </div>
-              <p className={`mt-2 text-[11px] leading-[14px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>42 saved this week</p>
+              <p className={`mt-2 text-[11px] leading-[14px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>{savedThisWeekCount} saved this week</p>
             </motion.div>
 
             <motion.div
@@ -669,7 +898,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   Expiring
                 </span>
               </div>
-              <p className={`mt-2 text-[11px] leading-[14px] truncate ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>YC W25 &amp; NSF SBIR Grant</p>
+              <p className={`mt-2 text-[11px] leading-[14px] truncate ${isDark ? 'text-[#878787]' : 'text-slate-500'}`} title={expiringSublabel}>{expiringSublabel}</p>
             </motion.div>
 
             <motion.div
@@ -704,8 +933,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   Clips
                 </span>
               </div>
-              <p className={`mt-2 text-[11px] leading-[14px] font-medium truncate ${isDark ? 'text-[#60A5FA]' : 'text-blue-600'}`}>
-                8 flagged high relevance
+              <p className={`mt-2 text-[11px] leading-[14px] font-medium truncate ${isDark ? 'text-[#60A5FA]' : 'text-blue-600'}`} title={learnSublabel}>
+                {learnSublabel}
               </p>
             </motion.div>
 
@@ -740,8 +969,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   Live
                 </span>
               </div>
-              <p className={`mt-2 text-[11px] leading-[14px] truncate ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                Notion, Sheets, Obsidian, Webhook
+              <p className={`mt-2 text-[11px] leading-[14px] truncate ${isDark ? 'text-[#878787]' : 'text-slate-500'}`} title={syncSublabel}>
+                {syncSublabel}
               </p>
             </motion.div>
           </div>
@@ -749,7 +978,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
           {/* Intent tabs + filter bar */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-2">
             <div className="flex items-center gap-1 overflow-x-auto pb-1 lg:pb-0 no-scrollbar">
-              {FILTERS.map((f) => {
+              {filterCounts.map((f) => {
                 const isActive = activeFilter === f.label;
                 return (
                   <motion.button
@@ -875,7 +1104,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     Recent Clips
                   </h2>
                   <span className={`text-[13px] leading-[20px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                    Showing {visibleClips.length} of 148 clips
+                    Showing {visibleClips.length} of {dynamicClips.length} clips
                   </span>
                 </div>
                 <button
@@ -1133,8 +1362,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   {digestCount} <span className={`text-[14px] font-medium ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>saves</span>
                 </div>
                 <p className={`text-[12px] leading-[18px] mt-1 line-clamp-3 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                  Top story: Anthropic Claude 3.5 Sonnet Speculative Decoding. 2 opportunities
-                  expiring soon.
+                  Top story: {topStoryTitle}. {intentCounts.Apply} opportunities tracked.
                 </p>
                 <button className={`mt-2 inline-flex items-center gap-1 text-[12px] font-medium hover:underline cursor-pointer ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`}>
                   View digest
@@ -1159,11 +1387,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   {streakCount} <span className={`text-[14px] font-medium ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>days</span>
                 </div>
                 <div className="flex items-center gap-1 mt-2">
-                  {STREAK_DAYS.map((d, i) => (
+                  {liveStreakDays.map((d, i) => (
                     <span key={i} className="flex flex-col items-center gap-1">
                       <span
                         className={`w-4 h-4 rounded-full ${
-                          STREAK_ON[i]
+                          liveStreakOn[i]
                             ? 'bg-[#EA580C]'
                             : isDark
                             ? 'bg-[#181818] border border-[#262626]'
@@ -1173,7 +1401,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                       <span className={`text-[8.5px] font-sans ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>{d}</span>
                     </span>
                   ))}
-                  <span className={`ml-auto text-[11px] font-sans ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>Best 26d</span>
+                  <span className={`ml-auto text-[11px] font-sans ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>Best {bestStreak}d</span>
                 </div>
               </motion.div>
 
@@ -1183,14 +1411,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 transition={reduceMotion ? { duration: 0 } : { ...SPRING, delay: 0.06 }}
                 className={`${cardClass} p-6 flex items-center gap-3`}
               >
-                <GoalRing pct={70} isDark={isDark} />
+                <GoalRing current={savedTodayCount} target={dailyGoalTarget} pct={goalPct} isDark={isDark} />
                 <div className="min-w-0">
                   <span className={`text-[11px] leading-[14px] tracking-[0.02em] font-medium uppercase ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                     Daily Goal
                   </span>
-                  <div className={`text-[14px] font-medium mt-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>7 of 10 today</div>
+                  <div className={`text-[14px] font-medium mt-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>{savedTodayCount} of {dailyGoalTarget} today</div>
                   <div className={`h-1.5 rounded-full mt-2 overflow-hidden ${isDark ? 'bg-[#1F1F1F]' : 'bg-slate-100'}`}>
-                    <div className={`h-full w-[70%] rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-[#2D6A4F]'}`} />
+                    <div className={`h-full rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-[#2D6A4F]'}`} style={{ width: `${goalPct}%` }} />
                   </div>
                 </div>
               </motion.div>
@@ -1204,22 +1432,26 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 <span className={`text-[11px] leading-[14px] tracking-[0.02em] font-medium uppercase ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                   Top Tags
                 </span>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {TOP_TAGS.map((t) => (
-                    <span
-                      key={t.tag}
-                      className={`inline-flex items-center gap-1 text-[11px] leading-[14px] font-medium rounded-full px-2 py-0.5 ${
-                        isDark
-                          ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
-                          : 'bg-[#DCFCE7] text-[#166534]'
-                      }`}
-                    >
-                      {t.tag}
-                      <span className="font-bold tabular-nums">{t.count}</span>
-                    </span>
-                  ))}
-                </div>
-                <p className={`text-[11px] leading-[14px] mt-2 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>148 clips this month</p>
+                {dynamicTopTags.length === 0 ? (
+                  <p className={`text-[12px] mt-2 italic ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>No tags indexed yet</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {dynamicTopTags.map((t) => (
+                      <span
+                        key={t.tag}
+                        className={`inline-flex items-center gap-1 text-[11px] leading-[14px] font-medium rounded-full px-2 py-0.5 ${
+                          isDark
+                            ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                            : 'bg-[#DCFCE7] text-[#166534]'
+                        }`}
+                      >
+                        {t.tag}
+                        <span className="font-bold tabular-nums">{t.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className={`text-[11px] leading-[14px] mt-2 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>{dynamicClips.length} clips synced</p>
               </motion.div>
             </div>
 
@@ -1245,7 +1477,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                       {/* Track background */}
                       <circle cx="50" cy="50" fill="none" r="40" stroke={isDark ? '#1F1F1F' : '#F1F5F9'} strokeWidth="12" />
-                      {DONUT.map((s, idx) => {
+                      {dynamicDonut.map((s, idx) => {
                         const darkColors = ['#444444', '#777777', '#00CA50', '#86D7AD', '#555555', '#333333'];
                         const segColor = isDark ? (darkColors[idx] || s.color) : s.color;
                         return (
@@ -1256,7 +1488,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                             fill="none"
                             r="40"
                             stroke={segColor}
-                            strokeDasharray={`${s.dash} 241.4`}
+                            strokeDasharray={`${s.dash} 251.3`}
                             strokeDashoffset={s.offset}
                             strokeLinecap="round"
                             strokeWidth={activeDonut === idx ? 15 : 12}
@@ -1273,16 +1505,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                         className={`text-[28px] leading-[36px] tracking-tight font-semibold tabular-nums ${isDark ? 'text-white' : 'text-slate-900'}`}
                         style={{ fontFamily: FONT_GAMBETTA }}
                       >
-                        {activeDonut !== null ? `${DONUT[activeDonut].pct}%` : '148'}
+                        {activeDonut !== null ? `${dynamicDonut[activeDonut].pct}%` : `${totalCount}`}
                       </span>
                       <span className={`text-[11px] leading-[14px] uppercase tracking-wider font-medium mt-1 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                        {activeDonut !== null ? DONUT[activeDonut].name : 'Total'}
+                        {activeDonut !== null ? dynamicDonut[activeDonut].name : 'Total'}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-2">
-                  {DONUT.map((d, idx) => {
+                  {dynamicDonut.map((d, idx) => {
                     const darkColors = ['#444444', '#777777', '#00CA50', '#86D7AD', '#555555', '#333333'];
                     const dotColor = isDark ? (darkColors[idx] || d.color) : d.color;
                     return (
@@ -1338,88 +1570,98 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                       ? 'bg-[#2A1715] text-[#EA580C] border-[#4A1E1C]'
                       : 'bg-orange-100 text-orange-800 border-orange-200/50'
                   }`}>
-                    3 Actions
+                    {dynamicDeadlines.length} Actions
                   </span>
                 </div>
                 <div className="flex flex-col gap-3">
-                  {DEADLINES.map((d, idx) => {
-                    const isDone = doneDeadlines.has(d.title);
-                    return (
-                      <React.Fragment key={d.title}>
-                        <div className="flex gap-3 items-start group">
-                          <div
-                            className={`w-2 h-2 rounded-full mt-2 shrink-0 transition-colors ${
-                              isDone
-                                ? 'bg-[#3FE769]'
-                                : idx === 0
-                                  ? 'bg-[#EA580C]'
-                                  : idx === 1
-                                    ? 'bg-amber-400'
-                                    : isDark ? 'bg-[#444444]' : 'bg-slate-300'
-                            }`}
-                          ></div>
-                          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <span
-                                className={`font-medium text-[14px] truncate transition-colors ${
-                                  isDone
-                                    ? isDark ? 'text-[#666666] line-through' : 'text-slate-400 line-through'
-                                    : isDark ? 'text-white' : 'text-slate-900'
-                                }`}
-                              >
-                                {d.title}
-                              </span>
-                              {isDone ? (
-                                <span className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border ${
-                                  isDark
-                                    ? 'bg-[#12231A] text-[#3FE769] border-[#1C3E2D]'
-                                    : 'bg-emerald-100 text-emerald-800 border-emerald-200/50'
-                                }`}>
-                                  Done
-                                </span>
-                              ) : (
+                  {dynamicDeadlines.length === 0 ? (
+                    <div className={`p-5 rounded-xl border text-center flex flex-col items-center justify-center ${
+                      isDark ? 'bg-[#141414] border-[#262626] text-[#878787]' : 'bg-slate-50 border-slate-200 text-slate-500'
+                    }`}>
+                      <Check className={`w-5 h-5 mb-1.5 ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`} />
+                      <p className={`text-[13px] font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>All deadlines on track</p>
+                      <p className={`text-[11px] mt-0.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>No urgent action items pending</p>
+                    </div>
+                  ) : (
+                    dynamicDeadlines.map((d, idx) => {
+                      const isDone = doneDeadlines.has(d.title);
+                      return (
+                        <React.Fragment key={d.title}>
+                          <div className="flex gap-3 items-start group">
+                            <div
+                              className={`w-2 h-2 rounded-full mt-2 shrink-0 transition-colors ${
+                                isDone
+                                  ? 'bg-[#3FE769]'
+                                  : idx === 0
+                                    ? 'bg-[#EA580C]'
+                                    : idx === 1
+                                      ? 'bg-amber-400'
+                                      : isDark ? 'bg-[#444444]' : 'bg-slate-300'
+                              }`}
+                            ></div>
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
                                 <span
-                                  className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border ${
-                                    isDark
-                                      ? 'bg-[#1C1B1B] text-[#EDEDED] border-[#262626]'
-                                      : d.badgeClass
+                                  className={`font-medium text-[14px] truncate transition-colors ${
+                                    isDone
+                                      ? isDark ? 'text-[#666666] line-through' : 'text-slate-400 line-through'
+                                      : isDark ? 'text-white' : 'text-slate-900'
                                   }`}
                                 >
-                                  {deadlineBadge(d)}
+                                  {d.title}
+                                </span>
+                                {isDone ? (
+                                  <span className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border ${
+                                    isDark
+                                      ? 'bg-[#12231A] text-[#3FE769] border-[#1C3E2D]'
+                                      : 'bg-emerald-100 text-emerald-800 border-emerald-200/50'
+                                  }`}>
+                                    Done
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[11px] font-semibold shrink-0 border ${
+                                      isDark
+                                        ? 'bg-[#1C1B1B] text-[#EDEDED] border-[#262626]'
+                                        : d.badgeClass
+                                    }`}
+                                  >
+                                    {deadlineBadge(d)}
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`text-[13px] leading-[18px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>{d.sub}</span>
+                              {!isDone && (
+                                <span className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                  <button
+                                    onClick={() => toggleDone(d.title)}
+                                    className={`text-[11px] font-semibold rounded-full px-2 py-0.5 transition-colors cursor-pointer border ${
+                                      isDark
+                                        ? 'text-[#3FE769] bg-[#12231A] hover:bg-[#1A3326] border-[#1C3E2D]'
+                                        : 'text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border-emerald-200/60'
+                                    }`}
+                                  >
+                                    Mark done
+                                  </button>
+                                  <button
+                                    onClick={() => snoozeDeadline(d.title)}
+                                    className={`text-[11px] font-semibold rounded-full px-2 py-0.5 transition-colors cursor-pointer border ${
+                                      isDark
+                                        ? 'text-[#A1A1A1] bg-[#181818] hover:bg-[#222222] border-[#262626]'
+                                        : 'text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border-transparent'
+                                    }`}
+                                  >
+                                    Snooze
+                                  </button>
                                 </span>
                               )}
                             </div>
-                            <span className={`text-[13px] leading-[18px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>{d.sub}</span>
-                            {!isDone && (
-                              <span className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                <button
-                                  onClick={() => toggleDone(d.title)}
-                                  className={`text-[11px] font-semibold rounded-full px-2 py-0.5 transition-colors cursor-pointer border ${
-                                    isDark
-                                      ? 'text-[#3FE769] bg-[#12231A] hover:bg-[#1A3326] border-[#1C3E2D]'
-                                      : 'text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border-emerald-200/60'
-                                  }`}
-                                >
-                                  Mark done
-                                </button>
-                                <button
-                                  onClick={() => snoozeDeadline(d.title)}
-                                  className={`text-[11px] font-semibold rounded-full px-2 py-0.5 transition-colors cursor-pointer border ${
-                                    isDark
-                                      ? 'text-[#A1A1A1] bg-[#181818] hover:bg-[#222222] border-[#262626]'
-                                      : 'text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border-transparent'
-                                  }`}
-                                >
-                                  Snooze
-                                </button>
-                              </span>
-                            )}
                           </div>
-                        </div>
-                        {idx < DEADLINES.length - 1 && <div className={`h-px ml-5 ${isDark ? 'bg-[#1F1F1F]' : 'bg-slate-100'}`}></div>}
-                      </React.Fragment>
-                    );
-                  })}
+                          {idx < dynamicDeadlines.length - 1 && <div className={`h-px ml-5 ${isDark ? 'bg-[#1F1F1F]' : 'bg-slate-100'}`}></div>}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
                 </div>
               </motion.div>
 
@@ -1443,7 +1685,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     </h3>
                   </div>
                   <span className={`text-[12px] font-semibold tracking-wide ${isDark ? 'text-[#3FE769]' : 'text-emerald-600'}`}>
-                    99.98% OK
+                    {activeDestinations.length > 0 ? '100% Operational' : 'Offline'}
                   </span>
                 </div>
                 <div className="relative flex flex-col gap-4 overflow-hidden">
@@ -1456,7 +1698,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                       transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }}
                     />
                   )}
-                  {SYNC_ROWS.map((r) => (
+                  {dynamicSyncRows.map((r) => (
                     <div key={r.name} className="flex items-center justify-between group">
                       <div className="flex items-center gap-3 min-w-0">
                         <span className="relative flex h-2 w-2 shrink-0">
