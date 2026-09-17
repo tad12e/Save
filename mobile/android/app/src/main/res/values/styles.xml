@@ -10,4 +10,14 @@
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
     </style>
+
+    <!-- Dedicated share-overlay theme: fully transparent, no title, no action bar.
+         Used by ShareHandlerActivity so Instagram stays visible behind the sheet. -->
+    <style name="ShareOverlayTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowIsFloating">false</item>
+    </style>
 </resources>

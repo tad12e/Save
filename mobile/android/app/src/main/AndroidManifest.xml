@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     
     <application
         android:label="Clipper"
@@ -10,7 +12,6 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -21,11 +22,35 @@
               android:resource="@style/NormalTheme"
               />
             
-            <!-- Standard App Launcher -->
+            <!-- Standard App Launcher ONLY — no SHARE filters here on purpose.
+                 Shares go to ShareHandlerActivity below so the user stays
+                 inside Instagram/TikTok/YouTube instead of being yanked
+                 into the full Clipper task. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+        </activity>
+
+        <!-- Share overlay: translucent bottom-sheet drawn OVER the source app.
+             singleInstance + excludeFromRecents + noHistory = stays in the
+             calling app's context, finish() drops straight back. -->
+        <activity
+            android:name=".ShareHandlerActivity"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="com.save.app.save_mobile.share"
+            android:theme="@style/ShareOverlayTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/ShareOverlayTheme"
+              />
 
             <!-- Native Share Sheet Receiver: Plain Text & URLs (Spotify, TikTok, LinkedIn, YouTube, X, Instagram) -->
             <intent-filter>
