@@ -8,13 +8,15 @@ import { ClipItem, DestinationConfig } from '../types';
 // Analytics cache instead of firing a second backend request.
 export function useAnalyticsQuery(
   clips: ClipItem[],
-  destinations: DestinationConfig[]
+  destinations: DestinationConfig[],
+  intent: string = 'all',
+  destination: string = 'all'
 ) {
   const { selectedPeriod } = useAnalyticsStore();
 
   return useQuery({
-    queryKey: ['analytics_full', selectedPeriod, clips.length, destinations.length],
-    queryFn: () => fetchFullAnalytics(selectedPeriod, false, clips, destinations),
+    queryKey: ['analytics_full', selectedPeriod, clips.length, destinations.length, intent, destination],
+    queryFn: () => fetchFullAnalytics(selectedPeriod, false, clips, destinations, intent, destination),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });

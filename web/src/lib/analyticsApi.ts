@@ -87,6 +87,7 @@ export interface AnalyticsPayload {
     currentPeriod: number;
     previousPeriod: number;
     fullMark: number;
+    count?: number;
   }>;
   destinations_health: {
     active_count: number;
@@ -144,16 +145,36 @@ export interface AnalyticsPayload {
       next_tier_points: number;
     };
   };
+  top_sources?: Array<{
+    id: string;
+    domain: string;
+    displayName: string;
+    clips: number;
+    primaryIntent: string;
+    intentTheme: 'emerald' | 'blue' | 'amber' | 'purple';
+    sharePct: number;
+    trend: string;
+    isPositive: boolean;
+  }>;
 }
 
 export async function fetchFullAnalytics(
   period: string = 'this_week',
   forceRefresh: boolean = false,
   localClips: ClipItem[] = [],
-  localDestinations: DestinationConfig[] = []
+  localDestinations: DestinationConfig[] = [],
+  intent: string = 'all',
+  destination: string = 'all'
 ): Promise<AnalyticsPayload> {
   try {
-    const res = await fetch(`${BASE_URL}/api/analytics/full/?period=${period}&refresh=${forceRefresh}`, {
+    const params = new URLSearchParams({
+      period,
+      refresh: String(forceRefresh),
+    });
+    if (intent && intent !== 'all') params.append('intent', intent);
+    if (destination && destination !== 'all') params.append('destination', destination);
+
+    const res = await fetch(`${BASE_URL}/api/analytics/full/?${params.toString()}`, {
       headers: getAuthHeaders(),
     });
 
@@ -414,12 +435,16 @@ function normalizeBackendAnalytics(
 
   // 9. Normalize Knowledge Radar
   const knowledge_radar: AnalyticsPayload['knowledge_radar'] = Array.isArray(raw.knowledge_radar) && raw.knowledge_radar.length > 0
-    ? raw.knowledge_radar.map((r: any) => ({
-        subject: r.subject || r.vertical || 'Domain',
-        currentPeriod: r.currentPeriod ?? r.current ?? 75,
-        previousPeriod: r.previousPeriod ?? r.previous ?? 60,
-        fullMark: r.fullMark || 100,
-      }))
+    ? raw.knowledge_radar.map((r: any) => {
+        const score = typeof r.score === 'number' ? r.score : (r.currentPeriod ?? r.current ?? 0);
+        return {
+          subject: r.subject || r.axis || r.vertical || 'Domain',
+          currentPeriod: score,
+          previousPeriod: r.previousPeriod ?? r.previous ?? (score > 0 ? Math.max(5, Math.round(score * 0.8)) : 0),
+          fullMark: r.fullMark || 100,
+          count: typeof r.count === 'number' ? r.count : undefined,
+        };
+      })
     : fallback.knowledge_radar;
 
   // 10. Normalize Popular Tags
@@ -499,6 +524,7 @@ function normalizeBackendAnalytics(
     content_breakdown: contentList,
     popular_tags,
     knowledge_radar,
+    top_sources: Array.isArray(raw.top_sources) && raw.top_sources.length > 0 ? raw.top_sources : undefined,
     destinations_health,
     gamification,
     predictive_forecast,
@@ -513,22 +539,84 @@ function generateClientSynthesizedAnalytics(
   clips: ClipItem[],
   destinations: DestinationConfig[]
 ): AnalyticsPayload {
-  const totalClips = Math.max(clips.length, 38);
+  const totalClips = clips.length;
   const now = new Date();
-  
-  // 52-week contribution data
+  const todayStr = now.toISOString().split('T')[0];
+
+  // Map clips to dates
+  const clipDatesMap: Record<string, number> = {};
+  let todayClipsCount = 0;
+  let taggedClipsCount = 0;
+  let actionableClipsCount = 0;
+
+  clips.forEach((c) => {
+    if (c.created_at) {
+      try {
+        const dStr = new Date(c.created_at).toISOString().split('T')[0];
+        clipDatesMap[dStr] = (clipDatesMap[dStr] || 0) + 1;
+        if (dStr === todayStr) todayClipsCount++;
+      } catch {}
+    }
+    if (Array.isArray(c.tags) && c.tags.length > 0) taggedClipsCount++;
+    const intent = (c.intent || '').toLowerCase();
+    if (intent.includes('apply') || intent.includes('action') || (c as any).status === 'done' || (c as any).deadline_date) {
+      actionableClipsCount++;
+    }
+  });
+
+  // Calculate live streak
+  const uniqueDates = Object.keys(clipDatesMap).sort();
+  let currentStreak = 0;
+  let longestStreak = 0;
+
+  if (uniqueDates.length > 0) {
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    // Check if current streak is alive (active today or yesterday)
+    let checkDate = new Date(now);
+    if (!clipDatesMap[todayStr] && clipDatesMap[yesterdayStr]) {
+      checkDate = yesterday;
+    }
+
+    while (true) {
+      const dStr = checkDate.toISOString().split('T')[0];
+      if (clipDatesMap[dStr]) {
+        currentStreak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    // Longest streak
+    let tempStreak = 0;
+    let prevDate: Date | null = null;
+    for (const dStr of uniqueDates) {
+      const curDate = new Date(dStr);
+      if (prevDate) {
+        const diffDays = Math.round((curDate.getTime() - prevDate.getTime()) / (1000 * 3600 * 24));
+        if (diffDays === 1) {
+          tempStreak++;
+        } else {
+          tempStreak = 1;
+        }
+      } else {
+        tempStreak = 1;
+      }
+      if (tempStreak > longestStreak) longestStreak = tempStreak;
+      prevDate = curDate;
+    }
+  }
+
+  // 52-week contribution data from actual clips (180 days history, true zeros on empty days)
   const days: Array<{ date: string; count: number }> = [];
   for (let i = 180; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dateStr = d.toISOString().split('T')[0];
-    
-    // Seed realistic activity
-    const dayOfWeek = d.getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const baseProb = isWeekend ? 0.4 : 0.75;
-    const count = Math.random() < baseProb ? Math.floor(Math.random() * 8) + 1 : 0;
-    days.push({ date: dateStr, count });
+    days.push({ date: dateStr, count: clipDatesMap[dateStr] || 0 });
   }
 
   // 7x24 grid
@@ -536,59 +624,89 @@ function generateClientSynthesizedAnalytics(
   const grid_7x24: Array<{ day: string; dayIndex: number; hour: number; count: number }> = [];
   for (let d = 0; d < 7; d++) {
     for (let h = 0; h < 24; h++) {
-      const isPeakHour = (h >= 9 && h <= 12) || (h >= 14 && h <= 17);
-      const isNight = h < 6 || h > 22;
-      let count = 0;
-      if (!isNight) {
-        count = isPeakHour ? Math.floor(Math.random() * 6) + 2 : Math.floor(Math.random() * 3);
-      }
       grid_7x24.push({
         day: dayNames[d],
         dayIndex: d,
         hour: h,
-        count,
+        count: 0,
       });
     }
   }
 
-  // Hourly matrix
+  // Populate grid_7x24 from actual clips
+  clips.forEach((c) => {
+    if (c.created_at) {
+      try {
+        const dt = new Date(c.created_at);
+        const dayIdx = (dt.getDay() + 6) % 7; // 0 = Mon
+        const hr = dt.getHours();
+        const cell = grid_7x24.find((g) => g.dayIndex === dayIdx && g.hour === hr);
+        if (cell) cell.count++;
+      } catch {}
+    }
+  });
+
+  // Hourly matrix from actual clips
   const hourlyMatrix = Array.from({ length: 24 }, (_, h) => ({
     hour: h,
     label: `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`,
-    count: Math.floor(Math.random() * 12) + (h >= 13 && h <= 17 ? 15 : 2),
+    count: 0,
   }));
+  clips.forEach((c) => {
+    if (c.created_at) {
+      try {
+        const hr = new Date(c.created_at).getHours();
+        if (hourlyMatrix[hr]) hourlyMatrix[hr].count++;
+      } catch {}
+    }
+  });
 
-  // Weekday rhythm
+  // Weekday rhythm from actual clips
   const weekdayData = [
-    { day: 'Mon', avg_clips: 6.4, total: 45 },
-    { day: 'Tue', avg_clips: 8.2, total: 58 },
-    { day: 'Wed', avg_clips: 9.5, total: 67 },
-    { day: 'Thu', avg_clips: 7.8, total: 55 },
-    { day: 'Fri', avg_clips: 6.1, total: 43 },
-    { day: 'Sat', avg_clips: 3.2, total: 22 },
-    { day: 'Sun', avg_clips: 2.8, total: 20 },
+    { day: 'Mon', avg_clips: 0, total: 0 },
+    { day: 'Tue', avg_clips: 0, total: 0 },
+    { day: 'Wed', avg_clips: 0, total: 0 },
+    { day: 'Thu', avg_clips: 0, total: 0 },
+    { day: 'Fri', avg_clips: 0, total: 0 },
+    { day: 'Sat', avg_clips: 0, total: 0 },
+    { day: 'Sun', avg_clips: 0, total: 0 },
   ];
+  clips.forEach((c) => {
+    if (c.created_at) {
+      try {
+        const dIdx = (new Date(c.created_at).getDay() + 6) % 7;
+        if (weekdayData[dIdx]) {
+          weekdayData[dIdx].total++;
+          weekdayData[dIdx].avg_clips = weekdayData[dIdx].total;
+        }
+      } catch {}
+    }
+  });
 
-  // Content type breakdown
-  const contentBreakdown = [
-    { name: 'Articles & Docs', type: 'article', count: Math.round(totalClips * 0.35), percentage: 35, color: '#3B82F6' },
-    { name: 'Job Opportunities', type: 'job', count: Math.round(totalClips * 0.25), percentage: 25, color: '#10B981' },
-    { name: 'AI & Developer Tools', type: 'tool', count: Math.round(totalClips * 0.15), percentage: 15, color: '#F97316' },
-    { name: 'Events & Meetups', type: 'event', count: Math.round(totalClips * 0.10), percentage: 10, color: '#8B5CF6' },
-    { name: 'Music & Audio', type: 'music', count: Math.round(totalClips * 0.08), percentage: 8, color: '#EC4899' },
-    { name: 'Other Vault Items', type: 'other', count: Math.round(totalClips * 0.07), percentage: 7, color: '#64748B' },
-  ];
+  // Content type breakdown from actual clips
+  const typeCounter: Record<string, number> = {};
+  clips.forEach((c) => {
+    const ct = (c.content_type || 'article').toLowerCase();
+    typeCounter[ct] = (typeCounter[ct] || 0) + 1;
+  });
+  const contentBreakdown = Object.entries(typeCounter).map(([type, count]) => ({
+    name: type.charAt(0).toUpperCase() + type.slice(1),
+    type,
+    count,
+    percentage: totalClips > 0 ? Math.round((count / totalClips) * 100) : 0,
+    color: '#3FE769',
+  }));
 
   // Historical + Forecast trend
   const historical_trend: Array<{ date: string; actual: number; predicted?: number }> = [];
-  for (let i = 14; i >= 0; i--) {
+  for (let i = 13; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
-    const base = 4 + Math.floor(Math.sin(i / 2) * 3) + Math.floor(Math.random() * 3);
+    const isoKey = d.toISOString().split('T')[0];
     historical_trend.push({
       date: dateStr,
-      actual: base,
+      actual: clipDatesMap[isoKey] || 0,
     });
   }
 
@@ -597,18 +715,16 @@ function generateClientSynthesizedAnalytics(
     const d = new Date();
     d.setDate(d.getDate() + i);
     const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
-    const pred = 6 + Math.floor(Math.sin((i + 14) / 2) * 2);
+    const avgRecent = Math.max(1, Math.round(totalClips / 14));
     forecast_days.push({
       date: dateStr,
-      predicted: pred,
-      confidence_high: pred + 2,
-      confidence_low: Math.max(1, pred - 2),
+      predicted: avgRecent,
+      confidence_high: avgRecent + 1,
+      confidence_low: Math.max(0, avgRecent - 1),
     });
   }
 
-  const activeDestCount = destinations.filter(d => d.connected).length || 3;
-
-  // Same backend formula: ~15min per clip at $25/hr benchmark.
+  const activeDestCount = destinations.filter(d => d.connected).length || 2;
   const fallbackTimeSavedHours = Math.round(totalClips * 0.25 * 10) / 10;
   const fallbackSavedDollars = Math.round(fallbackTimeSavedHours * 25);
 
@@ -619,61 +735,61 @@ function generateClientSynthesizedAnalytics(
     money: {
       saved_dollar_value: fallbackSavedDollars,
       time_saved_hours: fallbackTimeSavedHours,
-      action_rate_percent: 37.5,
+      action_rate_percent: totalClips > 0 ? Math.round((actionableClipsCount / totalClips) * 1000) / 10 : 0,
       missed_deadlines_count: 0,
       realized_value_index: `$${fallbackSavedDollars}`,
     },
     kpis: {
       total_clips: {
         value: totalClips,
-        delta_pct: 18.4,
-        is_positive: true,
-        sparkline: [12, 15, 18, 14, 22, 28, 34, totalClips],
-      },
-      weekly_velocity: {
-        value: 24,
         delta_pct: 12.5,
         is_positive: true,
-        sparkline: [4, 6, 3, 7, 5, 8, 24],
+        sparkline: [Math.max(0, totalClips - 4), Math.max(0, totalClips - 2), totalClips],
+      },
+      weekly_velocity: {
+        value: historical_trend.slice(-7).reduce((a, b) => a + b.actual, 0),
+        delta_pct: 10,
+        is_positive: true,
+        sparkline: historical_trend.slice(-7).map(h => h.actual),
       },
       active_streak: {
-        value: 9,
-        best_streak: 19,
-        sparkline: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        value: currentStreak,
+        best_streak: Math.max(currentStreak, longestStreak),
+        sparkline: [0, 0, currentStreak],
       },
       destinations_active: {
         value: activeDestCount,
         total: 8,
         health_pct: 100,
-        sparkline: [2, 2, 3, 3, 3, 4, activeDestCount],
+        sparkline: [1, 2, activeDestCount],
       },
     },
     streak_momentum: {
-      current_streak_days: 9,
-      best_streak_days: 19,
-      streak_multiplier: 1.5,
-      activity_level: 'Optimal Momentum 🔥',
-      next_milestone_days: 14,
+      current_streak_days: currentStreak,
+      best_streak_days: Math.max(currentStreak, longestStreak),
+      streak_multiplier: currentStreak > 3 ? 1.5 : 1.0,
+      activity_level: currentStreak > 0 ? 'Optimal Momentum 🔥' : 'Start Your Streak 🚀',
+      next_milestone_days: currentStreak < 7 ? 7 : (currentStreak < 14 ? 14 : 30),
     },
     daily_focus: {
       daily_goal_target: 10,
-      daily_goal_current: 7,
-      goal_completion_pct: 70,
+      daily_goal_current: todayClipsCount,
+      goal_completion_pct: Math.min(100, Math.round((todayClipsCount / 10) * 100)),
       rings: {
-        save_count: { current: 7, target: 10, pct: 70 },
-        tagging_health: { current: 9, target: 10, pct: 90 },
-        action_rate: { current: 6, target: 10, pct: 60 },
+        save_count: { current: todayClipsCount, target: 10, pct: Math.min(100, Math.round((todayClipsCount / 10) * 100)) },
+        tagging_health: { current: Math.min(10, Math.round((taggedClipsCount / (totalClips || 1)) * 10)), target: 10, pct: totalClips > 0 ? Math.round((taggedClipsCount / totalClips) * 100) : 0 },
+        action_rate: { current: Math.min(10, Math.round((actionableClipsCount / (totalClips || 1)) * 10)), target: 10, pct: totalClips > 0 ? Math.round((actionableClipsCount / totalClips) * 100) : 0 },
       },
     },
     hourly_distribution: {
       matrix: hourlyMatrix,
       grid_7x24,
-      peak_window: '2:00 PM – 5:00 PM Peak Saving Window',
-      peak_count: 18,
+      peak_window: '2:00 PM – 5:00 PM Peak Window',
+      peak_count: Math.max(...hourlyMatrix.map(h => h.count), 0),
     },
     contribution_matrix: {
-      total_active_days: 74,
-      longest_streak: 19,
+      total_active_days: Object.keys(clipDatesMap).length,
+      longest_streak: longestStreak,
       year: now.getFullYear(),
       days,
     },
@@ -717,20 +833,20 @@ function generateClientSynthesizedAnalytics(
     },
     gamification: {
       badges: [
-        { id: 'streak_7', title: 'Momentum Master', description: 'Maintained a 7-day clipping streak', icon: '🔥', category: 'consistency', unlocked: true, progress: 7, max_progress: 7, unlocked_at: '2 days ago' },
-        { id: 'vault_50', title: 'Knowledge Collector', description: 'Saved over 50 knowledge clips in vault', icon: '📚', category: 'volume', unlocked: true, progress: 50, max_progress: 50, unlocked_at: '1 week ago' },
-        { id: 'night_owl', title: 'Night Owl Researcher', description: 'Clipped 10+ research articles after midnight', icon: '🦉', category: 'discovery', unlocked: true, progress: 10, max_progress: 10 },
+        { id: 'streak_7', title: 'Momentum Master', description: 'Maintained a 7-day clipping streak', icon: '🔥', category: 'consistency', unlocked: currentStreak >= 7, progress: Math.min(7, currentStreak), max_progress: 7, unlocked_at: currentStreak >= 7 ? 'Recently' : undefined },
+        { id: 'vault_50', title: 'Knowledge Collector', description: 'Saved over 50 knowledge clips in vault', icon: '📚', category: 'volume', unlocked: totalClips >= 50, progress: Math.min(50, totalClips), max_progress: 50, unlocked_at: totalClips >= 50 ? 'Recently' : undefined },
+        { id: 'night_owl', title: 'Night Owl Researcher', description: 'Clipped 10+ research articles after midnight', icon: '🦉', category: 'discovery', unlocked: totalClips >= 10, progress: Math.min(10, totalClips), max_progress: 10 },
         { id: 'sync_pro', title: 'Multi-Cloud Maestro', description: 'Connected 3 or more storage destinations', icon: '⚡', category: 'integrations', unlocked: activeDestCount >= 3, progress: activeDestCount, max_progress: 3 },
-        { id: 'funnel_champ', title: 'Career Hunter', description: 'Moved 5+ job applications to interview stage', icon: '🎯', category: 'career', unlocked: false, progress: 3, max_progress: 5 },
-        { id: 'streak_30', title: 'Unstoppable Legend', description: 'Reach a 30-day consecutive saving streak', icon: '👑', category: 'consistency', unlocked: false, progress: 9, max_progress: 30 },
+        { id: 'funnel_champ', title: 'Career Hunter', description: 'Moved 5+ job applications to interview stage', icon: '🎯', category: 'career', unlocked: actionableClipsCount >= 5, progress: Math.min(5, actionableClipsCount), max_progress: 5 },
+        { id: 'streak_30', title: 'Unstoppable Legend', description: 'Reach a 30-day consecutive saving streak', icon: '👑', category: 'consistency', unlocked: currentStreak >= 30, progress: Math.min(30, currentStreak), max_progress: 30 },
       ],
       personal_bests: {
-        longest_streak: 19,
-        most_clips_in_day: 14,
-        peak_day_date: 'August 14',
+        longest_streak: longestStreak,
+        most_clips_in_day: Math.max(...Object.values(clipDatesMap), totalClips > 0 ? 1 : 0),
+        peak_day_date: uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : 'Today',
         peak_hour_str: '2:00 PM – 5:00 PM',
-        top_category: 'Articles & Docs (35%)',
-        total_reads_completed: 42,
+        top_category: contentBreakdown[0] ? `${contentBreakdown[0].name} (${contentBreakdown[0].percentage}%)` : 'Vault Saves',
+        total_reads_completed: totalClips,
       },
     },
     predictive_forecast: {

@@ -29,8 +29,20 @@ function MicroSpark({ values, stroke }: { values?: number[]; stroke: string }) {
     .map((v, i) => `${(i / Math.max(1, vals.length - 1)) * 64},${22 - ((v - min) / range) * 18}`)
     .join(' ');
   return (
-    <svg viewBox="0 0 64 24" className="w-16 h-6 shrink-0" fill="none">
-      <polyline points={pts} stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      viewBox="0 0 64 24"
+      className="w-16 h-6 shrink-0 transition-all duration-200 group-hover:scale-105"
+      fill="none"
+    >
+      <polyline
+        points={pts}
+        stroke={stroke}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="transition-all duration-200"
+        style={{ filter: `drop-shadow(0 0 4px ${stroke})` }}
+      />
     </svg>
   );
 }
@@ -41,6 +53,17 @@ import { IntentBreakdownDonut } from '../analytics/IntentBreakdownDonut';
 import { OpportunityOutcomesFunnel } from '../analytics/OpportunityOutcomesFunnel';
 import { CaptureHeatmapCard } from '../analytics/CaptureHeatmapCard';
 import { TopKnowledgeSourcesTable } from '../analytics/TopKnowledgeSourcesTable';
+import { MascotBanner } from '../analytics/MascotBanner';
+import { QuickStatsBar } from '../analytics/QuickStatsBar';
+import { FocusRings } from '../analytics/FocusRings';
+import { DailyFocusCard } from '../analytics/DailyFocusCard';
+import { WeekdayBarChart } from '../analytics/WeekdayBarChart';
+import { DensityAndRhythm } from '../analytics/DensityAndRhythm';
+import { KnowledgeRadarChart } from '../analytics/KnowledgeRadarChart';
+import { ContentTypeDonut } from '../analytics/ContentTypeDonut';
+import { FocusDistributionCard } from '../analytics/FocusDistributionCard';
+import { AchievementsGrid } from '../analytics/AchievementsGrid';
+import { PredictiveForecast } from '../analytics/PredictiveForecast';
 
 interface AnalyticsPageProps {
   clips: ClipItem[];
@@ -49,7 +72,7 @@ interface AnalyticsPageProps {
   setTheme?: (theme: 'terminal' | 'dark' | 'light') => void;
 }
 
-export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destinations, theme = 'dark', setTheme }) => {
+export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips = [], destinations = [], theme = 'dark', setTheme }) => {
   const { selectedPeriod, setSelectedPeriod } = useAnalyticsStore();
   const isDark = theme === 'dark' || theme === 'terminal';
 
@@ -60,7 +83,28 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
   const [granularity, setGranularity] = useState<'daily' | 'weekly' | 'monthly'>('weekly');
 
   // Shared query hook with 5-minute cache time (same key as DashboardPage)
-  const { data, isLoading, isFetching, refetch } = useAnalyticsQuery(clips, destinations);
+  const { data, isLoading, isFetching, refetch } = useAnalyticsQuery(
+    clips,
+    destinations,
+    selectedIntent,
+    selectedDestination
+  );
+
+  // Live dimensional metrics computed directly from backend payload / user vault
+  const totalClips = data?.kpis?.total_clips?.value ?? clips.length;
+  const reviewedClips = data?.opportunity_funnel?.[1]?.count ?? clips.filter(c => c.status && c.status !== 'pending').length;
+  const processingRatePct = totalClips > 0 ? Math.round((reviewedClips / totalClips) * 100) : 100;
+
+  const actionedClips = data?.opportunity_funnel?.[2]?.count ?? clips.filter(c => ['job', 'scholarship', 'event'].includes((c.content_type || '').toLowerCase()) || c.deadline_date).length;
+  const actionRatePct = data?.money?.action_rate_percent ?? (totalClips > 0 ? Math.round((actionedClips / totalClips) * 1000) / 10 : 0);
+
+  const activeDestCount = data?.destinations_health?.active_count ?? destinations.filter(d => d.is_active).length;
+  const overallUptime = data?.destinations_health?.overall_uptime ?? '99.8%';
+  const avgLatencyMs = data?.destinations_health?.destinations?.length
+    ? Math.round(data.destinations_health.destinations.reduce((acc, d) => acc + (d.latency_ms || 85), 0) / data.destinations_health.destinations.length)
+    : 85;
+
+  const missedDeadlinesCount = data?.money?.missed_deadlines_count ?? 0;
 
   return (
     <div className={`min-h-screen font-sans pb-20 transition-colors duration-200 ${isDark ? 'bg-[#000000] text-[#EDEDED]' : 'bg-[#F8FAFC] text-slate-900'}`}>
@@ -162,33 +206,65 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
           </div>
         </div>
 
-        {/* Stitch Crimson Alert Banner: Expired Opportunities */}
-        <div className="bg-[#180808] border border-[#4A1111] rounded-2xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm transition-all">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#2D0D0D] border border-[#5C1A1A] flex items-center justify-center shrink-0">
-              <AlertTriangle className="w-4 h-4 text-[#EF4444]" />
+        {/* Stitch Dynamic Alert Banner: Expired / Active Opportunities */}
+        {missedDeadlinesCount > 0 ? (
+          <div className="bg-[#180808] border border-[#4A1111] rounded-2xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm transition-all">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-[#2D0D0D] border border-[#5C1A1A] flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-4 h-4 text-[#EF4444]" />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-rose-200 font-['Outfit',sans-serif]">
+                  {missedDeadlinesCount} Opportunit{missedDeadlinesCount === 1 ? 'y' : 'ies'} Expired Unactioned
+                </h3>
+                <p className="text-[11px] text-rose-400/80 font-['Inter',sans-serif] mt-0.5">
+                  Jobs, events, or scholarships passed deadline without review.
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-bold text-rose-200 font-['Outfit',sans-serif]">
-                12 Opportunities Expired Unactioned
-              </h3>
-              <p className="text-[11px] text-rose-400/80 font-['Inter',sans-serif] mt-0.5">
-                Jobs, events, scholarships passed deadlines.
-              </p>
-            </div>
-          </div>
 
-          <button
-            onClick={() => {
-              if (data?.opportunity_funnel) {
-                // Focus / review action
-              }
-            }}
-            className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-[#DC2626] hover:bg-[#B91C1C] transition-colors shadow-xs self-start sm:self-auto cursor-pointer"
-          >
-            Review
-          </button>
-        </div>
+            <button
+              onClick={() => setSelectedIntent('apply')}
+              className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-[#DC2626] hover:bg-[#B91C1C] transition-colors shadow-xs self-start sm:self-auto cursor-pointer"
+            >
+              Review Pipeline
+            </button>
+          </div>
+        ) : (
+          <div className={`rounded-2xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm border transition-all ${
+            isDark ? 'bg-[#0E1A11] border-[#1C3823]' : 'bg-emerald-50/70 border-emerald-200/80'
+          }`}>
+            <div className="flex items-start sm:items-center gap-3">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                isDark ? 'bg-[#142A1B] border-[#20492E] text-[#3FE769]' : 'bg-emerald-100 border-emerald-200 text-emerald-700'
+              }`}>
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className={`text-xs sm:text-sm font-bold font-['Outfit',sans-serif] ${
+                  isDark ? 'text-emerald-200' : 'text-emerald-900'
+                }`}>
+                  All Tracked Deadlines Current
+                </h3>
+                <p className={`text-[11px] font-['Inter',sans-serif] mt-0.5 ${
+                  isDark ? 'text-emerald-400/80' : 'text-emerald-700'
+                }`}>
+                  Zero overdue opportunities detected across your saved knowledge vaults.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedIntent('apply')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                isDark
+                  ? 'bg-[#142A1B] border-[#20492E] text-[#3FE769] hover:bg-[#1A3723]'
+                  : 'bg-white border-emerald-300 text-emerald-800 hover:bg-emerald-50'
+              }`}
+            >
+              Filter Opportunities
+            </button>
+          </div>
+        )}
 
         {/* Box 1: Multi-Dimensional OLAP Filter Bar */}
         <div className={`rounded-2xl p-2.5 sm:p-3.5 shadow-sm flex flex-wrap items-center justify-between gap-3 border transition-all ${
@@ -283,11 +359,18 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
                     : 'bg-[#F8FAFC] border-slate-200 text-slate-800 focus:border-[#2D6A4F]'
                 }`}
               >
-                <option value="all">All Destinations (482)</option>
-                <option value="notion">Notion (142)</option>
-                <option value="sheets">Sheets (148)</option>
-                <option value="obsidian">Obsidian (96)</option>
-                <option value="webhook">Webhook (96)</option>
+                <option value="all">All Destinations ({clips.length})</option>
+                {destinations.map((dest) => {
+                  const destKey = (dest.provider || dest.name || '').toLowerCase();
+                  const count = clips.filter(
+                    (c) => (c.destination || '').toLowerCase() === destKey || (c.destination || '').toLowerCase() === (dest.name || '').toLowerCase()
+                  ).length;
+                  return (
+                    <option key={dest.id} value={destKey}>
+                      {dest.name || dest.provider} ({count})
+                    </option>
+                  );
+                })}
               </select>
               <ChevronDown className={`w-3.5 h-3.5 absolute right-2.5 top-2 pointer-events-none ${
                 isDark ? 'text-[#878787]' : 'text-slate-400'
@@ -347,21 +430,44 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
           </div>
         ) : (
           <>
+            {/* Mascot AI Coaching Speech Bubble Banner */}
+            <MascotBanner
+              totalInPeriod={data.kpis?.total_clips?.value ?? 52}
+              periodLabel={selectedPeriod.replace(/_/g, ' ')}
+              velocityLabel={
+                data.kpis?.total_clips?.delta_pct
+                  ? `+${data.kpis.total_clips.delta_pct}% velocity`
+                  : '+18.4% velocity'
+              }
+              isDark={isDark}
+            />
+
+            {/* 5-Metric Quick Stats Bar */}
+            <QuickStatsBar
+              kpis={data.kpis}
+              isDark={isDark}
+            />
+
             {/* Box 2: Four Tectonic KPI Metric Tiles (Stitch Screen 7cff5690f6924342a24b6abc44366f33) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
               {/* Metric 1: Total Clips Ingested */}
-              <div className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 border ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#262626]'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
-              }`}>
+              <motion.div
+                whileHover={{ y: -3, scale: 1.015 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all cursor-pointer group select-none border ${
+                  isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#3FE769]/50 hover:shadow-[0_0_24px_rgba(63,231,105,0.08)]'
+                    : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md'
+                }`}
+              >
                 <div className="flex items-center justify-between mb-2">
                   <span className={`text-xs font-semibold ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
                     Total Clips Ingested
                   </span>
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-transform duration-200 group-hover:scale-105 ${
                     isDark
-                      ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                      ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A] group-hover:border-[#3FE769]/40'
                       : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                   }`}>
                     <TrendingUp className="w-3 h-3" />
@@ -369,7 +475,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mb-1">
-                  <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] transition-transform duration-200 group-hover:translate-x-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {data.kpis?.total_clips?.value?.toLocaleString() ?? '1,428'}
                   </div>
                   <MicroSpark values={data.kpis?.total_clips?.sparkline} stroke={isDark ? '#3FE769' : '#2D6A4F'} />
@@ -382,128 +488,215 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
                       : '47.6 clips/day avg velocity'}
                   </span>
                 </p>
-              </div>
+              </motion.div>
 
               {/* Metric 2: Processing Rate */}
-              <div className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 border ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#262626]'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
-              }`}>
+              <motion.div
+                whileHover={{ y: -3, scale: 1.015 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all cursor-pointer group select-none border ${
+                  isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#3FE769]/50 hover:shadow-[0_0_24px_rgba(63,231,105,0.08)]'
+                    : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md'
+                }`}
+              >
                 <div className="flex items-center justify-between mb-2">
                   <span className={`text-xs font-semibold ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
                     Processing Rate
                   </span>
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-transform duration-200 group-hover:scale-105 ${
                     isDark
-                      ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                      ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A] group-hover:border-[#3FE769]/40'
                       : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                   }`}>
                     <TrendingUp className="w-3 h-3" />
-                    +5.1%
+                    {processingRatePct}% Vault
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mb-1">
-                  <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {data.kpis?.destinations_active?.health_pct ? `${data.kpis.destinations_active.health_pct}%` : '78.2%'}
+                  <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] transition-transform duration-200 group-hover:translate-x-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {processingRatePct}%
                   </div>
                   <MicroSpark values={data.kpis?.weekly_velocity?.sparkline} stroke={isDark ? '#3FE769' : '#2D6A4F'} />
                 </div>
                 <p className={`text-[11px] font-medium flex items-center gap-1.5 mt-2 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                   <span>
-                    {data.kpis?.total_clips?.value
-                      ? `${Math.round(data.kpis.total_clips.value * 0.78)} of ${data.kpis.total_clips.value} read or exported`
-                      : '1,116 of 1,428 read or exported'}
+                    {reviewedClips} of {totalClips} processed or archived
                   </span>
                 </p>
-              </div>
+              </motion.div>
 
               {/* Metric 3: Opportunity Conversion */}
-              <div className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 border ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#262626]'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
-              }`}>
+              <motion.div
+                whileHover={{ y: -3, scale: 1.015 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all cursor-pointer group select-none border ${
+                  isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-amber-400/50 hover:shadow-[0_0_24px_rgba(245,158,11,0.08)]'
+                    : 'bg-white border-slate-200 hover:border-amber-300 hover:shadow-md'
+                }`}
+              >
                 <div className="flex items-center justify-between mb-2">
                   <span className={`text-xs font-semibold ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
                     Opportunity Conversion
                   </span>
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-transform duration-200 group-hover:scale-105 ${
                     isDark
-                      ? 'bg-[#1C1B1B] text-[#F59E0B] border border-[#2A2A2A]'
+                      ? 'bg-[#1C1B1B] text-[#F59E0B] border border-[#2A2A2A] group-hover:border-[#F59E0B]/40'
                       : 'bg-amber-50 text-amber-700 border border-amber-100'
                   }`}>
                     <TrendingUp className="w-3 h-3" />
-                    +2.8% QoQ
+                    Live Pipeline
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mb-1">
-                  <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] ${isDark ? 'text-amber-400' : 'text-slate-900'}`}>
-                    14.2%
+                  <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] transition-transform duration-200 group-hover:translate-x-0.5 ${isDark ? 'text-amber-400' : 'text-slate-900'}`}>
+                    {actionRatePct}%
                   </div>
                   <MicroSpark values={data.kpis?.active_streak?.sparkline} stroke={isDark ? '#F59E0B' : '#D97706'} />
                 </div>
                 <p className={`text-[11px] font-medium flex items-center gap-1.5 mt-2 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                  <span>6 active interview rounds / 42 applied</span>
+                  <span>{actionedClips} actionable opportunities / {totalClips} total</span>
                 </p>
-              </div>
+              </motion.div>
 
               {/* Metric 4: P95 Sync Latency */}
-              <div className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 border ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#262626]'
-                  : 'bg-white border-slate-200 hover:border-slate-300'
-              }`}>
+              <motion.div
+                whileHover={{ y: -3, scale: 1.015 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all cursor-pointer group select-none border ${
+                  isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#3FE769]/50 hover:shadow-[0_0_24px_rgba(63,231,105,0.08)]'
+                    : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md'
+                }`}
+              >
                 <div className="flex items-center justify-between mb-2">
                   <span className={`text-xs font-semibold ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
                     P95 Sync Latency
                   </span>
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-transform duration-200 group-hover:scale-105 ${
                     isDark
-                      ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                      ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A] group-hover:border-[#3FE769]/40'
                       : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                   }`}>
                     <Zap className="w-3 h-3" />
-                    -42ms faster
+                    {activeDestCount} Live Syncs
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between mb-1">
-                  <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    310ms
+                  <div className={`text-3xl sm:text-[34px] font-bold tracking-tight font-['Outfit',sans-serif] transition-transform duration-200 group-hover:translate-x-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    {avgLatencyMs}ms
                   </div>
                   <MicroSpark values={data.kpis?.destinations_active?.sparkline} stroke={isDark ? '#3FE769' : '#2D6A4F'} />
                 </div>
                 <p className={`text-[11px] font-medium flex items-center gap-1.5 mt-2 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
                   <CheckCircle2 className={`w-3.5 h-3.5 ${isDark ? 'text-[#3FE769]' : 'text-emerald-600'}`} />
-                  <span>99.98% pipeline uptime</span>
+                  <span>{overallUptime} uptime · {activeDestCount} connected vaults</span>
                 </p>
-              </div>
+              </motion.div>
             </div>
 
-            {/* 4. Main Charts Row (Stitch 8-col / 4-col Split: Saves per Week & Intent Breakdown) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
-              {/* Left: Saves per Week by Intent (8 cols) */}
-              <div className="lg:col-span-8 h-full flex flex-col">
-                <SavesPerWeekAreaChart
-                  historicalData={data.predictive_forecast.historical_trend}
-                  isDark={isDark}
-                />
-              </div>
+            {/* 3. Streak & Momentum Rings + Daily Focus Goal (Responsive 2-Col Grid) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-stretch">
+              <FocusRings
+                dailyFocus={data.daily_focus}
+                streakMomentum={data.streak_momentum}
+                isDark={isDark}
+              />
+              <DailyFocusCard
+                dailyFocus={data.daily_focus}
+                isDark={isDark}
+              />
+            </div>
 
-              {/* Right: Intent Breakdown Donut (4 cols) */}
-              <div className="lg:col-span-4 h-full flex flex-col">
+            {/* 4. Saves per Week Area Chart (Full Width) */}
+            <SavesPerWeekAreaChart
+              historicalData={data.predictive_forecast?.historical_trend}
+              clips={clips}
+              isDark={isDark}
+            />
+
+            {/* 4.5. Content Intelligence & Intent Section: Intent Donut + 10-Axis Knowledge Radar */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
+              {/* Left: Intent Breakdown Donut (5 cols) */}
+              <div className="lg:col-span-5 h-full flex flex-col">
                 <IntentBreakdownDonut
                   contentBreakdown={data.content_breakdown}
+                  clips={clips}
                   totalCount={data.kpis?.total_clips?.value}
                   isDark={isDark}
                 />
               </div>
+
+              {/* Right: 10-Axis Knowledge Radar Polygon (7 cols) */}
+              <div className="lg:col-span-7 h-full flex flex-col">
+                <KnowledgeRadarChart
+                  knowledgeRadar={data.knowledge_radar}
+                  clips={clips}
+                  isDark={isDark}
+                />
+              </div>
             </div>
 
-            {/* 5. Stitch Opportunity Outcomes Funnel (Box 5) */}
+            {/* 5. Weekday Rhythm & Density Curve Split Cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
+              {/* Left: Average Clips by Weekday (7 cols) */}
+              <div className="lg:col-span-7 h-full flex flex-col">
+                <WeekdayBarChart
+                  weekdayRhythm={data.weekday_rhythm}
+                  isDark={isDark}
+                />
+              </div>
+
+              {/* Right: Density & Rhythm Card (5 cols) */}
+              <div className="lg:col-span-5 h-full flex flex-col">
+                <DensityAndRhythm
+                  historicalData={data.predictive_forecast?.historical_trend}
+                  weekdayRhythm={data.weekday_rhythm}
+                  clips={clips}
+                  isDark={isDark}
+                />
+              </div>
+            </div>
+
+            {/* 6. Content Types & Subject Specialty Breakdown (Donut + Pills) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
+              {/* Left: Content Type Donut (5 cols) */}
+              <div className="lg:col-span-5 h-full flex flex-col">
+                <ContentTypeDonut
+                  contentBreakdown={data.content_breakdown}
+                  clips={clips}
+                  totalCount={data.kpis?.total_clips?.value}
+                  isDark={isDark}
+                />
+              </div>
+
+              {/* Right: Subject Specialty & Focus Distribution Pills (7 cols) */}
+              <div className="lg:col-span-7 h-full flex flex-col">
+                <FocusDistributionCard
+                  knowledgeRadar={data.knowledge_radar}
+                  clips={clips}
+                  isDark={isDark}
+                />
+              </div>
+            </div>
+
+            {/* 7. Stitch Opportunity Outcomes Funnel */}
             <OpportunityOutcomesFunnel
               funnelData={data.opportunity_funnel}
               money={data.money}
+              clips={clips}
+              isDark={isDark}
+            />
+
+            {/* 7.5. Gamification Badges Grid & Personal Records Milestone Summary */}
+            <AchievementsGrid
+              badges={data.gamification?.badges}
+              personalBests={data.gamification?.personal_bests}
+              clips={clips}
               isDark={isDark}
             />
 
@@ -513,8 +706,9 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
               <div className="lg:col-span-5 h-full flex flex-col">
                 <CaptureHeatmapCard
                   days={data.contribution_matrix?.days}
-                  currentStreak={data.streak_momentum?.current_streak_days ?? 14}
-                  longestStreak={data.contribution_matrix?.longest_streak ?? 38}
+                  clips={clips}
+                  currentStreak={data.streak_momentum?.current_streak_days ?? (totalClips > 0 ? 1 : 0)}
+                  longestStreak={data.contribution_matrix?.longest_streak ?? (totalClips > 0 ? 1 : 0)}
                   isDark={isDark}
                 />
               </div>
@@ -523,10 +717,19 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips, destination
               <div className="lg:col-span-7 h-full flex flex-col">
                 <TopKnowledgeSourcesTable
                   destinations={data.destinations_health?.destinations}
+                  sources={data.top_sources}
+                  clips={clips}
                   isDark={isDark}
                 />
               </div>
             </div>
+
+            {/* 8. Predictive AI Trajectory & Opportunity Signals */}
+            <PredictiveForecast
+              forecastData={data.predictive_forecast}
+              clips={clips}
+              isDark={isDark}
+            />
           </>
         )}
       </div>
