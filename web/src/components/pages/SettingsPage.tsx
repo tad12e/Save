@@ -11,6 +11,9 @@ import {
   setMusicProviderBackend,
   fetchCategoryRoutingRules,
   saveCategoryRoutingRules,
+  fetchUserSettingsBackend,
+  updateUserSettingsBackend,
+  UserSettingsData,
   SpotifyPlaylist, 
   SpotifyTrack 
 } from '../../lib/api';
@@ -308,6 +311,43 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
         localStorage.setItem('clipper_category_rules', JSON.stringify(rules));
       }
     });
+
+    // Load full user preferences from Django backend
+    fetchUserSettingsBackend().then(settings => {
+      if (!settings) return;
+      if (settings.confirmation_mode) {
+        setConfirmationMode(settings.confirmation_mode);
+        localStorage.setItem('clipper_confirmation_mode', settings.confirmation_mode);
+      }
+      if (settings.music_provider) {
+        setMusicProvider(settings.music_provider);
+        localStorage.setItem('clipper_music_provider', settings.music_provider);
+      }
+      if (settings.music_target_playlist_id) {
+        setMusicPlaylist(settings.music_target_playlist_id);
+        localStorage.setItem('clipper_music_playlist', settings.music_target_playlist_id);
+      }
+      if (typeof settings.music_auto_add === 'boolean') {
+        setMusicAutoAdd(settings.music_auto_add);
+        localStorage.setItem('clipper_music_auto_add', String(settings.music_auto_add));
+      }
+      if (settings.spotify_client_id !== undefined) {
+        setSpotifyClientIdInput(settings.spotify_client_id);
+        localStorage.setItem('clipper_spotify_client_id', settings.spotify_client_id);
+      }
+      if (settings.spotify_client_secret !== undefined) {
+        setSpotifyClientSecretInput(settings.spotify_client_secret);
+        localStorage.setItem('clipper_spotify_client_secret', settings.spotify_client_secret);
+      }
+      if (typeof settings.privacy_mode === 'boolean') {
+        setIsPrivacyMode(settings.privacy_mode);
+        saveStoredPrivacyMode(settings.privacy_mode);
+      }
+      if (settings.ai_extraction_prompt) {
+        setAiExtractionPrompt(settings.ai_extraction_prompt);
+        localStorage.setItem('clipper_ai_extraction_prompt', settings.ai_extraction_prompt);
+      }
+    });
   }, []);
 
   const handleCategoryRuleChange = (categoryKey: string, destId: string) => {
@@ -318,6 +358,30 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
     setCategoryRules(updated);
     localStorage.setItem('clipper_category_rules', JSON.stringify(updated));
     saveCategoryRoutingRules(updated);
+  };
+
+  const handleConfirmationModeChange = (mode: ConfirmationMode) => {
+    setConfirmationMode(mode);
+    localStorage.setItem('clipper_confirmation_mode', mode);
+    updateUserSettingsBackend({ confirmation_mode: mode });
+  };
+
+  const handleMusicPlaylistChange = (playlistId: string) => {
+    setMusicPlaylist(playlistId);
+    localStorage.setItem('clipper_music_playlist', playlistId);
+    updateUserSettingsBackend({ music_target_playlist_id: playlistId });
+  };
+
+  const handleMusicAutoAddChange = (checked: boolean) => {
+    setMusicAutoAdd(checked);
+    localStorage.setItem('clipper_music_auto_add', String(checked));
+    updateUserSettingsBackend({ music_auto_add: checked });
+  };
+
+  const handlePrivacyModeChange = (checked: boolean) => {
+    setIsPrivacyMode(checked);
+    saveStoredPrivacyMode(checked);
+    updateUserSettingsBackend({ privacy_mode: checked });
   };
 
   const handleDiscardChanges = () => {
@@ -355,10 +419,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
     localStorage.setItem('clipper_music_provider', musicProvider);
     localStorage.setItem('clipper_music_playlist', musicPlaylist);
     localStorage.setItem('clipper_music_auto_add', String(musicAutoAdd));
+    localStorage.setItem('clipper_spotify_client_id', spotifyClientIdInput);
+    localStorage.setItem('clipper_spotify_client_secret', spotifyClientSecretInput);
     localStorage.setItem('clipper_ai_extraction_prompt', aiExtractionPrompt);
 
-    // Save category rules to backend database
-    await saveCategoryRoutingRules(categoryRules);
+    // Save category rules and all user settings to backend database concurrently
+    await Promise.all([
+      saveCategoryRoutingRules(categoryRules),
+      updateUserSettingsBackend({
+        confirmation_mode: confirmationMode,
+        music_provider: musicProvider,
+        music_target_playlist_id: musicPlaylist,
+        music_auto_add: musicAutoAdd,
+        spotify_client_id: spotifyClientIdInput,
+        spotify_client_secret: spotifyClientSecretInput,
+        privacy_mode: isPrivacyMode,
+        ai_extraction_prompt: aiExtractionPrompt,
+      })
+    ]);
 
     setDestinations(prev =>
       prev.map(d => ({
@@ -495,10 +573,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Card 1: Auto Mode */}
           <div
-            onClick={() => {
-              setConfirmationMode('auto');
-              localStorage.setItem('clipper_confirmation_mode', 'auto');
-            }}
+            onClick={() => handleConfirmationModeChange('auto')}
             className={`group relative flex flex-col justify-between p-4 rounded-xl cursor-pointer transition-all ${
               confirmationMode === 'auto'
                 ? isDark
@@ -556,10 +631,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
 
           {/* Card 2: Confirm Mode (Recommended) */}
           <div
-            onClick={() => {
-              setConfirmationMode('confirm');
-              localStorage.setItem('clipper_confirmation_mode', 'confirm');
-            }}
+            onClick={() => handleConfirmationModeChange('confirm')}
             className={`group relative flex flex-col justify-between p-4 rounded-xl cursor-pointer transition-all ${
               confirmationMode === 'confirm'
                 ? isDark
@@ -617,10 +689,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
 
           {/* Card 3: Always Ask */}
           <div
-            onClick={() => {
-              setConfirmationMode('always_ask');
-              localStorage.setItem('clipper_confirmation_mode', 'always_ask');
-            }}
+            onClick={() => handleConfirmationModeChange('always_ask')}
             className={`group relative flex flex-col justify-between p-4 rounded-xl cursor-pointer transition-all ${
               confirmationMode === 'always_ask'
                 ? isDark
@@ -1380,10 +1449,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
             <div className="relative w-full">
               <select
                 value={musicPlaylist}
-                onChange={(e) => {
-                  setMusicPlaylist(e.target.value);
-                  localStorage.setItem('clipper_music_playlist', e.target.value);
-                }}
+                onChange={(e) => handleMusicPlaylistChange(e.target.value)}
                 className={`w-full h-9 pl-3 pr-8 rounded-lg text-xs appearance-none cursor-pointer focus:outline-none transition-colors truncate ${
                   isDark
                     ? 'bg-[#181818] border border-[#2B2B2B] text-white focus:border-[#3FE769]'
@@ -1618,10 +1684,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
             <input
               type="checkbox"
               checked={musicAutoAdd}
-              onChange={(e) => {
-                setMusicAutoAdd(e.target.checked);
-                localStorage.setItem('clipper_music_auto_add', String(e.target.checked));
-              }}
+              onChange={(e) => handleMusicAutoAddChange(e.target.checked)}
               className="sr-only peer"
             />
             <div className={`w-11 h-6 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all ${
@@ -1699,10 +1762,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ destinations, setDes
             <input
               type="checkbox"
               checked={isPrivacyMode}
-              onChange={(e) => {
-                setIsPrivacyMode(e.target.checked);
-                saveStoredPrivacyMode(e.target.checked);
-              }}
+              onChange={(e) => handlePrivacyModeChange(e.target.checked)}
               className="sr-only peer"
             />
             <div

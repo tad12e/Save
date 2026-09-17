@@ -1,4 +1,4 @@
-import type { CustomPageConfig } from '../types';
+import type { CustomPageConfig, CustomCategoryConfig, ClipItem, ClipType } from '../types';
 
 export interface AuthorizeParams {
   provider: string;
@@ -99,6 +99,138 @@ export async function createClipBackend(clipData: {
     return await response.json();
   } catch (error) {
     console.warn('Could not post clip to backend:', error);
+    return null;
+  }
+}
+
+export function convertBackendClipToItem(b: any): ClipItem {
+  const normType = (b.content_type || b.intent || 'general').toLowerCase();
+  const validTypes: ClipType[] = [
+    'job', 'education', 'research', 'book', 'project',
+    'programming', 'course', 'event', 'scholarship', 'music', 'deal', 'article', 'general'
+  ];
+  const clipType: ClipType = validTypes.includes(normType as any) ? (normType as ClipType) : 'article';
+
+  return {
+    id: String(b.id),
+    title: b.title || b.url || 'Untitled Clip',
+    url: b.url,
+    selectedText: b.selected_text || '',
+    summary: b.summary || '',
+    type: clipType,
+    tags: Array.isArray(b.tags) ? b.tags : [],
+    createdAt: b.created_at || new Date().toISOString(),
+    sourceApp: (b.source_platform && b.source_platform !== 'web') ? b.source_platform : 'Web App',
+    syncedTo: b.destination_provider ? [b.destination_provider] : [],
+    storageMode: 'cloud',
+    pageId: b.custom_page_id || undefined,
+    faviconUrl: `https://www.google.com/s2/favicons?domain=${encodeURIComponent(b.url || '')}&sz=32`,
+    extractedData: {
+      deadline: b.deadline_date,
+      ...(b.extra_metadata || {})
+    },
+    isFavorite: false,
+    sourcePlatform: b.source_platform || 'web',
+    sourceAuthor: b.source_author || undefined,
+    sourcePostUrl: b.source_post_url || undefined,
+    parentClipId: b.parent_clip_id || undefined,
+    parentClipTitle: b.parent_clip_title || undefined,
+    childClipsCount: b.child_clips_count || 0,
+    isResourceHub: b.is_resource_hub || false,
+    extractedResourceUrl: b.extracted_resource_url || undefined,
+    ...(b.intent ? { intent: b.intent } : {}),
+  } as ClipItem;
+}
+
+export async function fetchClipsBackend(params?: { intent?: string; pageId?: string; source?: string; type?: string; groupBy?: string }): Promise<ClipItem[] | null> {
+  try {
+    const query = new URLSearchParams();
+    if (params?.intent && params.intent !== 'all') query.set('intent', params.intent);
+    if (params?.pageId && params.pageId !== 'all') query.set('page_id', params.pageId);
+    if (params?.source && params.source !== 'all') query.set('source', params.source);
+    if (params?.type && params.type !== 'all') query.set('type', params.type);
+    if (params?.groupBy && params.groupBy !== 'all') query.set('group_by', params.groupBy);
+
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const response = await fetch(`${BASE_URL}/api/clips/${qs}`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return data.map(convertBackendClipToItem);
+    }
+    return null;
+  } catch (error) {
+    console.warn('Could not fetch clips from backend:', error);
+    return null;
+  }
+}
+
+export interface BackendDashboardData {
+  user?: {
+    name: string;
+    email: string;
+  };
+  stats?: {
+    total_clips: number;
+    saved_this_week: number;
+    jobs_saved: number;
+    music_saved: number;
+    articles_saved: number;
+    active_destinations: number;
+    upcoming_deadlines_count: number;
+  };
+  upcoming_deadlines?: any[];
+  destinations_status?: Array<{
+    id: string;
+    provider: string;
+    name: string;
+    connected: boolean;
+    status: string;
+    items_synced: number;
+  }>;
+  intent_distribution?: Array<{
+    name: string;
+    intent: string;
+    count: number;
+    pct: number;
+    color: string;
+  }>;
+  intent_counts?: Record<string, number>;
+  ai_digest_highlight?: {
+    title: string;
+    summary: string;
+    action_needed_count: number;
+  };
+  recent_clips?: any[];
+}
+
+export async function fetchClipsDashboardBackend(): Promise<BackendDashboardData | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/clips/dashboard/`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not fetch clips dashboard from backend:', error);
+    return null;
+  }
+}
+
+export async function fetchDashboardCardsBackend() {
+  try {
+    const response = await fetch(`${BASE_URL}/api/analytics/cards/`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not fetch dashboard cards from backend:', error);
     return null;
   }
 }
@@ -456,6 +588,52 @@ export async function saveCategoryRoutingRules(rules: Record<string, string>) {
   }
 }
 
+export interface UserSettingsData {
+  id?: string;
+  confirmation_mode?: 'auto' | 'confirm' | 'always_ask';
+  music_provider?: 'spotify' | 'youtube_music';
+  music_target_playlist_id?: string;
+  music_auto_add?: boolean;
+  spotify_client_id?: string;
+  spotify_client_secret?: string;
+  privacy_mode?: boolean;
+  ai_extraction_prompt?: string;
+  theme?: string;
+  extra_preferences?: Record<string, any>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function fetchUserSettingsBackend(): Promise<UserSettingsData | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/users/settings/`, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not fetch user settings from backend:', error);
+    return null;
+  }
+}
+
+export async function updateUserSettingsBackend(payload: Partial<UserSettingsData>): Promise<UserSettingsData | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/users/settings/`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not update user settings on backend:', error);
+    return null;
+  }
+}
+
 export async function fetchClipClustersBackend(params?: { threshold?: number; minSize?: number; refresh?: boolean }) {
   try {
     const query = new URLSearchParams();
@@ -563,6 +741,114 @@ export function convertBackendPageToConfig(p: any): CustomPageConfig {
     createdAt: p.created_at || new Date().toISOString(),
     isSystemDefault: Boolean(p.is_system_default),
   };
+}
+
+export async function fetchCustomCategoriesBackend(dimension?: string): Promise<CustomCategoryConfig[]> {
+  try {
+    const url = dimension && dimension !== 'all'
+      ? `${BASE_URL}/api/clips/custom-categories/?dimension=${dimension}`
+      : `${BASE_URL}/api/clips/custom-categories/`;
+    const response = await fetch(url, {
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return (data || []).map((c: any) => ({
+      id: c.id,
+      dimension: c.dimension,
+      name: c.name,
+      slug: c.slug,
+      color: c.color,
+      bgColor: c.bg_color,
+      iconName: c.icon_name,
+      description: c.description,
+      keywords: c.keywords,
+      createdAt: c.created_at,
+    }));
+  } catch (error) {
+    console.warn('Could not fetch custom categories:', error);
+    return [];
+  }
+}
+
+export async function createCustomCategoryBackend(data: Partial<CustomCategoryConfig>): Promise<CustomCategoryConfig | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/clips/custom-categories/`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        name: data.name,
+        slug: data.slug,
+        dimension: data.dimension || 'intent',
+        color: data.color,
+        bg_color: data.bgColor,
+        icon_name: data.iconName,
+        description: data.description,
+        keywords: data.keywords,
+      }),
+    });
+    if (!response.ok) return null;
+    const c = await response.json();
+    return {
+      id: c.id,
+      dimension: c.dimension,
+      name: c.name,
+      slug: c.slug,
+      color: c.color,
+      bgColor: c.bg_color,
+      iconName: c.icon_name,
+      description: c.description,
+      keywords: c.keywords,
+      createdAt: c.created_at,
+    };
+  } catch (error) {
+    console.warn('Could not create custom category:', error);
+    return null;
+  }
+}
+
+export async function deleteCustomCategoryBackend(id: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/clips/custom-categories/${id}/`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn('Could not delete custom category:', error);
+    return false;
+  }
+}
+
+export async function updateClipBackend(clipId: string, data: {
+  title?: string;
+  intent?: string;
+  type?: string;
+  content_type?: string;
+  custom_page_id?: string | null;
+  tags?: string[];
+  note?: string;
+}): Promise<any> {
+  try {
+    const payload: any = { ...data };
+    if (data.type && !data.content_type) {
+      payload.content_type = data.type;
+    }
+    const response = await fetch(`${BASE_URL}/api/clips/${clipId}/`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.warn('Could not update clip on backend:', error);
+    return null;
+  }
 }
 
 

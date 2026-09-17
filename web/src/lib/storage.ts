@@ -1,4 +1,4 @@
-import { DestinationConfig, ClipItem, JobCard, ConnectionSyncLog, SharedBoard, CustomPageConfig } from '../types';
+import { DestinationConfig, ClipItem, JobCard, ConnectionSyncLog, SharedBoard, CustomPageConfig, CustomCategoryConfig } from '../types';
 import { INITIAL_DESTINATIONS, INITIAL_CLIPS, INITIAL_JOBS, INITIAL_SYNC_LOGS, INITIAL_SHARED_BOARDS, INITIAL_CUSTOM_PAGES } from '../data/mockData';
 
 const DESTINATIONS_KEY = 'clipper_destinations_v1';
@@ -63,14 +63,14 @@ export const getStoredDestinations = (): DestinationConfig[] => {
       return d;
     });
 
-    const hasUnconnectedActiveExternal = normalized.some(
-      d => d.id !== 'dest_save_vault' && d.connected
-    );
-    if (hasUnconnectedActiveExternal) {
-      localStorage.removeItem(DESTINATIONS_KEY);
-      return INITIAL_DESTINATIONS;
-    }
-    return normalized;
+    const sanitized = normalized.map(d => {
+      if (d.itemsSyncedCount === 142 || d.itemsSyncedCount === 48) {
+        return { ...d, itemsSyncedCount: 0 };
+      }
+      return d;
+    });
+
+    return sanitized;
   } catch (e) {
     console.error('Error loading stored destinations', e);
     return INITIAL_DESTINATIONS;
@@ -154,5 +154,25 @@ export const saveStoredBoards = (boards: SharedBoard[]): void => {
     localStorage.setItem(BOARDS_KEY, JSON.stringify(boards));
   } catch (e) {
     console.error('Error saving boards', e);
+  }
+};
+
+const CUSTOM_CATEGORIES_KEY = 'clipper_custom_categories_v1';
+
+export const getStoredCustomCategories = (): CustomCategoryConfig[] => {
+  try {
+    const item = localStorage.getItem(CUSTOM_CATEGORIES_KEY);
+    return item ? JSON.parse(item) : [];
+  } catch (e) {
+    console.error('Error loading custom categories', e);
+    return [];
+  }
+};
+
+export const saveStoredCustomCategories = (cats: CustomCategoryConfig[]): void => {
+  try {
+    localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(cats));
+  } catch (e) {
+    console.error('Error saving custom categories', e);
   }
 };
