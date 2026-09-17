@@ -1,103 +1,172 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Target, Activity, Flame, Award, Clock, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Activity, Flame, Sparkles } from 'lucide-react';
 import { AnalyticsPayload } from '../../lib/analyticsApi';
 
 interface FocusRingsProps {
-  dailyFocus: AnalyticsPayload['daily_focus'];
-  streakMomentum: AnalyticsPayload['streak_momentum'];
-  personalBests: AnalyticsPayload['gamification']['personal_bests'];
+  dailyFocus?: AnalyticsPayload['daily_focus'];
+  streakMomentum?: AnalyticsPayload['streak_momentum'];
+  isDark?: boolean;
 }
 
 export const FocusRings: React.FC<FocusRingsProps> = ({
   dailyFocus,
   streakMomentum,
-  personalBests,
+  isDark = true,
 }) => {
+  const [hoveredRingId, setHoveredRingId] = useState<string | null>(null);
+  const [clickCount, setClickCount] = useState<number>(0);
+
+  const saveCount = dailyFocus?.rings?.save_count ?? { current: 7, target: 10, pct: 70 };
+  const taggingHealth = dailyFocus?.rings?.tagging_health ?? { current: 9, target: 10, pct: 90 };
+  const actionRate = dailyFocus?.rings?.action_rate ?? { current: 8, target: 10, pct: 80 };
+  const goalPct = dailyFocus?.goal_completion_pct ?? 82;
+
+  const currentStreak = streakMomentum?.current_streak_days ?? 14;
+  const bestStreak = streakMomentum?.best_streak_days ?? 38;
+  const multiplier = streakMomentum?.streak_multiplier ?? 1.4;
+  const nextMilestone = streakMomentum?.next_milestone_days ?? 20;
+
   // SVG Ring calculation helper
   const size = 180;
   const center = size / 2;
 
-  // Concentric Rings Radii & Stroke Widths
   const rings = [
     {
       id: 'save_count',
       label: 'Clips Target',
-      current: dailyFocus.rings.save_count.current,
-      target: dailyFocus.rings.save_count.target,
-      pct: dailyFocus.rings.save_count.pct,
-      color: '#2D6A4F', // Forest Green
-      bgColor: '#DCFCE7', // Mint green
+      current: saveCount.current,
+      target: saveCount.target,
+      pct: saveCount.pct,
+      color: isDark ? '#3FE769' : '#2D6A4F',
+      bgColor: isDark ? '#1C271E' : '#DCFCE7',
       radius: 68,
-      strokeWidth: 10,
+      strokeWidth: 9,
     },
     {
       id: 'tagging_health',
-      label: 'Tagging Health',
-      current: dailyFocus.rings.tagging_health.current,
-      target: dailyFocus.rings.tagging_health.target,
-      pct: dailyFocus.rings.tagging_health.pct,
-      color: '#40916C', // Vibrant Green
-      bgColor: '#E2E8F0',
-      radius: 52,
-      strokeWidth: 10,
+      label: 'Momentum',
+      current: taggingHealth.current,
+      target: taggingHealth.target,
+      pct: taggingHealth.pct,
+      color: '#F59E0B',
+      bgColor: isDark ? '#2C2213' : '#FEF3C7',
+      radius: 53,
+      strokeWidth: 9,
     },
     {
       id: 'action_rate',
-      label: 'Sync Actions',
-      current: dailyFocus.rings.action_rate.current,
-      target: dailyFocus.rings.action_rate.target,
-      pct: dailyFocus.rings.action_rate.pct,
-      color: '#10B981', // Emerald
-      bgColor: '#F1F5F9',
-      radius: 36,
-      strokeWidth: 10,
+      label: 'Vault Actions',
+      current: actionRate.current,
+      target: actionRate.target,
+      pct: actionRate.pct,
+      color: isDark ? '#40916C' : '#10B981',
+      bgColor: isDark ? '#18271E' : '#E2E8F0',
+      radius: 38,
+      strokeWidth: 9,
     },
   ];
 
+  const activeRing = hoveredRingId ? rings.find((r) => r.id === hoveredRingId) : null;
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* 1. Concentric Activity Rings (Apple Fitness Style) */}
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.1 }}
-        className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm flex flex-col justify-between"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-              <Activity className="w-4 h-4 text-emerald-700" />
-            </div>
-            <div>
-              <h3 className="text-xs font-mono font-bold tracking-wider text-slate-800 uppercase">
-                CONSISTENCY RINGS
-              </h3>
-              <p className="text-[11px] text-slate-500 font-sans">Multi-dimensional daily rhythm</p>
-            </div>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3, scale: 1.01 }}
+      whileTap={{ scale: 0.985 }}
+      transition={{ duration: 0.2 }}
+      className={`rounded-2xl border p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all group ${
+        isDark
+          ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#3FE769]/50 hover:shadow-[0_0_24px_rgba(63,231,105,0.08)]'
+          : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md'
+      }`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2.5">
+          <div
+            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-all ${
+              isDark
+                ? 'bg-[#1C1B1B] text-[#3FE769] border-[#2A2A2A] group-hover:border-[#3FE769]/50'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-100 group-hover:border-emerald-300'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
           </div>
-          <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            {dailyFocus.goal_completion_pct}% Active
-          </span>
+          <div>
+            <h3
+              className={`text-sm sm:text-base font-bold font-['Outfit',sans-serif] tracking-tight ${
+                isDark ? 'text-white' : 'text-slate-900'
+              }`}
+            >
+              Streak &amp; Momentum Rings
+            </h3>
+            <p
+              className={`text-[11px] font-['Inter',sans-serif] ${
+                isDark ? 'text-[#878787]' : 'text-slate-500'
+              }`}
+            >
+              Apple Fitness-style daily velocity
+            </p>
+          </div>
         </div>
 
-        {/* Concentric SVG Rings */}
-        <div className="flex items-center justify-center my-3 relative">
-          <svg width={size} height={size} className="transform -rotate-90">
+        <span
+          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold font-mono transition-all ${
+            isDark
+              ? 'bg-[#1C1B1B] text-[#F59E0B] border border-[#2A2A2A] group-hover:border-[#F59E0B]/50'
+              : 'bg-amber-50 text-amber-700 border border-amber-100'
+          }`}
+        >
+          <Flame className="w-3 h-3 text-[#F59E0B] animate-pulse" />
+          {currentStreak}d Streak
+        </span>
+      </div>
+
+      {/* Concentric SVG Rings with Interactive Click & Hover Focus */}
+      <div
+        className="flex items-center justify-center my-2 relative cursor-pointer select-none"
+        onClick={() => setClickCount((c) => c + 1)}
+        title="Click to trigger elastic ring bounce"
+      >
+        <motion.div
+          animate={{ rotate: clickCount * 360 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+          className="relative"
+        >
+          <svg
+            width={size}
+            height={size}
+            className="transform -rotate-90 filter drop-shadow-sm transition-all"
+          >
             {rings.map((ring, i) => {
               const circumference = 2 * Math.PI * ring.radius;
-              const progressOffset = circumference - (circumference * Math.min(ring.pct, 100)) / 100;
+              const progressOffset =
+                circumference - (circumference * Math.min(ring.pct, 100)) / 100;
+              const isHovered = hoveredRingId === ring.id;
+              const isDimmed = hoveredRingId !== null && !isHovered;
 
               return (
-                <g key={ring.id}>
+                <g
+                  key={ring.id}
+                  className="transition-all duration-300"
+                  style={{
+                    opacity: isDimmed ? 0.35 : 1,
+                    filter: isHovered ? `drop-shadow(0 0 8px ${ring.color})` : 'none',
+                  }}
+                  onMouseEnter={() => setHoveredRingId(ring.id)}
+                  onMouseLeave={() => setHoveredRingId(null)}
+                >
                   {/* Track Background */}
                   <circle
                     cx={center}
                     cy={center}
                     r={ring.radius}
                     stroke={ring.bgColor}
-                    strokeWidth={ring.strokeWidth}
+                    strokeWidth={isHovered ? ring.strokeWidth + 2 : ring.strokeWidth}
                     fill="transparent"
+                    className="transition-all duration-200"
                   />
                   {/* Animated Progress Arc */}
                   <motion.circle
@@ -105,190 +174,180 @@ export const FocusRings: React.FC<FocusRingsProps> = ({
                     cy={center}
                     r={ring.radius}
                     stroke={ring.color}
-                    strokeWidth={ring.strokeWidth}
+                    strokeWidth={isHovered ? ring.strokeWidth + 2.5 : ring.strokeWidth}
                     strokeLinecap="round"
                     fill="transparent"
                     strokeDasharray={circumference}
                     initial={{ strokeDashoffset: circumference }}
                     animate={{ strokeDashoffset: progressOffset }}
                     transition={{
-                      duration: 1.2,
-                      delay: 0.15 + i * 0.12,
+                      duration: 1.1,
+                      delay: 0.1 + i * 0.1,
                       ease: [0.16, 1, 0.3, 1],
                     }}
+                    className="transition-all duration-200"
                   />
                 </g>
               );
             })}
           </svg>
+        </motion.div>
 
-          {/* Central Percentage */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-xl font-bold font-serif text-slate-900">
-              {dailyFocus.goal_completion_pct}%
-            </span>
-            <span className="text-[9px] font-mono uppercase text-slate-500 font-medium">GOAL</span>
-          </div>
+        {/* Central Morphing Metric Indicator */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+          <AnimatePresence mode="wait">
+            {activeRing ? (
+              <motion.div
+                key={`ring-${activeRing.id}`}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.15 }}
+                className="flex flex-col items-center"
+              >
+                <span
+                  className={`text-xl font-bold font-mono tracking-tight ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}
+                  style={{ color: activeRing.color }}
+                >
+                  {activeRing.current}/{activeRing.target}
+                </span>
+                <span
+                  className={`text-[8px] font-mono font-bold uppercase tracking-wider ${
+                    isDark ? 'text-[#A1A1A1]' : 'text-slate-500'
+                  }`}
+                >
+                  {activeRing.pct}% {activeRing.label.split(' ')[0]}
+                </span>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="default-goal"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.15 }}
+                className="flex flex-col items-center"
+              >
+                <span
+                  className={`text-2xl font-bold font-['Outfit',sans-serif] tracking-tight ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}
+                >
+                  {goalPct}%
+                </span>
+                <span
+                  className={`text-[9px] font-mono font-semibold uppercase tracking-wider ${
+                    isDark ? 'text-[#878787]' : 'text-slate-400'
+                  }`}
+                >
+                  ACTIVE
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
+      </div>
 
-        {/* Ring Legends */}
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
-          {rings.map((ring) => (
-            <div key={ring.id} className="flex flex-col items-center">
+      {/* Ring Legend with Interactive Hover Focus */}
+      <div
+        className={`grid grid-cols-3 gap-2 pt-3 border-t text-center ${
+          isDark ? 'border-[#262626]' : 'border-slate-100'
+        }`}
+      >
+        {rings.map((ring) => {
+          const isHovered = hoveredRingId === ring.id;
+          return (
+            <motion.div
+              key={ring.id}
+              whileHover={{ scale: 1.05 }}
+              className={`flex flex-col items-center p-1 rounded-xl cursor-pointer transition-all ${
+                isHovered
+                  ? isDark
+                    ? 'bg-[#1C1B1B]'
+                    : 'bg-slate-100'
+                  : ''
+              }`}
+              onMouseEnter={() => setHoveredRingId(ring.id)}
+              onMouseLeave={() => setHoveredRingId(null)}
+            >
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: ring.color }} />
-                <span className="text-[10px] font-mono text-slate-600 font-medium">{ring.label}</span>
+                <span
+                  className="w-2 h-2 rounded-full transition-transform duration-200"
+                  style={{
+                    backgroundColor: ring.color,
+                    transform: isHovered ? 'scale(1.5)' : 'scale(1)',
+                    boxShadow: isHovered ? `0 0 6px ${ring.color}` : 'none',
+                  }}
+                />
+                <span
+                  className={`text-[11px] font-medium font-['Inter',sans-serif] transition-colors ${
+                    isHovered
+                      ? isDark
+                        ? 'text-white font-semibold'
+                        : 'text-slate-900 font-semibold'
+                      : isDark
+                      ? 'text-[#A1A1A1]'
+                      : 'text-slate-600'
+                  }`}
+                >
+                  {ring.label}
+                </span>
               </div>
-              <span className="text-xs font-bold font-mono text-slate-900">
+              <span
+                className={`text-xs font-bold font-mono transition-colors ${
+                  isHovered
+                    ? isDark
+                      ? 'text-[#3FE769]'
+                      : 'text-emerald-700'
+                    : isDark
+                    ? 'text-white'
+                    : 'text-slate-900'
+                }`}
+              >
                 {ring.current}/{ring.target}
               </span>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+            </motion.div>
+          );
+        })}
+      </div>
 
-      {/* 2. Daily Goal Circular Progress & Momentum */}
+      {/* Milestone Booster with Hover Shimmer */}
       <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.15 }}
-        className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm flex flex-col justify-between"
+        whileHover={{ scale: 1.015 }}
+        whileTap={{ scale: 0.985 }}
+        className={`mt-3 flex items-center justify-between text-xs p-2.5 rounded-xl border transition-all cursor-pointer relative overflow-hidden ${
+          isDark
+            ? 'bg-[#181818] border-[#262626] text-[#EDEDED] hover:border-[#3FE769]/50'
+            : 'bg-emerald-50/70 border-emerald-100 text-slate-800 hover:border-emerald-300'
+        }`}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-              <Target className="w-4 h-4 text-emerald-700" />
-            </div>
-            <div>
-              <h3 className="text-xs font-mono font-bold tracking-wider text-slate-800 uppercase">
-                DAILY SAVING GOAL
-              </h3>
-              <p className="text-[11px] text-slate-500 font-sans">Target: 10 clips per day</p>
-            </div>
-          </div>
-          <span className="text-[11px] font-mono font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-            <Flame className="w-3 h-3 text-amber-500" />
-            {streakMomentum.current_streak_days}d Streak
+        <div className="flex items-center gap-2">
+          <Sparkles
+            className={`w-3.5 h-3.5 ${
+              isDark ? 'text-[#3FE769]' : 'text-emerald-700'
+            }`}
+          />
+          <span className="text-[11px] font-['Inter',sans-serif]">
+            Multiplier:{' '}
+            <strong
+              className={`font-mono ${
+                isDark ? 'text-[#3FE769]' : 'text-emerald-800'
+              }`}
+            >
+              {multiplier}x XP
+            </strong>
           </span>
         </div>
-
-        {/* Big Progress Display */}
-        <div className="my-4 bg-slate-50 border border-slate-100 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-mono uppercase text-slate-500 font-semibold tracking-wider">
-              CLIPS TODAY
-            </span>
-            <div className="text-3xl font-bold font-serif text-slate-900 mt-0.5">
-              {dailyFocus.daily_goal_current} <span className="text-base text-slate-400 font-sans font-normal">/ {dailyFocus.daily_goal_target}</span>
-            </div>
-            <p className="text-[11px] text-emerald-700 font-medium font-sans mt-1">
-              {dailyFocus.daily_goal_target - dailyFocus.daily_goal_current > 0
-                ? `${dailyFocus.daily_goal_target - dailyFocus.daily_goal_current} clips needed to hit today's target`
-                : '🎉 Daily goal accomplished!'}
-            </p>
-          </div>
-
-          <div className="w-20 h-20 relative flex items-center justify-center">
-            <svg width="74" height="74" className="transform -rotate-90">
-              <circle cx="37" cy="37" r="30" stroke="#DCFCE7" strokeWidth="6" fill="transparent" />
-              <motion.circle
-                cx="37"
-                cy="37"
-                r="30"
-                stroke="#2D6A4F"
-                strokeWidth="6"
-                strokeLinecap="round"
-                fill="transparent"
-                strokeDasharray={2 * Math.PI * 30}
-                initial={{ strokeDashoffset: 2 * Math.PI * 30 }}
-                animate={{
-                  strokeDashoffset:
-                    2 * Math.PI * 30 - (2 * Math.PI * 30 * dailyFocus.goal_completion_pct) / 100,
-                }}
-                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center font-mono font-bold text-xs text-slate-900">
-              {dailyFocus.goal_completion_pct}%
-            </div>
-          </div>
-        </div>
-
-        {/* Milestone Booster */}
-        <div className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-200/70">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-            <span className="text-[11px] font-sans font-medium text-slate-800">
-              Streak Multiplier: <strong className="text-emerald-800 font-mono">{streakMomentum.streak_multiplier}x XP</strong>
-            </span>
-          </div>
-          <span className="text-[10px] font-mono text-emerald-800 font-semibold">
-            {streakMomentum.next_milestone_days - streakMomentum.current_streak_days}d to next tier
-          </span>
-        </div>
+        <span
+          className={`text-[10px] font-mono font-semibold ${
+            isDark ? 'text-[#A1A1A1]' : 'text-slate-600'
+          }`}
+        >
+          {Math.max(0, nextMilestone - currentStreak)}d to next tier (Best: {bestStreak}d)
+        </span>
       </motion.div>
-
-      {/* 3. Personal Bests Grid */}
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.2 }}
-        className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-sm flex flex-col justify-between"
-      >
-        <div className="flex items-center gap-2 mb-3">
-          <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-            <Award className="w-4 h-4 text-emerald-700" />
-          </div>
-          <div>
-            <h3 className="text-xs font-mono font-bold tracking-wider text-slate-800 uppercase">
-              PERSONAL BESTS
-            </h3>
-            <p className="text-[11px] text-slate-500 font-sans">All-time lifetime records</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2.5 flex-1">
-          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-            <span className="text-[10px] font-mono uppercase text-slate-500 font-medium">
-              LONGEST STREAK
-            </span>
-            <div className="text-lg font-bold font-serif text-slate-900 mt-0.5">
-              {personalBests.longest_streak} <span className="text-xs font-sans text-slate-500">Days</span>
-            </div>
-            <span className="text-[10px] font-mono text-emerald-700 font-medium">Lifetime Peak</span>
-          </div>
-
-          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-            <span className="text-[10px] font-mono uppercase text-slate-500 font-medium">
-              MAX SAVED (DAY)
-            </span>
-            <div className="text-lg font-bold font-serif text-slate-900 mt-0.5">
-              {personalBests.most_clips_in_day} <span className="text-xs font-sans text-slate-500">Clips</span>
-            </div>
-            <span className="text-[10px] font-mono text-slate-500">{personalBests.peak_day_date}</span>
-          </div>
-
-          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-            <span className="text-[10px] font-mono uppercase text-slate-500 font-medium flex items-center gap-1">
-              <Clock className="w-3 h-3 text-slate-400" /> PEAK HOUR
-            </span>
-            <div className="text-xs font-bold font-mono text-slate-900 mt-1 truncate">
-              {personalBests.peak_hour_str}
-            </div>
-            <span className="text-[10px] text-slate-500">Highest Focus</span>
-          </div>
-
-          <div className="bg-slate-50 border border-slate-100 rounded-lg p-2.5">
-            <span className="text-[10px] font-mono uppercase text-slate-500 font-medium">
-              TOP DOMAIN
-            </span>
-            <div className="text-xs font-bold font-sans text-slate-900 mt-1 truncate">
-              {personalBests.top_category}
-            </div>
-            <span className="text-[10px] text-emerald-700 font-medium font-mono">35% of Vault</span>
-          </div>
-        </div>
-      </motion.div>
-    </div>
+    </motion.div>
   );
 };

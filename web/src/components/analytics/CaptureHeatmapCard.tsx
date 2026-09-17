@@ -10,6 +10,7 @@ interface DayActivity {
 
 export interface CaptureHeatmapCardProps {
   days?: Array<{ date: string; count: number }>;
+  clips?: any[];
   currentStreak?: number;
   longestStreak?: number;
   isDark?: boolean;
@@ -17,8 +18,9 @@ export interface CaptureHeatmapCardProps {
 
 export const CaptureHeatmapCard: React.FC<CaptureHeatmapCardProps> = ({
   days,
-  currentStreak = 14,
-  longestStreak = 38,
+  clips,
+  currentStreak = 0,
+  longestStreak = 0,
   isDark = false,
 }) => {
   const [hoveredCell, setHoveredCell] = useState<{
@@ -29,13 +31,75 @@ export const CaptureHeatmapCard: React.FC<CaptureHeatmapCardProps> = ({
   } | null>(null);
 
   // Generate 16 calendar weeks matrix (16 cols x 7 rows = 112 days)
-  const { weeks, totalActiveDays } = useMemo(() => {
+  const { weeks, totalActiveDays, liveStreak, liveLongest } = useMemo(() => {
     const daysMap = new Map<string, number>();
-    if (days && days.length > 0) {
-      days.forEach((d) => daysMap.set(d.date, d.count));
+
+    if (clips && clips.length > 0) {
+      clips.forEach((c: any) => {
+        if (!c.created_at) return;
+        try {
+          const dStr = new Date(c.created_at).toISOString().slice(0, 10);
+          daysMap.set(dStr, (daysMap.get(dStr) || 0) + 1);
+        } catch {}
+      });
+    } else if (days && days.length > 0) {
+      days.forEach((d) => {
+        if (d.count > 0) {
+          if (d.date) daysMap.set(d.date, d.count);
+          if ((d as any).raw_date) daysMap.set((d as any).raw_date, d.count);
+        }
+      });
     }
 
-    // Benchmark realistic calendar distribution leading up to today
+    // Compute live streak from actual daysMap
+    let calcStreak = 0;
+    let calcLongest = 0;
+    const activeDates = Array.from(daysMap.keys()).sort();
+
+    if (activeDates.length > 0) {
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+      let checkDate = new Date(now);
+      if (!daysMap.has(todayStr) && daysMap.has(yesterdayStr)) {
+        checkDate = yesterday;
+      }
+
+      while (true) {
+        const dStr = checkDate.toISOString().slice(0, 10);
+        if (daysMap.has(dStr)) {
+          calcStreak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+
+      let curStreak = 0;
+      let prevDate: Date | null = null;
+      for (const dStr of activeDates) {
+        const curDate = new Date(dStr);
+        if (prevDate) {
+          const diffDays = Math.round((curDate.getTime() - prevDate.getTime()) / (1000 * 3600 * 24));
+          if (diffDays === 1) {
+            curStreak++;
+          } else {
+            curStreak = 1;
+          }
+        } else {
+          curStreak = 1;
+        }
+        if (curStreak > calcLongest) calcLongest = curStreak;
+        prevDate = curDate;
+      }
+    } else {
+      calcStreak = currentStreak;
+      calcLongest = longestStreak;
+    }
+
     const now = new Date();
     const resultWeeks: DayActivity[][] = [];
     let activeDaysCount = 0;
@@ -54,20 +118,8 @@ export const CaptureHeatmapCard: React.FC<CaptureHeatmapCardProps> = ({
         cellDate.setDate(endDate.getDate() - offsetDays);
         const dateStr = cellDate.toISOString().slice(0, 10);
 
-        // Value resolution
-        let count = daysMap.get(dateStr);
-        if (count === undefined) {
-          // Synthetic realistic benchmark matching 14-day streak & active rhythm
-          const daysFromEnd = offsetDays;
-          if (daysFromEnd <= 14) {
-            // Active streak: daily activity
-            count = ((daysFromEnd * 7 + d * 3) % 9) + 2;
-          } else {
-            // Realistic pattern across the 16 weeks
-            const pseudo = (w * 13 + d * 7) % 17;
-            count = pseudo > 7 ? (pseudo % 12) + 1 : 0;
-          }
-        }
+        // Value resolution directly from actual activity map
+        const count = daysMap.get(dateStr) ?? 0;
 
         if (count > 0) activeDaysCount++;
 
@@ -81,8 +133,13 @@ export const CaptureHeatmapCard: React.FC<CaptureHeatmapCardProps> = ({
       resultWeeks.push(week);
     }
 
-    return { weeks: resultWeeks, totalActiveDays: activeDaysCount };
-  }, [days]);
+    return {
+      weeks: resultWeeks,
+      totalActiveDays: activeDaysCount,
+      liveStreak: calcStreak,
+      liveLongest: Math.max(calcStreak, calcLongest),
+    };
+  }, [days, clips, currentStreak, longestStreak]);
 
   // Color intensity scale
   const getCellColor = (count: number) => {
@@ -136,7 +193,7 @@ export const CaptureHeatmapCard: React.FC<CaptureHeatmapCardProps> = ({
               }`}
             >
               <Flame className={`w-3 h-3 ${isDark ? 'text-[#3FE769]' : 'text-[#16A34A]'}`} />
-              {currentStreak} Day Streak
+              {liveStreak} Day Streak
             </span>
           </div>
           <p className={`text-xs font-['Inter',sans-serif] mt-0.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
@@ -206,8 +263,8 @@ export const CaptureHeatmapCard: React.FC<CaptureHeatmapCardProps> = ({
       {/* Footer: Streak info + Intensity Legend */}
       <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-100 dark:border-[#1F1F1F] text-xs">
         <div className={`font-mono text-[11px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-          Streak: <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>{currentStreak}d</span> · Longest:{' '}
-          <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>{longestStreak}d</span>
+          Streak: <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>{liveStreak}d</span> · Longest:{' '}
+          <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>{liveLongest}d</span>
         </div>
 
         <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
