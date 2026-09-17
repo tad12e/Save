@@ -33,3 +33,4 @@ urlpatterns = [
     path('api/analytics/', include(('apps.analytics.urls', 'analytics-legacy'), namespace='analytics-legacy')),
     path('api/dashboard/', include(('apps.analytics.urls', 'dashboard-legacy'), namespace='dashboard-legacy')),
 ]
+# Reload trigger for UserSettings

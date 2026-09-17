@@ -2,7 +2,7 @@ from django.contrib.auth import authenticate
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import CustomUser
+from .models import CustomUser, UserSettings
 from .services.google_auth import GoogleTokenVerificationError, verify_google_access_token
 from .services.otp import clear_otp, issue_and_send_otp, verify_otp
 
@@ -231,3 +231,24 @@ class GoogleAuthSerializer(serializers.Serializer):
 
         user.save()
         return user
+
+
+class UserSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserSettings
+        fields = (
+            'id',
+            'confirmation_mode',
+            'music_provider',
+            'music_target_playlist_id',
+            'music_auto_add',
+            'spotify_client_id',
+            'spotify_client_secret',
+            'privacy_mode',
+            'ai_extraction_prompt',
+            'theme',
+            'extra_preferences',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')

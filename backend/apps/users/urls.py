@@ -9,6 +9,7 @@ from .views import (
     SigninView,
     SignupView,
     UserMeView,
+    UserSettingsView,
     VerifyOTPView,
 )
 
@@ -28,4 +29,5 @@ urlpatterns = [
     path('google/', GoogleAuthView.as_view(), name='google-auth-alias'),
     path('api-keys/', api_key_views.ApiKeyListCreateView.as_view(), name='api-key-list-create'),
     path('api-keys/<uuid:key_id>/', api_key_views.ApiKeyDetailView.as_view(), name='api-key-detail'),
+    path('settings/', UserSettingsView.as_view(), name='user-settings'),
 ]

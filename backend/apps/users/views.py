@@ -6,12 +6,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from .models import UserSettings
 from .serializers import (
     GoogleAuthSerializer,
     ResendOTPSerializer,
     SigninSerializer,
     SignupSerializer,
     UserSerializer,
+    UserSettingsSerializer,
     VerifyOTPSerializer,
 )
 from .services.otp import OTPEmailDeliveryError
@@ -191,3 +193,36 @@ class LogoutView(APIView):
 
         response = Response({'message': 'Logged out successfully.', 'revoked': revoked}, status=status.HTTP_200_OK)
         return clear_auth_cookies(response)
+
+
+class UserSettingsView(APIView):
+    """
+    GET: Retrieves the current user's settings (or global/guest settings if unauthenticated).
+    PATCH/PUT: Updates user settings and returns the updated state.
+    """
+    permission_classes = [AllowAny]
+
+    def _get_or_create_settings(self, request):
+        user = request.user if (request.user and request.user.is_authenticated) else None
+        if user:
+            settings_obj, _ = UserSettings.objects.get_or_create(user=user)
+        else:
+            settings_obj = UserSettings.objects.filter(user__isnull=True).first()
+            if not settings_obj:
+                settings_obj = UserSettings.objects.create(user=None)
+        return settings_obj
+
+    def get(self, request):
+        settings_obj = self._get_or_create_settings(request)
+        serializer = UserSettingsSerializer(settings_obj)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        settings_obj = self._get_or_create_settings(request)
+        serializer = UserSettingsSerializer(settings_obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        return self.patch(request)
