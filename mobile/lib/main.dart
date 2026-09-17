@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'core/theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/clips_provider.dart';
+import 'providers/feed_provider.dart';
 import 'screens/auth/onboarding_screen.dart';
 import 'screens/main_navigation_shell.dart';
 import 'services/sharing_service.dart';
@@ -22,6 +23,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => ClipsProvider()..loadClips()),
+        ChangeNotifierProvider(create: (_) => FeedProvider()),
       ],
       child: SaveMobileApp(initialSharePayload: SharingService.initialPayload),
     ),
@@ -92,15 +94,36 @@ class _SaveMobileAppState extends State<SaveMobileApp> {
       navigatorKey: navigatorKey,
       title: 'Clipper',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
+      theme: isDirectShare
+          // Transparent canvas so Instagram stays visible behind the sheet.
+          ? AppTheme.lightTheme.copyWith(
+              scaffoldBackgroundColor: Colors.transparent,
+              canvasColor: Colors.transparent,
+            )
+          : AppTheme.lightTheme,
       home: isDirectShare
-          ? Scaffold(
-              backgroundColor: Colors.transparent,
-              body: SaveClipBottomSheet(
-                initialUrl: widget.initialSharePayload!.url,
-                initialNote: widget.initialSharePayload!.note,
-                platform: widget.initialSharePayload!.platform,
-                isExternalShare: true,
+          // Share overlay mode: translucent sheet floating OVER Instagram /
+          // TikTok / YouTube. Back button or tap-outside finishes the native
+          // ShareHandlerActivity and reveals the source app underneath.
+          ? PopScope(
+              canPop: false,
+              onPopInvokedWithResult: (didPop, _) {
+                if (didPop) return;
+                SharingService.closeShareOverlay();
+              },
+              child: Container(
+                color: Colors.transparent,
+                child: Scaffold(
+                  backgroundColor: Colors.transparent,
+                  extendBodyBehindAppBar: true,
+                  extendBody: true,
+                  body: SaveClipBottomSheet(
+                    initialUrl: widget.initialSharePayload!.url,
+                    initialNote: widget.initialSharePayload!.note,
+                    platform: widget.initialSharePayload!.platform,
+                    isExternalShare: true,
+                  ),
+                ),
               ),
             )
           : Consumer<AuthProvider>(

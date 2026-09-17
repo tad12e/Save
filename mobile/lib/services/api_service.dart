@@ -397,6 +397,28 @@ class ApiService {
     String? destinationId,
     bool isPrivacyMode = false,
   }) async {
+    final res = await saveClipDetailed(
+      url: url,
+      selectedText: selectedText,
+      destinationId: destinationId,
+      isPrivacyMode: isPrivacyMode,
+    );
+    return res.ok;
+  }
+
+  // --- Extension-parity detailed save (duplicate flag + note/tags/deadline) ---
+
+  static Future<SaveResult> saveClipDetailed({
+    required String url,
+    String? selectedText,
+    String? destinationId,
+    String? note,
+    List<String>? tags,
+    String? deadline,
+    String? tableId,
+    String? tableName,
+    bool isPrivacyMode = false,
+  }) async {
     final baseUrl = await getBaseUrl();
     try {
       final headers = await _getHeaders(
@@ -405,26 +427,293 @@ class ApiService {
         },
       );
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/api/clips/'),
-        headers: headers,
-        body: jsonEncode({
-          'url': url,
-          'selected_text': selectedText ?? '',
-          'destination_id': destinationId,
-          'privacy_mode': isPrivacyMode,
-        }),
-      );
+      final payload = <String, dynamic>{
+        'url': url,
+        'selected_text': selectedText ?? '',
+        'destination_id': destinationId,
+        'privacy_mode': isPrivacyMode,
+      };
+      if (note != null && note.trim().isNotEmpty) payload['note'] = note.trim();
+      if (tags != null && tags.isNotEmpty) payload['tags'] = tags;
+      if (deadline != null && deadline.trim().isNotEmpty) {
+        payload['deadline'] = deadline.trim().substring(0, 10);
+      }
+      if (tableId != null && tableId.isNotEmpty) payload['table_id'] = tableId;
+      if (tableName != null && tableName.isNotEmpty) payload['table_name'] = tableName;
 
-      return response.statusCode == 200 || response.statusCode == 201;
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/clips/'),
+            headers: headers,
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        Map<String, dynamic> body = {};
+        try {
+          body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        } catch (_) {}
+        final duplicate = body['duplicate'] == true;
+        await _rememberDestination(destinationId);
+        return SaveResult(
+          ok: true,
+          duplicate: duplicate,
+          destinationName: body['destination_name']?.toString(),
+          clipId: body['id']?.toString(),
+        );
+      }
+      return SaveResult(ok: false, error: 'Server ${response.statusCode}');
     } catch (e) {
-      if (kDebugMode) print('ApiService.saveClip error: $e');
+      if (kDebugMode) print('ApiService.saveClipDetailed error: $e');
+      return SaveResult(ok: false, error: e.toString());
+    }
+  }
+
+  static const String _keyLastDestinationId = 'clipper_last_destination_id';
+
+  static Future<void> _rememberDestination(String? destinationId) async {
+    if (destinationId == null || destinationId.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyLastDestinationId, destinationId);
+    } catch (_) {}
+  }
+
+  static Future<String?> getLastDestinationId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyLastDestinationId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<List<SaveDestination>> getDestinations() async {
+    const fallback = [
+      SaveDestination(id: 'vault', name: 'Save Vault', provider: 'vault', isDefault: false),
+      SaveDestination(id: 'google_sheets', name: 'Google Sheets', provider: 'google_sheets', isDefault: true),
+      SaveDestination(id: 'notion', name: 'Notion Workspace', provider: 'notion', isDefault: false),
+    ];
+    final baseUrl = await getBaseUrl();
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/destinations/'), headers: await _getHeaders())
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return fallback;
+      final dynamic data = jsonDecode(utf8.decode(response.bodyBytes));
+      final List<dynamic> list = data is List ? data : (data is Map ? (data['results'] as List? ?? []) : []);
+      if (list.isEmpty) return fallback;
+      return list.map((d) {
+        final m = d as Map<String, dynamic>;
+        return SaveDestination(
+          id: m['id']?.toString() ?? '',
+          name: (m['name'] ?? m['provider'] ?? 'Destination').toString(),
+          provider: (m['provider'] ?? m['type'] ?? '').toString(),
+          isDefault: m['is_default'] == true,
+          isActive: m['is_active'] != false,
+        );
+      }).where((d) => d.id.isNotEmpty).toList();
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  static Future<bool> setDefaultDestination(String id) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final response = await http
+          .post(Uri.parse('$baseUrl/api/destinations/$id/set_default/'), headers: await _getHeaders())
+          .timeout(const Duration(seconds: 8));
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
       return false;
     }
   }
 
-  static Future<Map<String, dynamic>?> fetchDashboardStats() async {
+  // --- Music Radar (extension parity) ---
+
+  static Future<MusicRecognitionResult> recognizeAudio({
+    required String audioBase64,
+    String format = 'm4a',
+    String titleHint = '',
+  }) async {
     final baseUrl = await getBaseUrl();
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/clips/recognize-audio/'),
+            headers: await _getHeaders(requireAuth: false),
+            body: jsonEncode({
+              'audio': audioBase64,
+              'format': format,
+              'title_hint': titleHint,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
+      Map<String, dynamic> body = {};
+      try {
+        body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      } catch (_) {}
+      if (response.statusCode == 200 && (body['success'] == true || body['title'] != null)) {
+        return MusicRecognitionResult(
+          success: true,
+          title: (body['title'] ?? 'Unknown Track').toString(),
+          artist: (body['artist'] ?? 'Unknown Artist').toString(),
+          artworkUrl: body['artwork_url']?.toString() ?? '',
+          previewUrl: body['preview_url']?.toString() ?? '',
+          spotifyId: body['spotify_id']?.toString() ?? '',
+          spotifyUri: body['spotify_uri']?.toString() ?? '',
+          spotifyUrl: body['spotify_url']?.toString() ?? '',
+          youtubeMusicUrl: body['youtube_music_url']?.toString() ?? '',
+          isSimulated: body['is_simulated'] == true,
+        );
+      }
+      return MusicRecognitionResult(
+        success: false,
+        error: (body['error'] ?? 'Song could not be identified').toString(),
+      );
+    } catch (e) {
+      return MusicRecognitionResult(success: false, error: e.toString());
+    }
+  }
+
+  static Future<List<SpotifyPlaylistRef>> fetchSpotifyPlaylists() async {
+    const fallback = [SpotifyPlaylistRef(id: 'default', name: 'Clipper Tracks (Default)')];
+    final baseUrl = await getBaseUrl();
+    try {
+      final token = await getAccessToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/destinations/spotify/playlists/'), headers: headers)
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return fallback;
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final List<dynamic> list = data['playlists'] ?? [];
+      if (list.isEmpty) return fallback;
+      return list.map((p) {
+        final m = p as Map<String, dynamic>;
+        return SpotifyPlaylistRef(
+          id: (m['id'] ?? '').toString(),
+          name: (m['name'] ?? 'Playlist').toString(),
+        );
+      }).where((p) => p.id.isNotEmpty).toList();
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  static Future<bool> addTrackToSpotify({
+    required String playlistId,
+    required String trackId,
+    required String trackUri,
+    String query = '',
+  }) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final token = await getAccessToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/destinations/spotify/add-track/'),
+            headers: headers,
+            body: jsonEncode({
+              'playlist_id': playlistId,
+              'track_id': trackId,
+              'track_uri': trackUri,
+              if (query.isNotEmpty) 'query': query,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // --- Real backend feed (FeedEngine, no backend changes) ---
+
+  /// GET /api/clips/feed/?timeframe=today|week|all&category=...&limit=50
+  /// Returns the raw feed map, or null when unreachable (caller falls back
+  /// to client-side synthesis from cached clips).
+  static Future<Map<String, dynamic>?> fetchFeed({
+    String timeframe = 'today',
+    String category = 'all',
+    int limit = 50,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final uri = Uri.parse('$baseUrl/api/clips/feed/').replace(
+        queryParameters: {
+          'timeframe': timeframe,
+          'category': category,
+          'limit': '$limit',
+        },
+      );
+      final response = await http
+          .get(uri, headers: await _getHeaders())
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) return null;
+      final dynamic data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (data is Map<String, dynamic> &&
+          data['metrics'] is Map &&
+          data['stream_items'] is List) {
+        return data;
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('ApiService.fetchFeed error: $e');
+      return null;
+    }
+  }
+
+  /// POST /api/clips/feed/<clipId>/action/ {action, note}
+  /// action: review|master|snooze|watchlist|archive
+  static Future<FeedActionResult> performFeedAction(
+    String clipId,
+    String action, {
+    String note = '',
+  }) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/clips/feed/$clipId/action/'),
+            headers: await _getHeaders(),
+            body: jsonEncode({'action': action, 'note': note}),
+          )
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        Map<String, dynamic> body = {};
+        try {
+          body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        } catch (_) {}
+        return FeedActionResult(
+          success: body['success'] != false,
+          isReviewed: body['is_reviewed'] == true,
+          isWatchlisted: body['is_watchlisted'] == true,
+        );
+      }
+      // Optimistic fallback (web parity): treat as success locally.
+      return FeedActionResult(
+        success: true,
+        isReviewed: action == 'review' || action == 'master',
+        isWatchlisted: action == 'watchlist',
+        optimistic: true,
+      );
+    } catch (_) {
+      return FeedActionResult(
+        success: true,
+        isReviewed: action == 'review' || action == 'master',
+        isWatchlisted: action == 'watchlist',
+        optimistic: true,
+      );
+    }
+  }
+
+  static Future<Map<String, dynamic>?> fetchDashboardStats() async {    final baseUrl = await getBaseUrl();
     try {
       final headers = await _getHeaders();
       final response = await http.get(
@@ -473,5 +762,86 @@ class ApiService {
     }
     return null;
   }
+}
+
+class SaveResult {
+  final bool ok;
+  final bool duplicate;
+  final String? destinationName;
+  final String? clipId;
+  final String? error;
+
+  const SaveResult({
+    required this.ok,
+    this.duplicate = false,
+    this.destinationName,
+    this.clipId,
+    this.error,
+  });
+}
+
+class SaveDestination {
+  final String id;
+  final String name;
+  final String provider;
+  final bool isDefault;
+  final bool isActive;
+
+  const SaveDestination({
+    required this.id,
+    required this.name,
+    required this.provider,
+    this.isDefault = false,
+    this.isActive = true,
+  });
+}
+
+class MusicRecognitionResult {
+  final bool success;
+  final String title;
+  final String artist;
+  final String artworkUrl;
+  final String previewUrl;
+  final String spotifyId;
+  final String spotifyUri;
+  final String spotifyUrl;
+  final String youtubeMusicUrl;
+  final bool isSimulated;
+  final String error;
+
+  const MusicRecognitionResult({
+    required this.success,
+    this.title = '',
+    this.artist = '',
+    this.artworkUrl = '',
+    this.previewUrl = '',
+    this.spotifyId = '',
+    this.spotifyUri = '',
+    this.spotifyUrl = '',
+    this.youtubeMusicUrl = '',
+    this.isSimulated = false,
+    this.error = '',
+  });
+}
+
+class SpotifyPlaylistRef {
+  final String id;
+  final String name;
+
+  const SpotifyPlaylistRef({required this.id, required this.name});
+}
+
+class FeedActionResult {
+  final bool success;
+  final bool isReviewed;
+  final bool isWatchlisted;
+  final bool optimistic;
+
+  const FeedActionResult({
+    required this.success,
+    this.isReviewed = false,
+    this.isWatchlisted = false,
+    this.optimistic = false,
+  });
 }
 

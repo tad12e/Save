@@ -6,6 +6,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../providers/clips_provider.dart';
+import '../services/api_service.dart';
+import '../services/sharing_service.dart';
 import 'audio_recognition_dialog.dart';
 
 class SaveClipBottomSheet extends StatefulWidget {
@@ -47,22 +49,27 @@ class SaveClipBottomSheet extends StatefulWidget {
   State<SaveClipBottomSheet> createState() => _SaveClipBottomSheetState();
 }
 
-enum SaveState { saving, saved, error, deleted }
+enum SaveState { idle, saving, saved, duplicate, error, deleted }
 
 class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
     with SingleTickerProviderStateMixin {
   late final TextEditingController _noteController;
   late final TextEditingController _tagController;
-  SaveState _saveState = SaveState.saving;
-  String _selectedDestination = 'google_sheets';
+  late final TextEditingController _tableController;
+  SaveState _saveState = SaveState.idle;
+  String _selectedDestination = '';
   String? _statusSubtitle;
+  String? _saveError;
+  String? _savedDestinationName;
   bool _showNotesField = false;
   bool _showTagsField = false;
   bool _showDestPicker = false;
   bool _showDeadlinePicker = false;
+  bool _rememberDefault = true;
   DateTime? _selectedDeadline;
   final List<String> _tags = [];
   Timer? _autoDismissTimer;
+  Timer? _countdownTimer;
   late AnimationController _badgeAnimController;
 
   @override
@@ -70,72 +77,162 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
     super.initState();
     _noteController = TextEditingController(text: widget.initialNote ?? '');
     _tagController = TextEditingController();
+    _tableController = TextEditingController();
+    _statusSubtitle = 'Choose a destination and tap Save';
 
     _badgeAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
 
-    // Auto-save immediately upon opening from share sheet
-    _triggerAutoSave();
+    // Manual-save like the browser extension: load destinations, wait for tap.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initDestinations());
   }
 
-  @override
-  void dispose() {
-    _autoDismissTimer?.cancel();
-    _badgeAnimController.dispose();
-    _noteController.dispose();
-    _tagController.dispose();
-    super.dispose();
+  Future<void> _initDestinations() async {
+    final provider = Provider.of<ClipsProvider>(context, listen: false);
+    if (provider.destinations.isEmpty) {
+      await provider.loadDestinations();
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedDestination = provider.selectedDestinationId.isNotEmpty
+          ? provider.selectedDestinationId
+          : 'google_sheets';
+      _statusSubtitle = 'Choose a destination and tap Save';
+    });
   }
 
-  Future<void> _triggerAutoSave() async {
+  String _hostOf(String raw) {
+    try {
+      final uri = Uri.parse(raw.trim());
+      return uri.host.isNotEmpty ? uri.host : raw.trim();
+    } catch (_) {
+      return raw.trim();
+    }
+  }
+
+  Future<void> _handleSaveClip({String? destinationId}) async {
     final url = (widget.initialUrl ?? '').trim();
     if (url.isEmpty) {
       setState(() {
         _saveState = SaveState.error;
+        _saveError = 'No valid link detected';
         _statusSubtitle = 'No valid link detected';
+      });
+      return;
+    }
+    final destId = destinationId ?? _selectedDestination;
+    if (destId.isEmpty) {
+      setState(() {
+        _saveState = SaveState.error;
+        _saveError = 'Pick a destination first';
+        _statusSubtitle = 'Pick a destination first';
       });
       return;
     }
 
     setState(() {
       _saveState = SaveState.saving;
+      _saveError = null;
       _statusSubtitle = 'Saving to Clipper…';
     });
 
     final provider = Provider.of<ClipsProvider>(context, listen: false);
+    final deadlineStr = _selectedDeadline == null
+        ? null
+        : '${_selectedDeadline!.year}-${_selectedDeadline!.month.toString().padLeft(2, '0')}-${_selectedDeadline!.day.toString().padLeft(2, '0')}';
 
-    // Perform save
-    final success = await provider.createClip(
+    final res = await provider.createClipDetailed(
       url,
       selectedText: _noteController.text.trim(),
-      destinationId: _selectedDestination,
+      destinationId: destId,
+      note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+      tags: _tags,
+      deadline: deadlineStr,
+      tableName: _tableController.text.trim().isEmpty ? null : _tableController.text.trim(),
     );
 
-    if (mounted) {
-      setState(() {
-        if (success) {
-          _saveState = SaveState.saved;
-          _statusSubtitle = _getDestinationLabel(_selectedDestination);
-        } else {
-          _saveState = SaveState.error;
-          _statusSubtitle = 'Saved offline • Will sync when connected';
+    if (!mounted) return;
+    if (_rememberDefault) {
+      provider.setDestination(destId);
+      await ApiService.setDefaultDestination(destId);
+    } else {
+      provider.setDestination(destId);
+    }
+    setState(() {
+      if (res.ok && res.duplicate) {
+        _saveState = SaveState.duplicate;
+        _statusSubtitle = 'Already saved previously';
+      } else if (res.ok) {
+        _saveState = SaveState.saved;
+        _savedDestinationName = res.destinationName;
+        _statusSubtitle = _getDestinationLabel(destId);
+      } else {
+        _saveState = SaveState.error;
+        _saveError = res.error ?? 'Failed to save clip.';
+        _statusSubtitle = 'Failed to save — try again';
+      }
+    });
+
+    if ((res.ok) && widget.isExternalShare) {
+      _autoDismissTimer?.cancel();
+      _autoDismissTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted && !_showNotesField && !_showTagsField && !_showDestPicker && !_showDeadlinePicker) {
+          _handleDismiss();
         }
       });
-
-      // If user doesn't interact, auto-dismiss and return cleanly to Twitter/Instagram
-      if (widget.isExternalShare) {
-        _autoDismissTimer = Timer(const Duration(seconds: 4), () {
-          if (mounted && !_showNotesField && !_showTagsField && !_showDestPicker) {
-            _handleDismiss();
-          }
-        });
-      }
     }
   }
 
+  Future<void> _handleQuickSaveToProvider(String providerKey) async {
+    final provider = Provider.of<ClipsProvider>(context, listen: false);
+    if (provider.destinations.isEmpty) {
+      await provider.loadDestinations();
+    }
+    SaveDestination? match;
+    for (final d in provider.destinations) {
+      if (d.provider == providerKey || d.id == providerKey) {
+        match = d;
+        break;
+      }
+    }
+    if (match == null) {
+      if (!mounted) return;
+      setState(() {
+        _saveState = SaveState.error;
+        _saveError = 'No $providerKey destination connected';
+        _statusSubtitle = 'No $providerKey destination connected';
+      });
+      return;
+    }
+    setState(() => _selectedDestination = match!.id);
+    await _handleSaveClip(destinationId: match.id);
+  }
+
+  @override
+  void dispose() {
+    _autoDismissTimer?.cancel();
+    _countdownTimer?.cancel();
+    _badgeAnimController.dispose();
+    _noteController.dispose();
+    _tagController.dispose();
+    _tableController.dispose();
+    super.dispose();
+  }
+
   String _getDestinationLabel(String dest) {
+    final provider = Provider.of<ClipsProvider>(context, listen: false);
+    for (final d in provider.destinations) {
+      if (d.id == dest) {
+        if (d.provider == 'notion' || dest == 'notion') return 'Synced to ${d.name}';
+        if (d.provider == 'vault' || d.provider == 'custom_db' || dest == 'vault') {
+          return 'Saved to ${d.name} • Moved to Inbox';
+        }
+        if (d.provider == 'spotify' || dest == 'spotify') return 'Synced to Spotify Playlist';
+        return 'Synced to ${d.name} • AI Tagging';
+      }
+    }
     switch (dest) {
       case 'notion':
         return 'Synced to Notion Workspace';
@@ -150,8 +247,16 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
 
   void _handleDismiss() {
     _autoDismissTimer?.cancel();
-    Navigator.of(context, rootNavigator: true).pop();
+    // Close the Flutter route first (if any), then finish the native
+    // translucent share activity so Instagram / source app is revealed
+    // underneath — user never leaves the app they shared from.
+    if (Navigator.of(context, rootNavigator: true).canPop()) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
     if (widget.isExternalShare) {
+      // Finish ShareHandlerActivity -> instant return to source app.
+      SharingService.closeShareOverlay();
+      // Fallback: also pop the Flutter engine for old MainActivity path.
       SystemNavigator.pop();
     }
   }
@@ -169,14 +274,19 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
 
   void _handleOpenInApp() {
     _autoDismissTimer?.cancel();
-    Navigator.of(context, rootNavigator: true).pop();
+    if (Navigator.of(context, rootNavigator: true).canPop()) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
     // Keeps Clipper in foreground so user can read/browse their saves
   }
 
   void _handleMusicRadar() {
     _autoDismissTimer?.cancel();
-    Navigator.of(context, rootNavigator: true).pop();
-    AudioRecognitionDialog.show(context);
+    AudioRecognitionDialog.show(
+      context,
+      shareUrl: widget.initialUrl,
+      titleHint: _noteController.text.trim(),
+    );
   }
 
   @override
@@ -227,26 +337,50 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Top close button
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: GestureDetector(
-                      onTap: _handleDismiss,
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1C1F2E),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF2A2E44)),
-                        ),
-                        child: const Icon(
-                          LucideIcons.x,
-                          size: 16,
-                          color: Color(0xFF94A3B8),
+                  // Top bar: music radar + configure + close (extension parity)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildTopIcon(
+                        icon: LucideIcons.headphones,
+                        tooltip: 'Listen to Music',
+                        isActive: false,
+                        onTap: _handleMusicRadar,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildTopIcon(
+                        icon: LucideIcons.settings2,
+                        tooltip: 'Configure destination & tags',
+                        isActive: _showDestPicker || _showTagsField || _showNotesField || _showDeadlinePicker,
+                        onTap: () {
+                          setState(() {
+                            final open = !(_showDestPicker || _showTagsField || _showNotesField || _showDeadlinePicker);
+                            _showDestPicker = open;
+                            _showTagsField = false;
+                            _showNotesField = false;
+                            _showDeadlinePicker = false;
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _handleDismiss,
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1C1F2E),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: const Color(0xFF2A2E44)),
+                          ),
+                          child: const Icon(
+                            LucideIcons.x,
+                            size: 16,
+                            color: Color(0xFF94A3B8),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
@@ -305,7 +439,13 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                         ? 'Saving…'
                         : _saveState == SaveState.deleted
                             ? 'Removed'
-                            : 'Saved to Clipper',
+                            : _saveState == SaveState.duplicate
+                                ? 'Already Saved'
+                                : _saveState == SaveState.error
+                                    ? 'Save Failed'
+                                    : _saveState == SaveState.idle
+                                        ? 'Save to Clipper'
+                                        : 'Saved to Clipper',
                     style: GoogleFonts.outfit(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -317,14 +457,27 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
 
                   // ─── Subtitle: Destination & Sync status ───
                   Text(
-                    _statusSubtitle ?? 'Synced to Google Sheets',
+                    _statusSubtitle ?? 'Choose a destination and tap Save',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
                       color: const Color(0xFF94A3B8),
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
+
+                  // ─── Link preview card (extension parity) ───
+                  _buildLinkPreviewCard(),
+                  const SizedBox(height: 12),
+
+                  // ─── Destination selector (extension parity) ───
+                  _buildDestinationDropdown(),
+                  const SizedBox(height: 16),
+
+                  // ─── Save-state primary area (extension parity) ───
+                  ..._buildSaveStateArea(isMusicHint),
+                  const SizedBox(height: 12),
 
                   // ─── Inline Interactive Drawers (Notes, Tags, Destination) ───
                   if (_showNotesField) ...[
@@ -343,49 +496,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                     _buildInlineDeadlinePicker(),
                     const SizedBox(height: 16),
                   ],
-
-                  // ─── Primary Action Pill Button ───
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isMusicHint
-                            ? const Color(0xFF10B981)
-                            : const Color(0xFF1F2336),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(26),
-                          side: const BorderSide(
-                            color: Color(0xFF2E334D),
-                            width: 1.0,
-                          ),
-                        ),
-                      ),
-                      onPressed: isMusicHint ? _handleMusicRadar : _handleOpenInApp,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            isMusicHint ? LucideIcons.music : LucideIcons.externalLink,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            isMusicHint ? 'Identify Music & Sync' : 'Open in Clipper',
-                            style: GoogleFonts.outfit(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                  if (_showDestPicker || _showTagsField || _showNotesField || _showDeadlinePicker) ...[
+                    _buildRememberDefaultRow(),
+                    const SizedBox(height: 16),
+                  ],
 
                   // "Tap anywhere to dismiss" label
                   Text(
@@ -396,7 +510,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                       color: const Color(0xFF64748B),
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
 
                   // ─── Bottom Dock (5 Icon Actions matching screenshot) ───
                   Row(
@@ -473,6 +587,510 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTopIcon({
+    required IconData icon,
+    required String tooltip,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Tooltip(
+        message: tooltip,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isActive
+                ? const Color(0xFF7C3AED).withValues(alpha: 0.25)
+                : const Color(0xFF1C1F2E),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isActive ? const Color(0xFF7C3AED) : const Color(0xFF2A2E44),
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 15,
+            color: isActive ? const Color(0xFFA78BFA) : const Color(0xFF94A3B8),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinkPreviewCard() {
+    final url = (widget.initialUrl ?? '').trim();
+    final host = url.isEmpty ? '' : _hostOf(url);
+    final highlight = _noteController.text.trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF181B28),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF2D3249)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(LucideIcons.link, size: 15, color: Color(0xFFA78BFA)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      host.isEmpty ? 'No link detected' : host,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      url.isEmpty ? 'Share a link to preview it here' : url,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (highlight.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: const Border(
+                  left: BorderSide(color: Color(0xFF7C3AED), width: 2.5),
+                ),
+              ),
+              child: Text(
+                '"$highlight"',
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: const Color(0xFFCBD5E1),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDestinationDropdown() {
+    return Consumer<ClipsProvider>(
+      builder: (context, clips, _) {
+        final items = clips.destinations.isNotEmpty
+            ? clips.destinations
+            : const [
+                SaveDestination(id: 'google_sheets', name: 'Google Sheets', provider: 'google_sheets', isDefault: true),
+                SaveDestination(id: 'notion', name: 'Notion Workspace', provider: 'notion'),
+                SaveDestination(id: 'vault', name: 'Save Vault', provider: 'vault'),
+              ];
+        String value = _selectedDestination;
+        if (items.every((d) => d.id != value)) {
+          value = items.first.id;
+        }
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF181B28),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF2D3249)),
+          ),
+          child: Row(
+            children: [
+              Text(
+                'Saving to:',
+                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: value,
+                    isExpanded: true,
+                    dropdownColor: const Color(0xFF181B28),
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                    icon: const Icon(LucideIcons.chevronDown, size: 16, color: Color(0xFF94A3B8)),
+                    items: items.map((d) {
+                      final label = d.name + (d.provider == 'google_sheets' ? ' 📊' : d.provider == 'notion' ? ' 📝' : '');
+                      return DropdownMenuItem<String>(
+                        value: d.id,
+                        child: Text(label, overflow: TextOverflow.ellipsis),
+                      );
+                    }).toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() {
+                        _selectedDestination = v;
+                        _statusSubtitle = _getDestinationLabel(v);
+                        if (_saveState == SaveState.error) {
+                          _saveState = SaveState.idle;
+                          _saveError = null;
+                        }
+                      });
+                      Provider.of<ClipsProvider>(context, listen: false).setDestination(v);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildSaveStateArea(bool isMusicHint) {
+    switch (_saveState) {
+      case SaveState.saving:
+        return [
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7C3AED).withValues(alpha: 0.6),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+              ),
+              onPressed: null,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Saving to Clipper…',
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ];
+      case SaveState.saved:
+        return [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            decoration: BoxDecoration(
+              color: const Color(0xFF065F46).withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(LucideIcons.check, size: 16, color: Color(0xFF6EE7B7)),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _savedDestinationName != null && _savedDestinationName!.isNotEmpty
+                        ? 'Saved — ${_savedDestinationName!}'
+                        : 'Saved — processing in background',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF6EE7B7)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Color(0xFF2E334D)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+              ),
+              onPressed: _handleOpenInApp,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(LucideIcons.externalLink, size: 15, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Open in Clipper',
+                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ];
+      case SaveState.duplicate:
+        return [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(LucideIcons.circleAlert, size: 16, color: Color(0xFFFBBF24)),
+                const SizedBox(width: 8),
+                Text(
+                  'Already saved previously',
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFFFBBF24)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Color(0xFF2E334D)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+              ),
+              onPressed: _handleOpenInApp,
+              child: Text(
+                'Open in Clipper',
+                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+              ),
+            ),
+          ),
+        ];
+      case SaveState.error:
+        return [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFDC2626).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(LucideIcons.circleAlert, size: 16, color: Color(0xFFFCA5A5)),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _saveError ?? 'Failed to save',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFFFCA5A5)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7C3AED),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+              ),
+              onPressed: () => _handleSaveClip(),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(LucideIcons.bookmark, size: 16, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Try saving again',
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ];
+      case SaveState.idle:
+      case SaveState.deleted:
+        return [
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7C3AED),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(26),
+                  side: const BorderSide(color: Color(0xFF8B5CF6), width: 1.0),
+                ),
+              ),
+              onPressed: () => _handleSaveClip(),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(LucideIcons.bookmark, size: 16, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Save now',
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickProviderButton(
+                  label: 'Sheets',
+                  emoji: '📊',
+                  color: const Color(0xFF10B981),
+                  onTap: () => _handleQuickSaveToProvider('google_sheets'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildQuickProviderButton(
+                  label: 'Notion',
+                  emoji: '📝',
+                  color: const Color(0xFFF59E0B),
+                  onTap: () => _handleQuickSaveToProvider('notion'),
+                ),
+              ),
+            ],
+          ),
+          if (isMusicHint) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                ),
+                onPressed: _handleMusicRadar,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.headphones, size: 16, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Listen to Music & Identify',
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            '💡 Tip: add a note before saving to attach AI context.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+          ),
+        ];
+    }
+  }
+
+  Widget _buildQuickProviderButton({
+    required String label,
+    required String emoji,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 14)),
+            const SizedBox(width: 6),
+            Text(
+              'Save to $label',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRememberDefaultRow() {
+    return GestureDetector(
+      onTap: () => setState(() => _rememberDefault = !_rememberDefault),
+      child: Row(
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: _rememberDefault ? const Color(0xFF7C3AED) : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: _rememberDefault ? const Color(0xFF7C3AED) : const Color(0xFF475569),
+              ),
+            ),
+            child: _rememberDefault
+                ? const Icon(LucideIcons.check, size: 13, color: Colors.white)
+                : null,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Remember as default destination',
+            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+          ),
+        ],
       ),
     );
   }
@@ -592,12 +1210,48 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF2D3249)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildDestChoice('google_sheets', 'Sheets', LucideIcons.table, const Color(0xFF10B981)),
-          _buildDestChoice('notion', 'Notion', LucideIcons.fileText, const Color(0xFFF59E0B)),
-          _buildDestChoice('vault', 'Vault', LucideIcons.hardDrive, const Color(0xFF8B5CF6)),
+          Consumer<ClipsProvider>(
+            builder: (context, clips, _) {
+              final items = clips.destinations.isNotEmpty
+                  ? clips.destinations
+                  : const [
+                      SaveDestination(id: 'google_sheets', name: 'Sheets', provider: 'google_sheets'),
+                      SaveDestination(id: 'notion', name: 'Notion', provider: 'notion'),
+                      SaveDestination(id: 'vault', name: 'Vault', provider: 'vault'),
+                    ];
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: items.map((d) {
+                  final color = d.provider == 'google_sheets' || d.id == 'google_sheets'
+                      ? const Color(0xFF10B981)
+                      : d.provider == 'notion' || d.id == 'notion'
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF8B5CF6);
+                  final icon = d.provider == 'google_sheets' || d.id == 'google_sheets'
+                      ? LucideIcons.table
+                      : d.provider == 'notion' || d.id == 'notion'
+                          ? LucideIcons.fileText
+                          : LucideIcons.hardDrive;
+                  return _buildDestChoice(d.id, d.name, icon, color);
+                }).toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _tableController,
+            style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Target sheet / tab / table (optional)…',
+              hintStyle: GoogleFonts.inter(color: const Color(0xFF64748B)),
+              border: InputBorder.none,
+              isDense: true,
+            ),
+          ),
         ],
       ),
     );
@@ -611,7 +1265,12 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           _selectedDestination = id;
           _statusSubtitle = _getDestinationLabel(id);
           _showDestPicker = false;
+          if (_saveState == SaveState.error) {
+            _saveState = SaveState.idle;
+            _saveError = null;
+          }
         });
+        Provider.of<ClipsProvider>(context, listen: false).setDestination(id);
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),

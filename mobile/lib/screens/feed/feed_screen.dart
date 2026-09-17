@@ -10,9 +10,12 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/theme.dart';
 import '../../models/clip_model.dart';
+import '../../models/feed_models.dart';
 import '../../providers/clips_provider.dart';
+import '../../providers/feed_provider.dart';
 import '../../widgets/app_header.dart';
-import '../../widgets/save_clip_bottom_sheet.dart';
+import '../../widgets/feed/feed_cards.dart';
+import '../../widgets/feed/feed_sections.dart';
 
 class FeedScreen extends StatefulWidget {
   const FeedScreen({super.key});
@@ -22,28 +25,86 @@ class FeedScreen extends StatefulWidget {
 }
 
 class _FeedScreenState extends State<FeedScreen> {
-  String _selectedCategory = 'All';
-  final TextEditingController _aiChatController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final Set<String> _favoritedClipIds = {};
   final Map<String, List<String>> _clipNotes = {};
+  final TextEditingController _aiChatController = TextEditingController();
+  final List<String> _categories = ['All', 'Articles', 'Jobs', 'Tools', 'Audio', 'Events'];
+  String _selectedCategory = 'All';
+  bool _showSearch = false;
+  bool _feedInit = false;
 
-  final List<String> _categories = [
-    'All',
-    'AI & ML',
-    'Engineering',
-    'Research',
-    'Design',
-    'Hardware',
-    'Articles',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initFeed());
+  }
 
   @override
   void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
     _aiChatController.dispose();
     super.dispose();
   }
 
-  void _openXStyleInAppBrowser(BuildContext context, ClipModel clip) {
+  Future<void> _initFeed() async {
+    if (_feedInit) return;
+    _feedInit = true;
+    final clips = Provider.of<ClipsProvider>(context, listen: false);
+    final feed = Provider.of<FeedProvider>(context, listen: false);
+    if (clips.clips.isEmpty) {
+      await clips.loadClips();
+    }
+    await feed.loadFeed();
+    if (!mounted) return;
+    if (feed.payload.streamItems.isEmpty) {
+      feed.synthesizeFromClips(clips.clips);
+    }
+  }
+
+  Future<void> _refreshFeed() async {
+    final clips = Provider.of<ClipsProvider>(context, listen: false);
+    final feed = Provider.of<FeedProvider>(context, listen: false);
+    await clips.loadClips();
+    await feed.loadFeed();
+    if (!mounted) return;
+    if (feed.payload.streamItems.isEmpty) {
+      feed.synthesizeFromClips(clips.clips);
+    }
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 400) {
+      Provider.of<FeedProvider>(context, listen: false).loadMore();
+    }
+  }
+
+  void _openXStyleInAppBrowser(BuildContext context, dynamic item) {
+    final ClipModel clip;
+    if (item is ClipModel) {
+      clip = item;
+    } else if (item is FeedStreamItem) {
+      clip = ClipModel(
+        id: item.id,
+        url: item.url,
+        title: item.title,
+        summary: item.summary.isNotEmpty ? item.summary : item.keyTakeaway,
+        contentType: item.contentType,
+        tags: item.tags,
+        sourcePlatform: item.sourcePlatform,
+        sourceAuthor: item.author,
+        status: 'done',
+        exportStatus: item.exportStatus,
+        createdAt: DateTime.tryParse(item.createdAt) ?? DateTime.now(),
+      );
+    } else {
+      return;
+    }
     final isFavorited = _favoritedClipIds.contains(clip.id);
     XStyleInAppBrowserModal.show(
       context,
@@ -59,6 +120,20 @@ class _FeedScreenState extends State<FeedScreen> {
         });
       },
     );
+  }
+
+  Future<void> _handleFeedAction(String id, String action, {String note = ''}) async {
+    await Provider.of<FeedProvider>(context, listen: false).doAction(id, action, note: note);
+    if (!mounted) return;
+    if (action == 'snooze') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Snoozed for 3 days'),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   void _openAiChatForClip(BuildContext context, ClipModel clip) {
@@ -200,80 +275,456 @@ class _FeedScreenState extends State<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final clipsProvider = Provider.of<ClipsProvider>(context);
-    final allClips = clipsProvider.clips.isNotEmpty
-        ? clipsProvider.clips
-        : _getDemoFeedClips();
-
-    final filteredClips = _selectedCategory == 'All'
-        ? allClips
-        : allClips.where((c) {
-            final cat = _selectedCategory.toLowerCase();
-            final catSingular = cat.replaceAll(RegExp(r's$'), '');
-            final type = c.contentType.toLowerCase();
-            final typeSingular = type.replaceAll(RegExp(r's$'), '');
-
-            if (catSingular == typeSingular) return true;
-            if (cat == 'articles' && (type == 'article' || type == 'blog')) return true;
-
-            final tagsLower = c.tags.map((t) => t.toLowerCase()).toList();
-            if (cat == 'ai & ml' && (tagsLower.any((t) => t.contains('ai') || t.contains('ml')) || c.summary.toLowerCase().contains('ai'))) return true;
-            if (tagsLower.any((t) => t == cat || t.contains(catSingular))) return true;
-            return false;
-          }).toList();
-
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppHeader.list(
         title: 'Knowledge Feed',
-        onSearchTap: () {},
-        onFilterTap: () => SaveClipBottomSheet.show(context),
+        onSearchTap: () => setState(() => _showSearch = !_showSearch),
+        onFilterTap: () => _showCategorySheet(context),
       ),
       body: RefreshIndicator(
-        onRefresh: () => Provider.of<ClipsProvider>(context, listen: false).loadClips(),
-        color: const Color(0xFF2D6A4F),
-        backgroundColor: Colors.white,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Section 1: AI Ask Your Vault Bar
-              _buildAiAskVaultBar(context),
-              const SizedBox(height: 16),
+        onRefresh: _refreshFeed,
+        color: const Color(0xFF7C3AED),
+        child: Consumer<FeedProvider>(
+          builder: (context, feed, _) {
+            final isEmpty = feed.payload.streamItems.isEmpty &&
+                feed.payload.dailyReview.isEmpty;
 
-              // Section 2: Category Filter Pills
-              _buildCategoryChips(),
-              const SizedBox(height: 16),
+            if (feed.isLoading && isEmpty) {
+              return const Center(
+                child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+              );
+            }
 
-              // Section 3: Feed Stream Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            if (feed.error != null && isEmpty) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
-                  Text(
-                    'Stream (${filteredClips.length})',
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textPrimary,
+                  const SizedBox(height: 120),
+                  const Icon(LucideIcons.cloudOff, size: 44, color: AppTheme.inactiveGrey),
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Text(
+                      'Could not reach your vault',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Center(
+                    child: Text(
+                      'Check your connection and backend URL',
+                      style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF7C3AED),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        _feedInit = false;
+                        _initFeed();
+                      },
+                      child: Text(
+                        'Retry',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            final query = _searchController.text.trim().toLowerCase();
+            final allItems = feed.streamItems;
+            final items = query.isEmpty
+                ? allItems
+                : allItems.where((i) {
+                    return i.title.toLowerCase().contains(query) ||
+                        i.summary.toLowerCase().contains(query) ||
+                        i.domain.toLowerCase().contains(query) ||
+                        i.tags.any((t) => t.toLowerCase().contains(query));
+                  }).toList();
+            final showRiver = feed.category == 'sync_logs';
+
+            return SingleChildScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_showSearch) ...[
+                    _buildSearchField(),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // Metrics strip (real backend data)
+                  _buildMetricsStrip(feed),
+                  const SizedBox(height: 12),
+
+                  // Timeframe segmented control
+                  _buildTimeframeSegment(feed),
+                  const SizedBox(height: 10),
+
+                  // Server-driven category pills
+                  _buildFeedCategoryPills(feed),
+                  const SizedBox(height: 14),
+
+                  if (!showRiver) ...[
+                    DailyReviewCarousel(
+                      items: feed.payload.dailyReview,
+                      onAction: (id, action) => _handleFeedAction(id, action),
+                      onOpenInReader: (url) {
+                        final match = allItems.where((e) => e.url == url);
+                        if (match.isNotEmpty) {
+                          _openXStyleInAppBrowser(context, match.first);
+                        }
+                      },
+                    ),
+                    FeedSynthesisBanner(synthesis: feed.payload.synthesis),
+                  ],
+
+                  // Stream header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        showRiver
+                            ? 'Sync River (${feed.payload.syncRiver.length})'
+                            : 'Stream (${items.length})',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        feed.payload.isFallback
+                            ? 'Cached • offline'
+                            : feed.isLoading
+                                ? 'Syncing…'
+                                : 'Live from vault',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: feed.payload.isFallback
+                              ? const Color(0xFFD97706)
+                              : const Color(0xFF16A34A),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (showRiver)
+                    FeedSyncRiverList(items: feed.payload.syncRiver)
+                  else if (items.isEmpty)
+                    _buildEmptyStream()
+                  else
+                    ...items.map((item) {
+                      if (feedItemIsOpportunity(item)) {
+                        return FeedOpportunityCard(
+                          item: item,
+                          onAction: (id, action) => _handleFeedAction(id, action),
+                          onOpenInReader: (_) => _openXStyleInAppBrowser(context, item),
+                        );
+                      }
+                      if (feedItemIsAudio(item)) {
+                        return FeedAudioCard(
+                          item: item,
+                          onOpenInReader: (_) => _openXStyleInAppBrowser(context, item),
+                        );
+                      }
+                      return FeedArticleCard(
+                        item: item,
+                        onAction: (id, action) => _handleFeedAction(id, action),
+                        onOpenInReader: (_) => _openXStyleInAppBrowser(context, item),
+                      );
+                    }),
+
+                  if (!showRiver && feed.isLoadingMore)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: CircularProgressIndicator(color: Color(0xFF7C3AED)),
+                      ),
+                    ),
+
+                  if (!showRiver && !feed.payload.isFallback && items.length >= feed.limit)
+                    Center(
+                      child: TextButton(
+                        onPressed: () => feed.loadMore(),
+                        child: Text(
+                          'Load more',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF7C3AED),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  if (!showRiver) ...[
+                    const SizedBox(height: 8),
+                    FeedWatchlistWidget(items: feed.payload.watchlist),
+                  ],
+                  const SizedBox(height: 24),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  // ─── Real feed sections (backend-driven) ───
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      autofocus: true,
+      onChanged: (_) => setState(() {}),
+      style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textPrimary),
+      decoration: InputDecoration(
+        hintText: 'Search titles, summaries, tags…',
+        hintStyle: GoogleFonts.inter(fontSize: 12, color: AppTheme.inactiveGrey),
+        prefixIcon: const Icon(LucideIcons.search, size: 16, color: AppTheme.inactiveGrey),
+        suffixIcon: _searchController.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(LucideIcons.x, size: 16, color: AppTheme.inactiveGrey),
+                onPressed: () => setState(_searchController.clear),
+              ),
+        filled: true,
+        fillColor: AppTheme.surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.borderSubtle),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.borderSubtle),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF7C3AED)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricsStrip(FeedProvider feed) {
+    final m = feed.payload.metrics;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderSubtle),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _metricCell('${m.todayNewCount}', 'Today'),
+          _metricCell('${m.weekNewCount}', 'This week'),
+          _metricCell('${m.totalClips}', 'Total'),
+          _metricCell('${m.reviewStreak}🔥', 'Streak'),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricCell(String value, String label) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: GoogleFonts.inter(fontSize: 10, color: AppTheme.textMuted)),
+      ],
+    );
+  }
+
+  Widget _buildTimeframeSegment(FeedProvider feed) {
+    const options = ['today', 'week', 'all'];
+    const labels = ['Today', 'This Week', 'All Time'];
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceMuted,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: List.generate(options.length, (i) {
+          final selected = feed.timeframe == options[i];
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => feed.setTimeframe(options[i]),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: selected ? const Color(0xFF7C3AED) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  labels[i],
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                    color: selected ? Colors.white : AppTheme.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildFeedCategoryPills(FeedProvider feed) {
+    final cats = feed.payload.metrics.categories;
+    final items = cats.isNotEmpty
+        ? cats
+        : const [
+            FeedCategory(id: 'all', label: 'All Activity', count: 0),
+            FeedCategory(id: 'action_required', label: 'Action Required', count: 0),
+            FeedCategory(id: 'articles', label: 'Articles & Papers', count: 0),
+            FeedCategory(id: 'opportunities', label: 'Opportunities', count: 0),
+            FeedCategory(id: 'audio', label: 'Audio', count: 0),
+            FeedCategory(id: 'sync_logs', label: 'Sync River', count: 0),
+          ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: items.map((c) {
+          final selected = feed.category == c.id;
+          return GestureDetector(
+            onTap: () => feed.setCategory(c.id),
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xFF7C3AED) : AppTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: selected ? const Color(0xFF7C3AED) : AppTheme.borderSubtle,
+                ),
+              ),
+              child: Row(
+                children: [
                   Text(
-                    'Real-time sync',
+                    c.label,
                     style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF16A34A),
+                      fontSize: 12,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                      color: selected ? Colors.white : AppTheme.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: selected ? Colors.white.withValues(alpha: 0.25) : AppTheme.surfaceMuted,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${c.count}',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: selected ? Colors.white : AppTheme.textMuted,
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
 
-              // Section 4: Feed Cards List
-              ...filteredClips.map((clip) => _buildFeedCard(context, clip)),
-              const SizedBox(height: 24),
+  Widget _buildEmptyStream() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Center(
+        child: Column(
+          children: [
+            const Icon(LucideIcons.inbox, size: 40, color: AppTheme.inactiveGrey),
+            const SizedBox(height: 10),
+            Text(
+              'Nothing in this stream yet',
+              style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Share links from any app to fill your feed',
+              style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCategorySheet(BuildContext context) {
+    final feed = Provider.of<FeedProvider>(context, listen: false);
+    final cats = feed.payload.metrics.categories;
+    if (cats.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Filter by category',
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              ),
+              const SizedBox(height: 12),
+              ...cats.map((c) {
+                final selected = feed.category == c.id;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${c.label} (${c.count})',
+                    style: GoogleFonts.inter(
+                      fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      color: selected ? const Color(0xFF7C3AED) : AppTheme.textPrimary,
+                    ),
+                  ),
+                  trailing: selected
+                      ? const Icon(LucideIcons.check, size: 18, color: Color(0xFF7C3AED))
+                      : null,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    feed.setCategory(c.id);
+                  },
+                );
+              }),
             ],
           ),
         ),

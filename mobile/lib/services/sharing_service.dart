@@ -78,6 +78,35 @@ class SharingService {
     } catch (_) {}
   }
 
+  /// Finishes the native share-overlay activity so the user drops straight
+  /// back into Instagram / TikTok / YouTube — no app-switch to Clipper.
+  /// Safe to call when opened in-app (native side no-ops / backgrounds).
+  static Future<void> closeShareOverlay() async {
+    try {
+      await _channel.invokeMethod('closeShareOverlay');
+    } catch (_) {}
+  }
+
+  /// Music Radar: 5s mic capture via platform MediaRecorder (no plugin).
+  /// Returns base64 data URL, or null when mic unavailable/denied —
+  /// callers fall back to 'SIMULATED_AUDIO_SNIPPET' + link hint.
+  static Future<bool> startMusicCapture() async {
+    try {
+      final ok = await _channel.invokeMethod<bool>('startMusicCapture');
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<String?> stopMusicCapture() async {
+    try {
+      return await _channel.invokeMethod<String>('stopMusicCapture');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Parses shared text from Spotify, TikTok, LinkedIn, YouTube, Twitter, etc.
   static SharedPayload? parseSharedText(String text) {
     final cleanText = text.trim();

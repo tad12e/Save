@@ -56,14 +56,78 @@ class ClipsProvider extends ChangeNotifier {
   }
 
   Future<bool> createClip(String url, {String? selectedText, String? destinationId}) async {
-    final success = await ApiService.saveClip(
+    final res = await createClipDetailed(url, selectedText: selectedText, destinationId: destinationId);
+    return res.ok;
+  }
+
+  // --- Extension-parity state: destinations + detailed save ---
+
+  List<SaveDestination> _destinations = [];
+  String _selectedDestinationId = '';
+  bool _destinationsLoading = false;
+
+  List<SaveDestination> get destinations => _destinations;
+  String get selectedDestinationId => _selectedDestinationId;
+  bool get destinationsLoading => _destinationsLoading;
+
+  Future<void> loadDestinations() async {
+    _destinationsLoading = true;
+    notifyListeners();
+    try {
+      _destinations = await ApiService.getDestinations();
+      SaveDestination? def;
+      for (final d in _destinations) {
+        if (d.isDefault) {
+          def = d;
+          break;
+        }
+      }
+      final lastId = await ApiService.getLastDestinationId();
+      SaveDestination? lastMatch;
+      for (final d in _destinations) {
+        if (d.id == lastId) {
+          lastMatch = d;
+          break;
+        }
+      }
+      _selectedDestinationId =
+          def?.id ?? lastMatch?.id ?? (_destinations.isNotEmpty ? _destinations.first.id : '');
+    } catch (_) {
+      _destinations = [];
+    } finally {
+      _destinationsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void setDestination(String id) {
+    _selectedDestinationId = id;
+    notifyListeners();
+  }
+
+  Future<SaveResult> createClipDetailed(
+    String url, {
+    String? selectedText,
+    String? destinationId,
+    String? note,
+    List<String>? tags,
+    String? deadline,
+    String? tableId,
+    String? tableName,
+  }) async {
+    final res = await ApiService.saveClipDetailed(
       url: url,
       selectedText: selectedText,
-      destinationId: destinationId,
+      destinationId: destinationId ?? (_selectedDestinationId.isEmpty ? null : _selectedDestinationId),
+      note: note,
+      tags: tags,
+      deadline: deadline,
+      tableId: tableId,
+      tableName: tableName,
     );
-    if (success) {
+    if (res.ok) {
       await loadClips();
     }
-    return success;
+    return res;
   }
 }
