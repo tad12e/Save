@@ -1,5 +1,18 @@
 import React, { useState, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { Search, X, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, ArrowUpRight } from 'lucide-react';
+import {
+  XTwitterIcon,
+  ArxivIcon,
+  SubstackIcon,
+  GitHubIcon,
+  YCombinatorIcon,
+  NotionIcon,
+  YouTubeIcon,
+  MediumIcon,
+  LinearIcon,
+  LinkedInIcon,
+} from '../BrandIcons';
 
 export interface KnowledgeSourceItem {
   id: string;
@@ -18,163 +31,105 @@ export interface KnowledgeSourceItem {
 
 export interface TopKnowledgeSourcesTableProps {
   destinations?: any[];
+  sources?: any[];
+  clips?: any[];
   isDark?: boolean;
 }
 
 export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> = ({
+  sources,
+  clips,
   isDark = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
 
-  // Curated benchmark sources matching Stitch Light Screen 6fb4d64e13a74aa4890a8a72dd3ddda1
-  const allSources: KnowledgeSourceItem[] = useMemo(
-    () => [
-      {
-        id: '1',
-        domain: 'twitter.com',
-        displayName: 'twitter.com',
-        clips: 543,
-        primaryIntent: 'Track/Learn',
-        intentTheme: 'emerald',
-        sharePct: 38.0,
-        trend: '+22%',
-        isPositive: true,
-        iconBg: '#0F1419',
-        iconColor: '#FFFFFF',
-        iconContent: <span className="font-bold text-xs font-mono">𝕏</span>,
-      },
-      {
-        id: '2',
-        domain: 'arxiv.org',
-        displayName: 'arxiv.org',
-        clips: 342,
-        primaryIntent: 'Learn',
-        intentTheme: 'blue',
-        sharePct: 23.6,
-        trend: '+14%',
-        isPositive: true,
-        iconBg: isDark ? '#3D2020' : '#FEE2E2',
-        iconColor: '#DC2626',
-        iconContent: <span className="font-serif italic font-bold text-xs">a</span>,
-      },
-      {
-        id: '3',
-        domain: 'substack.com',
-        displayName: 'substack.com',
-        clips: 271,
-        primaryIntent: 'Learn',
-        intentTheme: 'blue',
-        sharePct: 19.0,
-        trend: '+6%',
-        isPositive: true,
-        iconBg: isDark ? '#2E1E12' : '#FFEDD5',
-        iconColor: '#EA580C',
-        iconContent: <span className="font-bold text-xs font-sans">S</span>,
-      },
-      {
-        id: '4',
-        domain: 'github.com',
-        displayName: 'github.com',
-        clips: 158,
-        primaryIntent: 'Track/Code',
-        intentTheme: 'emerald',
-        sharePct: 10.9,
-        trend: '+31%',
-        isPositive: true,
-        iconBg: isDark ? '#24292F' : '#0F172A',
-        iconColor: '#FFFFFF',
-        iconContent: <span className="font-mono font-bold text-[11px]">gh</span>,
-      },
-      {
-        id: '5',
-        domain: 'ycombinator.com',
-        displayName: 'ycombinator.com',
-        clips: 74,
-        primaryIntent: 'Apply/Hire',
-        intentTheme: 'amber',
-        sharePct: 5.2,
-        trend: '+45%',
-        isPositive: true,
-        iconBg: '#FF6600',
-        iconColor: '#FFFFFF',
-        iconContent: <span className="font-bold text-xs font-sans">Y</span>,
-      },
-      // Page 2 benchmark items
-      {
-        id: '6',
-        domain: 'notion.so',
-        displayName: 'notion.so',
-        clips: 62,
-        primaryIntent: 'Knowledge',
-        intentTheme: 'emerald',
-        sharePct: 4.3,
-        trend: '+18%',
-        isPositive: true,
-        iconBg: isDark ? '#262626' : '#F1F5F9',
-        iconColor: isDark ? '#FFFFFF' : '#0F172A',
-        iconContent: <span className="font-serif font-bold text-xs">N</span>,
-      },
-      {
-        id: '7',
-        domain: 'youtube.com',
-        displayName: 'youtube.com',
-        clips: 51,
-        primaryIntent: 'Learn',
-        intentTheme: 'blue',
-        sharePct: 3.5,
-        trend: '+12%',
-        isPositive: true,
-        iconBg: '#FF0000',
-        iconColor: '#FFFFFF',
-        iconContent: <span className="font-sans font-bold text-[10px]">▶</span>,
-      },
-      {
-        id: '8',
-        domain: 'medium.com',
-        displayName: 'medium.com',
-        clips: 39,
-        primaryIntent: 'Knowledge',
-        intentTheme: 'purple',
-        sharePct: 2.7,
-        trend: '-4%',
-        isPositive: false,
-        iconBg: isDark ? '#1C1B1B' : '#000000',
-        iconColor: '#FFFFFF',
-        iconContent: <span className="font-serif font-bold text-xs">M</span>,
-      },
-      {
-        id: '9',
-        domain: 'linear.app',
-        displayName: 'linear.app',
-        clips: 31,
-        primaryIntent: 'Action',
-        intentTheme: 'emerald',
-        sharePct: 2.1,
-        trend: '+8%',
-        isPositive: true,
-        iconBg: '#5E6AD2',
-        iconColor: '#FFFFFF',
-        iconContent: <span className="font-sans font-bold text-[10px]">L</span>,
-      },
-      {
-        id: '10',
-        domain: 'linkedin.com',
-        displayName: 'linkedin.com',
-        clips: 24,
-        primaryIntent: 'Apply/Career',
-        intentTheme: 'amber',
-        sharePct: 1.6,
-        trend: '+15%',
-        isPositive: true,
-        iconBg: '#0A66C2',
-        iconColor: '#FFFFFF',
-        iconContent: <span className="font-sans font-bold text-[11px]">in</span>,
-      },
-    ],
-    [isDark]
-  );
+  const getDomainIcon = (dom: string) => {
+    const d = dom.toLowerCase();
+    if (d.includes('twitter') || d.includes('x.com')) return <XTwitterIcon className="w-4 h-4 text-white" />;
+    if (d.includes('arxiv')) return <ArxivIcon className="w-4 h-4" />;
+    if (d.includes('substack')) return <SubstackIcon className="w-4 h-4" />;
+    if (d.includes('github')) return <GitHubIcon className="w-4 h-4 text-white" />;
+    if (d.includes('ycombinator') || d.includes('news.ycombinator')) return <YCombinatorIcon className="w-4 h-4" />;
+    if (d.includes('notion')) return <NotionIcon className="w-4 h-4" />;
+    if (d.includes('youtube')) return <YouTubeIcon className="w-4 h-4" />;
+    if (d.includes('medium')) return <MediumIcon className="w-4 h-4 text-white" />;
+    if (d.includes('linear')) return <LinearIcon className="w-4 h-4" />;
+    if (d.includes('linkedin')) return <LinkedInIcon className="w-4 h-4" />;
+    return <span className="font-mono text-[10px] font-bold uppercase">{dom.slice(0, 2)}</span>;
+  };
+
+  // Curated live origins from backend or extracted directly from clips
+  const allSources: KnowledgeSourceItem[] = useMemo(() => {
+    let sourceList: any[] = [];
+
+    if (sources && sources.length > 0) {
+      sourceList = sources;
+    } else if (clips && clips.length > 0) {
+      const domainMap: Record<string, number> = {};
+      clips.forEach((c: any) => {
+        const url = c.url || '';
+        if (url) {
+          try {
+            let host = new URL(url).hostname.toLowerCase();
+            if (host.startsWith('www.')) host = host.slice(4);
+            if (host) {
+              domainMap[host] = (domainMap[host] || 0) + 1;
+            }
+          } catch {
+            // ignore malformed url
+          }
+        }
+      });
+      const totalSourced = Object.values(domainMap).reduce((a, b) => a + b, 0) || 1;
+      sourceList = Object.entries(domainMap)
+        .sort((a, b) => b[1] - a[1])
+        .map(([domain, count], idx) => {
+          let theme: 'emerald' | 'blue' | 'amber' | 'purple' = 'emerald';
+          let intent = 'Track/Learn';
+          if (domain.includes('arxiv') || domain.includes('substack') || domain.includes('medium')) {
+            theme = 'blue';
+            intent = 'Learn';
+          } else if (domain.includes('github') || domain.includes('x.com') || domain.includes('twitter')) {
+            theme = 'emerald';
+            intent = 'Track';
+          } else if (domain.includes('ycombinator') || domain.includes('linkedin')) {
+            theme = 'amber';
+            intent = 'Apply/Career';
+          } else if (domain.includes('youtube') || domain.includes('spotify')) {
+            theme = 'purple';
+            intent = 'Media/Learn';
+          }
+          return {
+            id: String(idx + 1),
+            domain,
+            displayName: domain,
+            clips: count,
+            primaryIntent: intent,
+            intentTheme: theme,
+            sharePct: Math.round((count / totalSourced) * 1000) / 10,
+            trend: '+12%',
+            isPositive: true,
+          };
+        });
+    }
+
+    return sourceList.map((s, idx) => ({
+      id: s.id || String(idx + 1),
+      domain: s.domain,
+      displayName: s.displayName || s.domain,
+      clips: s.clips,
+      primaryIntent: s.primaryIntent || 'Knowledge',
+      intentTheme: s.intentTheme || 'emerald',
+      sharePct: s.sharePct ?? 10.0,
+      trend: s.trend || '+12%',
+      isPositive: s.isPositive ?? true,
+      iconBg: s.iconBg || (s.intentTheme === 'blue' ? (isDark ? '#1E293B' : '#DBEAFE') : (isDark ? '#1C1B1B' : '#F1F5F9')),
+      iconColor: s.iconColor || (isDark ? '#3FE769' : '#166534'),
+      iconContent: getDomainIcon(s.domain),
+    }));
+  }, [isDark, sources, clips]);
 
   // Filter based on search query
   const filtered = useMemo(() => {
@@ -211,8 +166,10 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
 
   return (
     <div
-      className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between h-full border transition-all ${
-        isDark ? 'bg-[#0E0E0E] border-[#262626] text-[#EDEDED]' : 'bg-white border-slate-200 text-slate-900'
+      className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between h-full border transition-all duration-300 ${
+        isDark
+          ? 'bg-[#0E0E0E] border-[#262626] text-[#EDEDED] hover:border-[#3FE769]/50 hover:shadow-[0_0_25px_rgba(63,231,105,0.06)]'
+          : 'bg-white border-slate-200 text-slate-900 hover:border-slate-300 hover:shadow-md'
       }`}
     >
       {/* Header & Filter Search */}
@@ -241,14 +198,16 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
               setCurrentPage(1);
             }}
             placeholder="Filter domains..."
-            className={`text-xs rounded-xl pl-8 pr-7 py-1.5 focus:outline-none transition-colors border w-44 sm:w-52 ${
+            className={`text-xs rounded-xl pl-8 pr-7 py-1.5 focus:outline-none transition-all duration-200 border w-44 sm:w-52 ${
               isDark
-                ? 'bg-[#181818] border-[#262626] text-white placeholder-[#666666] focus:border-[#3FE769]'
-                : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-[#2D6A4F]'
+                ? 'bg-[#181818] border-[#262626] text-white placeholder-[#666666] focus:border-[#3FE769] focus:ring-1 focus:ring-[#3FE769]/30'
+                : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-[#2D6A4F] focus:ring-1 focus:ring-[#2D6A4F]/20'
             }`}
           />
           {searchQuery && (
-            <button
+            <motion.button
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.9 }}
               onClick={() => {
                 setSearchQuery('');
                 setCurrentPage(1);
@@ -256,7 +215,7 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
               className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer p-0.5"
             >
               <X className="w-3 h-3" />
-            </button>
+            </motion.button>
           )}
         </div>
       </div>
@@ -276,27 +235,37 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-[#1F1F1F]">
-            {currentItems.map((item) => (
-              <tr
-                key={item.id}
-                className={`group transition-colors text-xs ${
-                  isDark ? 'hover:bg-[#141414]' : 'hover:bg-slate-50/80'
-                }`}
-              >
+            {currentItems.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-xs text-slate-500 font-mono">
+                  {searchQuery ? `No sources match "${searchQuery}"` : 'No external web sources clipped yet'}
+                </td>
+              </tr>
+            ) : (
+              currentItems.map((item) => (
+                <tr
+                  key={item.id}
+                  className={`group transition-all duration-200 text-xs cursor-default ${
+                    isDark ? 'hover:bg-[#151515]' : 'hover:bg-slate-50/80'
+                  }`}
+                >
                 {/* Domain with custom badge */}
                 <td className="py-2.5 pl-1">
                   <div className="flex items-center gap-2.5">
                     <div
-                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 shadow-xs"
+                      className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 shadow-xs transition-transform duration-200 group-hover:scale-110"
                       style={{ backgroundColor: item.iconBg, color: item.iconColor }}
                     >
                       {item.iconContent}
                     </div>
-                    <span className={`font-semibold font-mono text-[12px] truncate ${
-                      isDark ? 'text-white' : 'text-slate-800'
-                    }`}>
-                      {item.domain}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`font-semibold font-mono text-[12px] truncate transition-colors ${
+                        isDark ? 'text-white group-hover:text-[#3FE769]' : 'text-slate-800 group-hover:text-[#2D6A4F]'
+                      }`}>
+                        {item.domain}
+                      </span>
+                      <ArrowUpRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 translate-y-1 group-hover:opacity-100 group-hover:translate-x-0 group-hover:translate-y-0 transition-all duration-200 text-[#3FE769] shrink-0" />
+                    </div>
                   </div>
                 </td>
 
@@ -352,8 +321,9 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
                     {item.trend}
                   </span>
                 </td>
-              </tr>
-            ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -361,11 +331,13 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
       {/* Footer: Pagination & Counter */}
       <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-100 dark:border-[#1F1F1F] text-xs">
         <span className={`text-[11px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-          Showing {currentItems.length} of {filtered.length === allSources.length ? '84' : filtered.length} origins
+          Showing {currentItems.length} of {filtered.length} origins
         </span>
 
         <div className="flex items-center gap-1.5">
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
             className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
@@ -375,27 +347,31 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
             }`}
           >
             Prev
-          </button>
+          </motion.button>
 
           {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-            <button
+            <motion.button
               key={p}
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
               onClick={() => setCurrentPage(p)}
               className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 currentPage === p
                   ? isDark
-                    ? 'bg-[#3FE769] text-black shadow-xs'
-                    : 'bg-[#2D6A4F] text-white shadow-xs'
+                    ? 'bg-[#3FE769] text-black shadow-xs font-bold'
+                    : 'bg-[#2D6A4F] text-white shadow-xs font-bold'
                   : isDark
                   ? 'text-[#878787] hover:text-white hover:bg-[#181818]'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
               {p}
-            </button>
+            </motion.button>
           ))}
 
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
             className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
@@ -405,7 +381,7 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
             }`}
           >
             Next
-          </button>
+          </motion.button>
         </div>
       </div>
     </div>

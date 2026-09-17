@@ -5,58 +5,89 @@ import { AnalyticsPayload } from '../../lib/analyticsApi';
 interface OpportunityOutcomesFunnelProps {
   funnelData?: AnalyticsPayload['opportunity_funnel'];
   money?: AnalyticsPayload['money'];
+  clips?: any[];
   isDark?: boolean;
 }
 
 export const OpportunityOutcomesFunnel: React.FC<OpportunityOutcomesFunnelProps> = ({
   funnelData,
   money,
+  clips,
   isDark = false,
 }) => {
-  // Default benchmark values matching Stitch Screen 7cff5690f6924342a24b6abc44366f33
-  const defaultStages = [
-    { label: 'Saved', count: '47 clips', rate: '100%', isKey: false },
-    { label: 'Applied', count: '18 jobs', rate: '38%', isKey: false },
-    { label: 'Interview', count: '8 rounds', rate: '17%', isKey: false },
-    { label: 'Offer', count: '2 offers', rate: '4%', isKey: true },
-  ];
+  const { stages, categories } = React.useMemo(() => {
+    if (clips && clips.length > 0) {
+      const total = clips.length;
+      const applied = clips.filter((c: any) => {
+        const ct = (c.content_type || '').toLowerCase();
+        const it = (c.intent || '').toLowerCase();
+        return ct === 'job' || it.includes('apply') || c.status === 'in_progress' || c.status === 'review' || c.status === 'done' || c.deadline_date;
+      }).length;
 
-  const stages =
-    funnelData && funnelData.length >= 4
-      ? [
-          {
-            label: 'Saved',
-            count: `${funnelData[0].count} clips`,
-            rate: `${Math.round(funnelData[0].conversion_pct)}%`,
-            isKey: false,
-          },
-          {
-            label: 'Applied',
-            count: `${funnelData[1].count} jobs`,
-            rate: `${Math.round(funnelData[1].conversion_pct)}%`,
-            isKey: false,
-          },
-          {
-            label: 'Interview',
-            count: `${funnelData[2].count} rounds`,
-            rate: `${Math.round(funnelData[2].conversion_pct)}%`,
-            isKey: false,
-          },
-          {
-            label: 'Offer',
-            count: `${funnelData[3].count} offers`,
-            rate: `${Math.round(funnelData[3].conversion_pct)}%`,
-            isKey: true,
-          },
-        ]
-      : defaultStages;
+      const review = clips.filter((c: any) => {
+        return c.status === 'in_progress' || c.status === 'review' || (Array.isArray(c.tags) && c.tags.some((t: string) => String(t).toLowerCase().includes('interview')));
+      }).length;
 
-  const categories = [
-    { label: 'Jobs', rate: stages[1]?.rate || '38%' },
-    { label: 'Events', rate: '61%' },
-    { label: 'Courses', rate: '22%' },
-    { label: 'Products', rate: '15%' },
-  ];
+      const done = clips.filter((c: any) => c.status === 'done').length;
+
+      const computedStages = [
+        { label: 'Saved', count: `${total} clips`, rate: '100%', isKey: false },
+        { label: 'Applied', count: `${applied} opportunities`, rate: `${Math.round((applied / (total || 1)) * 100)}%`, isKey: false },
+        { label: 'In Review', count: `${review} active`, rate: `${Math.round((review / (total || 1)) * 100)}%`, isKey: false },
+        { label: 'Realized', count: `${done} completed`, rate: `${Math.round((done / (total || 1)) * 100)}%`, isKey: true },
+      ];
+
+      const getCategoryRate = (typePattern: string, intentPattern?: string) => {
+        const matches = clips.filter((c: any) => {
+          const ct = (c.content_type || '').toLowerCase();
+          const it = (c.intent || '').toLowerCase();
+          return ct.includes(typePattern) || (intentPattern ? it.includes(intentPattern) : false);
+        });
+        if (matches.length === 0) return '0%';
+        const actioned = matches.filter((c: any) => c.status !== 'pending' || c.intent === 'apply' || c.deadline_date);
+        return `${Math.round((actioned.length / matches.length) * 100)}%`;
+      };
+
+      const computedCategories = [
+        { label: 'Jobs', rate: getCategoryRate('job', 'apply') },
+        { label: 'Events', rate: getCategoryRate('event') },
+        { label: 'Courses', rate: getCategoryRate('course', 'learn') },
+        { label: 'Tools', rate: getCategoryRate('tool') },
+      ];
+
+      return { stages: computedStages, categories: computedCategories };
+    }
+
+    if (funnelData && funnelData.length >= 4) {
+      const computedStages = [
+        { label: 'Saved', count: `${funnelData[0].count} clips`, rate: `${Math.round(funnelData[0].conversion_pct)}%`, isKey: false },
+        { label: 'Applied', count: `${funnelData[1].count} jobs`, rate: `${Math.round(funnelData[1].conversion_pct)}%`, isKey: false },
+        { label: 'Interview', count: `${funnelData[2].count} rounds`, rate: `${Math.round(funnelData[2].conversion_pct)}%`, isKey: false },
+        { label: 'Offer', count: `${funnelData[3].count} offers`, rate: `${Math.round(funnelData[3].conversion_pct)}%`, isKey: true },
+      ];
+      const computedCategories = [
+        { label: 'Jobs', rate: computedStages[1].rate },
+        { label: 'Events', rate: '0%' },
+        { label: 'Courses', rate: '0%' },
+        { label: 'Tools', rate: '0%' },
+      ];
+      return { stages: computedStages, categories: computedCategories };
+    }
+
+    const emptyStages = [
+      { label: 'Saved', count: '0 clips', rate: '0%', isKey: false },
+      { label: 'Applied', count: '0 opportunities', rate: '0%', isKey: false },
+      { label: 'In Review', count: '0 active', rate: '0%', isKey: false },
+      { label: 'Realized', count: '0 completed', rate: '0%', isKey: true },
+    ];
+    const emptyCategories = [
+      { label: 'Jobs', rate: '0%' },
+      { label: 'Events', rate: '0%' },
+      { label: 'Courses', rate: '0%' },
+      { label: 'Tools', rate: '0%' },
+    ];
+    return { stages: emptyStages, categories: emptyCategories };
+  }, [clips, funnelData]);
 
   return (
     <div
@@ -83,7 +114,7 @@ export const OpportunityOutcomesFunnel: React.FC<OpportunityOutcomesFunnelProps>
               }`}
             >
               <TrendingUp className="w-3 h-3" />
-              {stages[1]?.rate} Action Rate
+              {stages[1]?.rate || '0%'} Action Rate
             </span>
           </div>
           <p className={`text-xs font-['Inter',sans-serif] mt-0.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>

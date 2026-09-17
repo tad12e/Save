@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { MoreHorizontal } from 'lucide-react';
 
 export interface IntentBreakdownItem {
@@ -11,45 +12,84 @@ export interface IntentBreakdownItem {
 
 interface IntentBreakdownDonutProps {
   contentBreakdown?: IntentBreakdownItem[];
+  clips?: any[];
   totalCount?: number;
   isDark?: boolean;
 }
 
 export const IntentBreakdownDonut: React.FC<IntentBreakdownDonutProps> = ({
   contentBreakdown,
+  clips,
   totalCount,
   isDark = false,
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  // Default fallback matching Stitch Screen 7cff5690f6924342a24b6abc44366f33 benchmark
-  const defaultItems: IntentBreakdownItem[] = [
-    { name: 'Knowledge', type: 'knowledge', count: 856, percentage: 60, color: isDark ? '#3FE769' : '#2D6A4F' },
-    { name: 'Action', type: 'action', count: 400, percentage: 28, color: isDark ? '#707973' : '#454747' },
-    { name: 'Reference', type: 'reference', count: 172, percentage: 12, color: isDark ? '#F59E0B' : '#D97706' },
-  ];
+  const items: IntentBreakdownItem[] = React.useMemo(() => {
+    if (clips && clips.length > 0) {
+      const counts: Record<string, number> = { Learn: 0, Apply: 0, Track: 0 };
+      clips.forEach((c: any) => {
+        const intent = (c.intent || '').toLowerCase();
+        if (intent.includes('apply') || intent.includes('job') || intent.includes('action')) {
+          counts.Apply++;
+        } else if (intent.includes('track') || intent.includes('monitor') || intent.includes('read_later')) {
+          counts.Track++;
+        } else {
+          counts.Learn++;
+        }
+      });
+      const totalClips = clips.length || 1;
+      const list: IntentBreakdownItem[] = [
+        {
+          name: 'Learn & Research',
+          type: 'learn',
+          count: counts.Learn,
+          percentage: Math.round((counts.Learn / totalClips) * 100),
+          color: isDark ? '#3FE769' : '#2D6A4F',
+        },
+        {
+          name: 'Apply & Career',
+          type: 'apply',
+          count: counts.Apply,
+          percentage: Math.round((counts.Apply / totalClips) * 100),
+          color: '#F59E0B',
+        },
+        {
+          name: 'Track & Monitor',
+          type: 'track',
+          count: counts.Track,
+          percentage: Math.round((counts.Track / totalClips) * 100),
+          color: isDark ? '#38BDF8' : '#0284C7',
+        },
+      ];
+      return list.filter((i) => i.count > 0 || totalClips === 0);
+    }
 
-  const items: IntentBreakdownItem[] =
-    contentBreakdown && contentBreakdown.length > 0
-      ? contentBreakdown.map((item) => ({
-          ...item,
-          color:
-            item.color ||
-            (item.type === 'knowledge' || item.name.toLowerCase().includes('learn')
-              ? isDark
-                ? '#3FE769'
-                : '#2D6A4F'
-              : item.type === 'action' || item.name.toLowerCase().includes('track')
-              ? isDark
-                ? '#707973'
-                : '#454747'
-              : item.type === 'apply' || item.name.toLowerCase().includes('apply')
-              ? '#F59E0B'
-              : '#8B5CF6'),
-        }))
-      : defaultItems;
+    if (contentBreakdown && contentBreakdown.length > 0 && contentBreakdown.some((c) => c.count > 0)) {
+      return contentBreakdown.map((item) => ({
+        ...item,
+        color:
+          item.color ||
+          (item.type === 'knowledge' || item.name.toLowerCase().includes('learn')
+            ? isDark
+              ? '#3FE769'
+              : '#2D6A4F'
+            : item.type === 'action' || item.name.toLowerCase().includes('track')
+            ? isDark
+              ? '#707973'
+              : '#454747'
+            : item.type === 'apply' || item.name.toLowerCase().includes('apply')
+            ? '#F59E0B'
+            : '#8B5CF6'),
+      }));
+    }
 
-  const total = totalCount ?? items.reduce((acc, curr) => acc + curr.count, 0);
+    return [
+      { name: 'All Saves', type: 'general', count: 0, percentage: 100, color: isDark ? '#262626' : '#E2E8F0' },
+    ];
+  }, [clips, contentBreakdown, isDark]);
+
+  const total = totalCount ?? (clips ? clips.length : items.reduce((acc, curr) => acc + curr.count, 0));
 
   // SVG Geometry calculation
   const R = 40;
@@ -72,9 +112,15 @@ export const IntentBreakdownDonut: React.FC<IntentBreakdownDonutProps> = ({
   const activeItem = hoveredIndex !== null ? items[hoveredIndex] : null;
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.2 }}
       className={`rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between h-full transition-all border ${
-        isDark ? 'bg-[#0E0E0E] border-[#262626] text-[#EDEDED]' : 'bg-white border-slate-200 text-slate-900'
+        isDark
+          ? 'bg-[#0E0E0E] border-[#262626] text-[#EDEDED] hover:border-[#3FE769]/30 hover:shadow-[0_0_24px_rgba(63,231,105,0.06)]'
+          : 'bg-white border-slate-200 text-slate-900 hover:border-emerald-300 hover:shadow-md'
       }`}
     >
       {/* Header */}
@@ -105,7 +151,7 @@ export const IntentBreakdownDonut: React.FC<IntentBreakdownDonutProps> = ({
       {/* Donut Vector Area */}
       <div className="flex flex-col items-center justify-center my-1 relative">
         <div className="relative w-36 h-36 sm:w-40 sm:h-40">
-          <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+          <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90 filter drop-shadow-sm">
             {/* Background base track */}
             <circle
               cx="50"
@@ -116,59 +162,101 @@ export const IntentBreakdownDonut: React.FC<IntentBreakdownDonutProps> = ({
               strokeWidth="11"
             />
 
-            {/* Segments */}
-            {segments.map((seg, idx) => (
-              <circle
-                key={seg.name}
-                cx="50"
-                cy="50"
-                r={R}
-                fill="transparent"
-                stroke={seg.color}
-                strokeWidth={hoveredIndex === idx ? 13 : 11}
-                strokeDasharray={seg.dashArray}
-                strokeDashoffset={seg.dashOffset}
-                strokeLinecap="round"
-                className="transition-all duration-300 cursor-pointer"
-                onMouseEnter={() => setHoveredIndex(idx)}
-                onMouseLeave={() => setHoveredIndex(null)}
-              />
-            ))}
+            {/* Segments with Focus Dimming & Bloom Glow on Hover */}
+            {segments.map((seg, idx) => {
+              const isHovered = hoveredIndex === idx;
+              const isDimmed = hoveredIndex !== null && !isHovered;
+
+              return (
+                <circle
+                  key={seg.name}
+                  cx="50"
+                  cy="50"
+                  r={R}
+                  fill="transparent"
+                  stroke={seg.color}
+                  strokeWidth={isHovered ? 14 : 11}
+                  strokeDasharray={seg.dashArray}
+                  strokeDashoffset={seg.dashOffset}
+                  strokeLinecap="round"
+                  className="transition-all duration-300 cursor-pointer"
+                  style={{
+                    opacity: isDimmed ? 0.35 : 1,
+                    filter: isHovered ? `drop-shadow(0 0 8px ${seg.color})` : 'none',
+                    transition: 'stroke-width 0.2s, opacity 0.2s, filter 0.2s',
+                  }}
+                  onMouseEnter={() => setHoveredIndex(idx)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                />
+              );
+            })}
           </svg>
 
-          {/* Center Callout */}
+          {/* Central Morphing Metric Indicator */}
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
-            <span
-              className={`text-2xl sm:text-[28px] font-bold tracking-tight font-['Outfit',sans-serif] transition-colors leading-tight ${
-                isDark ? 'text-white' : 'text-slate-900'
-              }`}
-            >
-              {activeItem ? activeItem.count.toLocaleString() : total.toLocaleString()}
-            </span>
-            <span
-              className={`text-[10px] font-semibold tracking-wide uppercase font-['Inter',sans-serif] mt-0.5 ${
-                activeItem
-                  ? isDark
-                    ? 'text-[#3FE769]'
-                    : 'text-[#2D6A4F]'
-                  : isDark
-                  ? 'text-[#878787]'
-                  : 'text-slate-500'
-              }`}
-            >
-              {activeItem ? `${activeItem.name} (${activeItem.percentage}%)` : 'Total Clips'}
-            </span>
+            <AnimatePresence mode="wait">
+              {activeItem ? (
+                <motion.div
+                  key={`item-${activeItem.name}`}
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.92 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex flex-col items-center"
+                >
+                  <span
+                    className="text-2xl sm:text-[28px] font-bold tracking-tight font-['Outfit',sans-serif] leading-tight"
+                    style={{ color: activeItem.color }}
+                  >
+                    {activeItem.count.toLocaleString()}
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold tracking-wide uppercase font-mono mt-0.5 ${
+                      isDark ? 'text-[#A1A1A1]' : 'text-slate-600'
+                    }`}
+                  >
+                    {activeItem.name} ({activeItem.percentage}%)
+                  </span>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="total-clips"
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.92 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex flex-col items-center"
+                >
+                  <span
+                    className={`text-2xl sm:text-[28px] font-bold tracking-tight font-['Outfit',sans-serif] leading-tight ${
+                      isDark ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
+                    {total.toLocaleString()}
+                  </span>
+                  <span
+                    className={`text-[10px] font-semibold tracking-wide uppercase font-['Inter',sans-serif] mt-0.5 ${
+                      isDark ? 'text-[#878787]' : 'text-slate-500'
+                    }`}
+                  >
+                    Total Clips
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
 
-      {/* Legend Stack */}
+      {/* Legend Stack with Hover Slide & Highlighting */}
       <div className="w-full mt-3 space-y-1 pt-2.5 border-t border-slate-100 dark:border-[#1F1F1F]">
         {items.map((item, idx) => {
           const isHovered = hoveredIndex === idx;
           return (
-            <div
+            <motion.div
               key={item.name}
+              whileHover={{ x: 3 }}
+              transition={{ duration: 0.15 }}
               onMouseEnter={() => setHoveredIndex(idx)}
               onMouseLeave={() => setHoveredIndex(null)}
               className={`flex items-center justify-between py-1 px-2 rounded-lg text-xs transition-all cursor-pointer ${
@@ -182,14 +270,15 @@ export const IntentBreakdownDonut: React.FC<IntentBreakdownDonutProps> = ({
               {/* Left label with color dot */}
               <div className="flex items-center gap-2 min-w-0">
                 <span
-                  className="w-2 h-2 rounded-full shrink-0 transition-transform"
+                  className="w-2 h-2 rounded-full shrink-0 transition-transform duration-200"
                   style={{
                     backgroundColor: item.color,
-                    transform: isHovered ? 'scale(1.25)' : 'scale(1)',
+                    transform: isHovered ? 'scale(1.4)' : 'scale(1)',
+                    boxShadow: isHovered ? `0 0 6px ${item.color}` : 'none',
                   }}
                 />
                 <span
-                  className={`font-medium text-xs truncate ${
+                  className={`font-medium text-xs truncate transition-colors ${
                     isHovered
                       ? isDark
                         ? 'text-white font-semibold'
@@ -208,7 +297,7 @@ export const IntentBreakdownDonut: React.FC<IntentBreakdownDonutProps> = ({
 
               {/* Right percentage */}
               <span
-                className={`font-mono font-semibold text-xs shrink-0 ${
+                className={`font-mono font-semibold text-xs shrink-0 transition-colors ${
                   isHovered
                     ? isDark
                       ? 'text-[#3FE769]'
@@ -220,10 +309,10 @@ export const IntentBreakdownDonut: React.FC<IntentBreakdownDonutProps> = ({
               >
                 {item.percentage}%
               </span>
-            </div>
+            </motion.div>
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 };
