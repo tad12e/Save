@@ -26,6 +26,8 @@ class FullAnalyticsView(APIView):
     def get(self, request):
         timeframe = request.query_params.get('period', 'this_week')
         force_refresh = request.query_params.get('refresh', 'false').lower() == 'true'
+        intent = request.query_params.get('intent', 'all')
+        destination = request.query_params.get('destination', 'all')
 
         if not request.user or not request.user.is_authenticated:
             # Fallback demo analytics for guest users
@@ -33,14 +35,18 @@ class FullAnalyticsView(APIView):
             User = get_user_model()
             demo_user = User.objects.first()
             if demo_user:
-                data = DuckDBAnalyticsEngine.get_full_analytics(demo_user, timeframe, force_refresh)
+                data = DuckDBAnalyticsEngine.get_full_analytics(
+                    demo_user, timeframe, force_refresh, intent=intent, destination=destination
+                )
                 return Response(data, status=status.HTTP_200_OK)
             return Response(
                 {"error": "Authentication required to view analytics."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        data = DuckDBAnalyticsEngine.get_full_analytics(request.user, timeframe, force_refresh)
+        data = DuckDBAnalyticsEngine.get_full_analytics(
+            request.user, timeframe, force_refresh, intent=intent, destination=destination
+        )
         return Response(data, status=status.HTTP_200_OK)
 
 
