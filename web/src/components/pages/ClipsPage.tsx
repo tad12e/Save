@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ClipItem, ClipType, DestinationConfig, CustomPageConfig, StorageMode } from '../../types';
+import { ClipItem, ClipType, DestinationConfig, CustomPageConfig, CustomCategoryConfig, StorageMode, GroupByDimension } from '../../types';
+import { CreateCustomCategoryModal } from '../modals/CreateCustomCategoryModal';
+import { fetchCustomCategoriesBackend, createCustomCategoryBackend, deleteCustomCategoryBackend, updateClipBackend } from '../../lib/api';
+import { getStoredCustomCategories, saveStoredCustomCategories } from '../../lib/storage';
 import { 
   Bookmark, 
   Search, 
@@ -27,112 +30,220 @@ import {
   Globe,
   Filter,
   ChevronDown,
+  ChevronUp,
   ChevronLeft,
   ChevronRight,
   Laptop,
   Smartphone,
   Copy,
-  Maximize2
+  Maximize2,
+  Video,
+  FileText,
+  Code2,
+  Briefcase,
+  Headphones,
+  BookOpen,
+  ShoppingBag,
+  Calendar,
+  FolderKanban,
+  Folder,
+  Target
 } from 'lucide-react';
 import { BrandIcon } from '../BrandIcons';
 
-export type ClipIntent = 'all' | 'apply' | 'learn' | 'track' | 'hire' | 'attend' | 'buy';
+export type ClipIntent = 'all' | 'apply' | 'learn' | 'track' | 'hire' | 'attend' | 'buy' | string;
 
-export function getClipIntent(clip: ClipItem): 'apply' | 'learn' | 'track' | 'hire' | 'attend' | 'buy' {
+export function getClipIntent(clip: ClipItem, customCategories?: CustomCategoryConfig[]): string {
   if ((clip as any).intent) {
-    const raw = String((clip as any).intent).toLowerCase();
-    if (['apply', 'learn', 'track', 'hire', 'attend', 'buy'].includes(raw)) {
-      return raw as any;
+    const raw = String((clip as any).intent).toLowerCase().trim();
+    if (customCategories && customCategories.length > 0) {
+      const customMatch = customCategories.find(
+        c => c.dimension === 'intent' && (c.slug === raw || c.name.toLowerCase() === raw)
+      );
+      if (customMatch) return customMatch.slug;
     }
+    if (['apply', 'submit', 'pitch'].includes(raw)) return 'apply';
+    if (['hire', 'recruit', 'contact'].includes(raw)) return 'hire';
+    if (['track', 'build', 'code', 'deploy', 'monitor', 'compare', 'benchmark'].includes(raw)) return 'track';
+    if (['attend', 'meet', 'rsvp', 'join'].includes(raw)) return 'attend';
+    if (['buy', 'shop', 'order', 'subscribe'].includes(raw)) return 'buy';
+    if (['learn', 'read', 'study', 'install', 'debug'].includes(raw)) return 'learn';
+    if (raw && raw !== 'other' && raw !== 'all') return raw;
   }
 
-  const tags = (clip.tags || []).map(t => t.toLowerCase());
+  const url = (clip.url || '').toLowerCase();
   const title = (clip.title || '').toLowerCase();
   const summary = (clip.summary || '').toLowerCase();
-  const type = clip.type || 'general';
+  const tags = (clip.tags || []).map(t => t.toLowerCase());
+  const type = (clip.type || 'general').toLowerCase();
+  const text = `${title} ${summary} ${url} ${tags.join(' ')}`;
 
-  // 1. Hire
+  // 1. Hire (talent, candidates, recruiters, freelance, portfolios)
   if (
-    tags.includes('hire') || 
-    tags.includes('hiring') || 
-    tags.includes('recruiting') || 
-    tags.includes('candidate') || 
-    title.includes('candidate') || 
-    title.includes('hiring') || 
-    summary.includes('candidate profile')
+    url.includes('linkedin.com/in/') ||
+    url.includes('read.cv') ||
+    url.includes('layers.to') ||
+    url.includes('peerlist.io') ||
+    url.includes('contra.com') ||
+    url.includes('dribbble.com') ||
+    url.includes('behance.net') ||
+    tags.some(t => ['hire', 'hiring', 'recruiting', 'recruiter', 'candidate', 'talent', 'portfolio', 'resume', 'cv'].includes(t)) ||
+    title.includes('candidate') ||
+    title.includes('hire me') ||
+    title.includes('resume') ||
+    title.includes('portfolio') ||
+    summary.includes('candidate profile') ||
+    summary.includes('freelance availability') ||
+    summary.includes('open for work')
   ) {
     return 'hire';
   }
 
-  // 2. Apply
+  // 2. Apply (jobs, careers, internships, grants, scholarships, fellowships, funding, YC)
   if (
-    type === 'job' || 
-    tags.includes('job') || 
-    tags.includes('apply') || 
-    tags.includes('career') || 
-    title.includes('engineer') || 
-    title.includes('developer')
+    type === 'job' ||
+    type === 'scholarship' ||
+    url.includes('greenhouse.io') ||
+    url.includes('lever.co') ||
+    url.includes('workday.com') ||
+    url.includes('ashbyhq.com') ||
+    url.includes('wellfound.com') ||
+    url.includes('smartrecruiters.com') ||
+    url.includes('grants.gov') ||
+    url.includes('/careers') ||
+    url.includes('/jobs') ||
+    url.includes('/internships') ||
+    url.includes('/scholarships') ||
+    url.includes('/grants') ||
+    url.includes('/fellowships') ||
+    url.includes('/apply') ||
+    url.includes('/open-positions') ||
+    tags.some(t => ['job', 'jobs', 'career', 'careers', 'apply', 'scholarship', 'grant', 'fellowship', 'internship', 'funding', 'yc'].includes(t)) ||
+    title.includes('grant') ||
+    title.includes('scholarship') ||
+    title.includes('fellowship') ||
+    title.includes('internship') ||
+    title.includes('engineer') ||
+    title.includes('developer') ||
+    title.includes('designer') ||
+    title.includes('manager') ||
+    title.includes('founding') ||
+    title.includes('hiring') ||
+    title.includes('open roles') ||
+    title.includes('apply') ||
+    title.includes('yc w') ||
+    title.includes('yc s') ||
+    title.includes('y combinator') ||
+    title.includes('seed grant') ||
+    title.includes('proposal') ||
+    title.includes('admissions') ||
+    summary.includes('apply now') ||
+    summary.includes('submit application') ||
+    summary.includes('application deadline') ||
+    summary.includes('open positions') ||
+    Boolean(clip.extractedData?.deadline && (title.includes('grant') || title.includes('job') || title.includes('internship') || title.includes('fellowship') || title.includes('batch') || title.includes('proposal')))
   ) {
     return 'apply';
   }
 
-  // 3. Attend
+  // 3. Attend (events, hackathons, webinars, meetups)
   if (
-    type === 'event' || 
-    tags.includes('attend') || 
-    tags.includes('event') || 
-    tags.includes('hackathon') || 
-    tags.includes('conference') || 
-    tags.includes('summit') || 
-    title.includes('hackathon') || 
-    title.includes('summit')
+    type === 'event' ||
+    url.includes('eventbrite') ||
+    url.includes('lu.ma') ||
+    url.includes('luma.com') ||
+    url.includes('meetup.com') ||
+    url.includes('partiful.com') ||
+    url.includes('/events') ||
+    tags.some(t => ['attend', 'event', 'events', 'hackathon', 'conference', 'summit', 'meetup', 'webinar'].includes(t)) ||
+    title.includes('hackathon') ||
+    title.includes('conference') ||
+    title.includes('summit') ||
+    title.includes('meetup') ||
+    title.includes('webinar') ||
+    summary.includes('rsvp') ||
+    summary.includes('register now')
   ) {
     return 'attend';
   }
 
-  // 4. Buy
+  // 4. Buy (deals, discounts, pricing, products)
   if (
-    type === 'deal' || 
-    tags.includes('buy') || 
-    tags.includes('deal') || 
-    tags.includes('discount') || 
-    tags.includes('pricing') || 
-    title.includes('deal') ||
+    type === 'deal' ||
+    url.includes('amazon.') ||
+    url.includes('shopify.com') ||
+    url.includes('gumroad.com') ||
+    url.includes('etsy.com') ||
+    url.includes('/pricing') ||
+    url.includes('/product') ||
+    tags.some(t => ['buy', 'deal', 'deals', 'discount', 'pricing', 'shop'].includes(t)) ||
     title.includes('discount') ||
+    title.includes('deal') ||
+    title.includes('pricing') ||
     Boolean(clip.extractedData?.price && type !== 'event')
   ) {
     return 'buy';
   }
 
-  // 5. Track
+  // 5. Track (repositories, dev tools, libraries, benchmarks, releases, metrics)
   if (
-    type === 'project' || 
-    type === 'programming' || 
-    type === 'scholarship' || 
-    tags.includes('track') || 
-    tags.includes('project') || 
-    tags.includes('github') || 
-    tags.includes('fellowship') || 
+    type === 'project' ||
+    type === 'programming' ||
+    url.includes('github.com') ||
+    url.includes('gitlab.com') ||
+    url.includes('huggingface.co') ||
+    url.includes('npmjs.com') ||
+    url.includes('pypi.org') ||
+    url.includes('crates.io') ||
+    url.includes('producthunt.com') ||
+    tags.some(t => ['track', 'project', 'github', 'release', 'benchmark', 'benchmarks', 'metrics', 'oss', 'opensource', 'open-source', 'tool', 'repo', 'repository'].includes(t)) ||
+    title.includes('release v') ||
+    title.includes('v0.') ||
+    title.includes('v1.') ||
+    title.includes('benchmark') ||
+    title.includes('repository') ||
+    title.includes('orchestrator') ||
+    title.includes('cuda graph') ||
+    title.includes('framework') ||
+    title.includes('library') ||
+    summary.includes('throughput') ||
+    summary.includes('benchmark') ||
+    summary.includes('repository') ||
+    summary.includes('release') ||
     Boolean(clip.extractedData?.deadline)
   ) {
     return 'track';
   }
 
-  // 6. Learn
+  // 6. Learn (tutorials, deep dives, research papers, courses, documentation, articles)
   if (
-    type === 'education' || 
-    type === 'course' || 
-    type === 'research' || 
-    type === 'book' || 
-    type === 'article' || 
-    tags.includes('research') || 
-    tags.includes('book') || 
-    tags.includes('notes') || 
-    tags.includes('learn')
+    type === 'education' ||
+    type === 'course' ||
+    type === 'research' ||
+    type === 'book' ||
+    type === 'article' ||
+    url.includes('arxiv.org') ||
+    url.includes('biorxiv.org') ||
+    url.includes('substack.com') ||
+    url.includes('medium.com') ||
+    url.includes('youtube.com') ||
+    tags.some(t => ['learn', 'research', 'book', 'notes', 'reading', 'tutorial', 'guide', 'ai', 'llm', 'study', 'deepdive', 'deep-dive'].includes(t)) ||
+    title.includes('deep dive') ||
+    title.includes('guide') ||
+    title.includes('tutorial') ||
+    title.includes('architecture') ||
+    title.includes('speculative decoding') ||
+    title.includes('pgvector') ||
+    summary.includes('walkthrough') ||
+    summary.includes('tutorial')
   ) {
     return 'learn';
   }
 
+  // Smart fallback: if it mentions tech / code / tools -> track; if it mentions reading / articles -> learn
+  if (text.includes('code') || text.includes('build') || text.includes('engine') || text.includes('api') || text.includes('cli') || text.includes('sdk')) {
+    return 'track';
+  }
   return 'learn';
 }
 
@@ -179,6 +290,120 @@ export function getSourceFormatLabel(clip: ClipItem): string {
   return 'Clip';
 }
 
+// -------------------------------------------------------------
+// Source Classification Helpers
+// -------------------------------------------------------------
+export type ClipSourceKey = 'all' | 'youtube' | 'github' | 'x_twitter' | 'linkedin' | 'reddit' | 'arxiv' | 'substack' | 'medium' | 'other';
+
+export function getClipSourceKey(clip: ClipItem): ClipSourceKey {
+  const url = (clip.url || '').toLowerCase();
+  const platform = (clip.sourcePlatform || '').toLowerCase();
+  if (url.includes('youtube.com') || url.includes('youtu.be') || platform === 'youtube') return 'youtube';
+  if (url.includes('github.com') || url.includes('gist.github.com') || platform === 'github') return 'github';
+  if (url.includes('twitter.com') || url.includes('x.com') || platform === 'x_twitter' || platform === 'twitter') return 'x_twitter';
+  if (url.includes('linkedin.com') || platform === 'linkedin') return 'linkedin';
+  if (url.includes('reddit.com') || platform === 'reddit') return 'reddit';
+  if (url.includes('arxiv.org') || url.includes('biorxiv.org')) return 'arxiv';
+  if (url.includes('substack.com')) return 'substack';
+  if (url.includes('medium.com')) return 'medium';
+  return 'other';
+}
+
+export function getClipSourceMeta(sourceKey: ClipSourceKey): { label: string; brandIcon: string; color: string; bg: string } {
+  switch (sourceKey) {
+    case 'youtube':
+      return { label: 'YouTube', brandIcon: 'youtube', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' };
+    case 'github':
+      return { label: 'GitHub', brandIcon: 'github', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.12)' };
+    case 'x_twitter':
+      return { label: 'X / Twitter', brandIcon: 'twitter', color: '#38BDF8', bg: 'rgba(56, 189, 248, 0.12)' };
+    case 'linkedin':
+      return { label: 'LinkedIn', brandIcon: 'linkedin', color: '#0A66C2', bg: 'rgba(10, 102, 194, 0.12)' };
+    case 'reddit':
+      return { label: 'Reddit', brandIcon: 'reddit', color: '#FF4500', bg: 'rgba(255, 69, 0, 0.12)' };
+    case 'arxiv':
+      return { label: 'ArXiv & Papers', brandIcon: 'arxiv', color: '#B91C1C', bg: 'rgba(185, 28, 28, 0.12)' };
+    case 'substack':
+      return { label: 'Substack', brandIcon: 'substack', color: '#FF6719', bg: 'rgba(255, 103, 25, 0.12)' };
+    case 'medium':
+      return { label: 'Medium', brandIcon: 'medium', color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' };
+    default:
+      return { label: 'Web & Other', brandIcon: 'web', color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' };
+  }
+}
+
+// -------------------------------------------------------------
+// Content Type Classification Helpers
+// -------------------------------------------------------------
+export type ClipContentTypeKey = 'all' | 'video' | 'article' | 'code' | 'job' | 'audio' | 'book' | 'deal' | 'event' | 'general';
+
+export function getClipContentTypeKey(clip: ClipItem): ClipContentTypeKey {
+  const url = (clip.url || '').toLowerCase();
+  const type = (clip.type || '').toLowerCase();
+  const format = getSourceFormatLabel(clip).toLowerCase();
+  const tags = (clip.tags || []).map(t => t.toLowerCase());
+
+  if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com') || url.includes('tiktok.com') || format === 'video' || tags.includes('video')) {
+    return 'video';
+  }
+  if (type === 'job' || type === 'scholarship' || format === 'opportunity' || format === 'grant') {
+    return 'job';
+  }
+  if (type === 'programming' || type === 'project' || url.includes('github.com') || url.includes('gitlab.com') || format === 'repo') {
+    return 'code';
+  }
+  if (type === 'music' || url.includes('spotify.com') || url.includes('soundcloud.com') || format === 'podcast' || tags.includes('audio') || tags.includes('podcast')) {
+    return 'audio';
+  }
+  if (type === 'book' || format === 'book' || tags.includes('book') || tags.includes('reading')) {
+    return 'book';
+  }
+  if (type === 'deal' || Boolean(clip.extractedData?.price) || format === 'deal' || url.includes('amazon.') || url.includes('shopify.')) {
+    return 'deal';
+  }
+  if (type === 'event' || format === 'summit' || url.includes('eventbrite') || url.includes('lu.ma') || url.includes('meetup.com')) {
+    return 'event';
+  }
+  if (type === 'article' || type === 'research' || type === 'education' || type === 'course' || format === 'paper' || format === 'post' || format === 'tweet') {
+    return 'article';
+  }
+  return 'general';
+}
+
+export function getClipContentTypeMeta(typeKey: ClipContentTypeKey): { label: string; icon: any; color: string; bg: string } {
+  switch (typeKey) {
+    case 'video':
+      return { label: 'Videos', icon: Video, color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' };
+    case 'article':
+      return { label: 'Articles & Reading', icon: FileText, color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' };
+    case 'code':
+      return { label: 'Code & Repos', icon: Code2, color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.12)' };
+    case 'job':
+      return { label: 'Jobs & Careers', icon: Briefcase, color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' };
+    case 'audio':
+      return { label: 'Audio & Music', icon: Headphones, color: '#EC4899', bg: 'rgba(236, 72, 153, 0.12)' };
+    case 'book':
+      return { label: 'Books & Lists', icon: BookOpen, color: '#06B6D4', bg: 'rgba(6, 182, 212, 0.12)' };
+    case 'deal':
+      return { label: 'Products & Deals', icon: ShoppingBag, color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.12)' };
+    case 'event':
+      return { label: 'Events & Summits', icon: Calendar, color: '#D946EF', bg: 'rgba(217, 70, 239, 0.12)' };
+    default:
+      return { label: 'Notes & General', icon: Bookmark, color: '#64748B', bg: 'rgba(100, 116, 139, 0.12)' };
+  }
+}
+
+// -------------------------------------------------------------
+// Custom Page / Tag Grouping Classification
+// -------------------------------------------------------------
+export function getClipCustomKey(clip: ClipItem, customPages: CustomPageConfig[]): string {
+  if (clip.pageId) {
+    const matched = customPages.find(p => p.id === clip.pageId || p.slug === clip.pageId);
+    if (matched) return matched.id;
+  }
+  return 'unassigned';
+}
+
 export function formatClipDate(dateStr: string): string {
   try {
     const d = new Date(dateStr);
@@ -189,7 +414,21 @@ export function formatClipDate(dateStr: string): string {
   }
 }
 
-export function getIntentBadgeStyle(intent: ClipIntent, isDark: boolean): { bg: string; text: string; border: string; dot: string } {
+export function getIntentBadgeStyle(intent: ClipIntent, isDark: boolean, customCategories?: CustomCategoryConfig[]): { bg: string; text: string; border: string; dot: string } {
+  if (customCategories && customCategories.length > 0) {
+    const custom = customCategories.find(
+      c => c.dimension === 'intent' && (c.slug === intent || c.name.toLowerCase() === intent.toLowerCase())
+    );
+    if (custom) {
+      return {
+        bg: isDark ? 'bg-slate-800/60' : 'bg-slate-100',
+        text: isDark ? 'text-white' : 'text-slate-900',
+        border: isDark ? 'border-slate-700' : 'border-slate-200',
+        dot: custom.color || '#6366F1'
+      };
+    }
+  }
+
   switch (intent) {
     case 'apply':
       return {
@@ -264,7 +503,11 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   onSendToDestination,
   theme = 'terminal'
 }) => {
-  const [selectedIntent, setSelectedIntent] = useState<ClipIntent>('all');
+  const isDark = theme === 'dark' || theme === 'terminal';
+  const [groupBy, setGroupBy] = useState<GroupByDimension>('intent');
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>('all');
+  const [isGroupedView, setIsGroupedView] = useState<boolean>(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [storageFilter, setStorageFilter] = useState<'all' | 'cloud' | 'local'>('all');
   const [selectedPageFilter, setSelectedPageFilter] = useState<string>('all');
@@ -277,6 +520,62 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   const [syncedState, setSyncedState] = useState<{ [key: string]: boolean }>({});
   const [localSearch, setLocalSearch] = useState<string>(searchQuery || '');
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [customCategories, setCustomCategories] = useState<CustomCategoryConfig[]>(() => getStoredCustomCategories());
+  const [isCreateCatModalOpen, setIsCreateCatModalOpen] = useState(false);
+  const [createCatDimension, setCreateCatDimension] = useState<GroupByDimension>('intent');
+
+  useEffect(() => {
+    fetchCustomCategoriesBackend().then(backendCats => {
+      if (backendCats && Array.isArray(backendCats) && backendCats.length > 0) {
+        setCustomCategories(backendCats);
+        saveStoredCustomCategories(backendCats);
+      }
+    });
+  }, []);
+
+  const handleCreateCustomCategory = async (newCat: CustomCategoryConfig) => {
+    const updated = [...customCategories, newCat];
+    setCustomCategories(updated);
+    saveStoredCustomCategories(updated);
+    setSelectedGroupFilter(newCat.slug);
+    const saved = await createCustomCategoryBackend(newCat);
+    if (saved && saved.id) {
+      setCustomCategories(prev => prev.map(c => c.id === newCat.id ? saved : c));
+    }
+  };
+
+  const handleDeleteCustomCategory = async (catId: string) => {
+    const updated = customCategories.filter(c => c.id !== catId);
+    setCustomCategories(updated);
+    saveStoredCustomCategories(updated);
+    setSelectedGroupFilter('all');
+    await deleteCustomCategoryBackend(catId);
+  };
+
+  const handleUpdateClip = async (clipId: string, updates: Partial<ClipItem>) => {
+    setClips(prev => prev.map(c => c.id === clipId ? { ...c, ...updates } : c));
+    if (detailModalClip && detailModalClip.id === clipId) {
+      setDetailModalClip(prev => prev ? { ...prev, ...updates } : null);
+    }
+    await updateClipBackend(clipId, {
+      title: updates.title,
+      intent: updates.intent as string,
+      type: updates.type as string,
+      custom_page_id: updates.pageId,
+      tags: updates.tags,
+    });
+  };
+
+  const toggleSectionCollapse = (sectionId: string) => {
+    setCollapsedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+
+  const handleGroupByChange = (dim: GroupByDimension) => {
+    setGroupBy(dim);
+    setSelectedGroupFilter('all');
+    setCurrentPage(1);
+  };
 
   // Sync external searchQuery prop with localSearch
   useEffect(() => {
@@ -299,28 +598,91 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   }, []);
 
   const intentCounts = useMemo(() => {
-    if (clips.length > 10) {
-      return {
-        all: clips.length,
-        apply: clips.filter(c => getClipIntent(c) === 'apply').length,
-        learn: clips.filter(c => getClipIntent(c) === 'learn').length,
-        track: clips.filter(c => getClipIntent(c) === 'track').length,
-        hire: clips.filter(c => getClipIntent(c) === 'hire').length,
-        attend: clips.filter(c => getClipIntent(c) === 'attend').length,
-        buy: clips.filter(c => getClipIntent(c) === 'buy').length,
-      };
-    }
-    // Stitch Save - Clips Vault specification metrics: 148, 18, 74, 29, 12, 9, 6
-    return {
-      all: 148,
-      apply: 18,
-      learn: 74,
-      track: 29,
-      hire: 12,
-      attend: 9,
-      buy: 6,
+    const counts: Record<string, number> = {
+      all: clips.length,
+      apply: clips.filter(c => getClipIntent(c, customCategories) === 'apply').length,
+      learn: clips.filter(c => getClipIntent(c, customCategories) === 'learn').length,
+      track: clips.filter(c => getClipIntent(c, customCategories) === 'track').length,
+      hire: clips.filter(c => getClipIntent(c, customCategories) === 'hire').length,
+      attend: clips.filter(c => getClipIntent(c, customCategories) === 'attend').length,
+      buy: clips.filter(c => getClipIntent(c, customCategories) === 'buy').length,
     };
+    customCategories.filter(c => c.dimension === 'intent').forEach(c => {
+      counts[c.slug] = clips.filter(clip => getClipIntent(clip, customCategories) === c.slug).length;
+    });
+    return counts;
+  }, [clips, customCategories]);
+
+  const dynamicIntentFilters = useMemo(() => {
+    const customIntents = customCategories
+      .filter(c => c.dimension === 'intent')
+      .map(c => ({
+        id: c.slug,
+        label: c.name,
+        defaultCount: 0,
+        dotColor: c.color,
+        dotBg: c.bgColor || `${c.color}20`,
+        isCustom: true,
+        customId: c.id,
+      }));
+    return [...INTENT_FILTERS, ...customIntents];
+  }, [customCategories]);
+
+  // Multi-dimensional Grouping Options & Dynamic Counts
+  const sourceOptions = useMemo(() => {
+    const allSources: ClipSourceKey[] = ['youtube', 'github', 'x_twitter', 'linkedin', 'reddit', 'arxiv', 'substack', 'medium', 'other'];
+    const items = allSources.map(k => {
+      const meta = getClipSourceMeta(k);
+      const count = clips.filter(c => getClipSourceKey(c) === k).length;
+      return { id: k, label: meta.label, brandIcon: meta.brandIcon, color: meta.color, bg: meta.bg, count };
+    }).filter(s => s.count > 0 || ['youtube', 'github', 'x_twitter', 'other'].includes(s.id));
+
+    return [
+      { id: 'all', label: 'All Sources', brandIcon: 'web', color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)', count: clips.length },
+      ...items
+    ];
   }, [clips]);
+
+  const typeOptions = useMemo(() => {
+    const allTypes: ClipContentTypeKey[] = ['video', 'article', 'code', 'job', 'audio', 'book', 'deal', 'event', 'general'];
+    const standard = allTypes.map(k => {
+      const meta = getClipContentTypeMeta(k);
+      const count = clips.filter(c => getClipContentTypeKey(c) === k).length;
+      return { id: k, label: meta.label, icon: meta.icon, color: meta.color, bg: meta.bg, count, isCustom: false };
+    }).filter(t => t.count > 0 || ['video', 'article', 'code', 'job'].includes(t.id));
+
+    const custom = customCategories
+      .filter(c => c.dimension === 'type')
+      .map(c => ({
+        id: c.slug,
+        label: c.name,
+        icon: Tag,
+        color: c.color,
+        bg: c.bgColor || `${c.color}15`,
+        count: clips.filter(clip => (clip.type || '').toLowerCase() === c.slug.toLowerCase() || (clip.type || '').toLowerCase() === c.name.toLowerCase()).length,
+        isCustom: true,
+      }));
+
+    return [
+      { id: 'all', label: 'All Types', icon: Bookmark, color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)', count: clips.length, isCustom: false },
+      ...standard,
+      ...custom,
+    ];
+  }, [clips, customCategories]);
+
+  const customOptions = useMemo(() => {
+    const pageItems = customPages.map(page => {
+      const count = clips.filter(c => getClipCustomKey(c, customPages) === page.id).length;
+      return { id: page.id, label: page.name, color: page.color || '#3B82F6', icon: Folder, count };
+    });
+    const unassignedCount = clips.filter(c => getClipCustomKey(c, customPages) === 'unassigned').length;
+
+    return [
+      { id: 'all', label: 'All Collections', color: '#10B981', icon: FolderKanban, count: clips.length },
+      ...pageItems,
+      ...(unassignedCount > 0 ? [{ id: 'unassigned', label: 'Vault Unassigned', color: '#64748B', icon: Bookmark, count: unassignedCount }] : [])
+    ];
+  }, [clips, customPages]);
 
   const categories = [
     { id: 'all', label: 'All', count: clips.length },
@@ -332,11 +694,24 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
     { id: 'article', label: 'Articles & Notes', count: clips.filter(c => c.type === 'article' || c.type === 'general').length },
   ];
 
-  // Filtering & Sorting
+  // Filtering & Sorting with Multi-Dimensional Group Filter
   const filteredClips = clips
     .filter(clip => {
-      const clipIntent = getClipIntent(clip);
-      const matchesIntent = selectedIntent === 'all' || clipIntent === selectedIntent;
+      // Multi-dimensional Group By Filter
+      if (selectedGroupFilter !== 'all') {
+        if (groupBy === 'intent') {
+          if (getClipIntent(clip, customCategories) !== selectedGroupFilter) return false;
+        } else if (groupBy === 'source') {
+          if (getClipSourceKey(clip) !== selectedGroupFilter) return false;
+        } else if (groupBy === 'type') {
+          const typeKey = getClipContentTypeKey(clip);
+          const clipType = (clip.type || '').toLowerCase();
+          if (typeKey !== selectedGroupFilter && clipType !== selectedGroupFilter) return false;
+        } else if (groupBy === 'custom') {
+          if (getClipCustomKey(clip, customPages) !== selectedGroupFilter) return false;
+        }
+      }
+
       const matchesCategory = selectedCategory === 'all' || clip.type === selectedCategory;
       const matchesStorage = storageFilter === 'all' || clip.storageMode === storageFilter;
       const matchesPage = selectedPageFilter === 'all' || clip.pageId === selectedPageFilter;
@@ -357,7 +732,7 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
         clip.summary.toLowerCase().includes(query) ||
         clip.tags.some(t => t.toLowerCase().includes(query));
 
-      return matchesIntent && matchesCategory && matchesStorage && matchesPage && matchesDest && matchesSearch;
+      return matchesCategory && matchesStorage && matchesPage && matchesDest && matchesSearch;
     })
     .sort((a, b) => {
       if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -374,17 +749,17 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   // Reset pagination to page 1 on filter or search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedIntent, selectedCategory, storageFilter, selectedPageFilter, destinationFilter, localSearch, sortBy]);
+  }, [groupBy, selectedGroupFilter, selectedCategory, storageFilter, selectedPageFilter, destinationFilter, localSearch, sortBy]);
 
   const totalCount = useMemo(() => {
-    if (localSearch.trim() || destinationFilter !== 'all' || selectedCategory !== 'all') {
+    if (localSearch.trim() || destinationFilter !== 'all' || selectedCategory !== 'all' || selectedGroupFilter !== 'all') {
       return filteredClips.length;
     }
-    if (selectedIntent !== 'all') {
-      return intentCounts[selectedIntent] || filteredClips.length;
+    if (groupBy === 'intent' && selectedGroupFilter === 'all') {
+      return Math.max(148, filteredClips.length);
     }
-    return Math.max(148, filteredClips.length);
-  }, [filteredClips.length, intentCounts, selectedIntent, destinationFilter, selectedCategory, localSearch]);
+    return filteredClips.length;
+  }, [filteredClips.length, groupBy, selectedGroupFilter, destinationFilter, selectedCategory, localSearch]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
 
@@ -412,6 +787,79 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
     }
     return pageItems;
   }, [filteredClips, currentPage, itemsPerPage, totalCount]);
+
+  // Sectioned Groups for Grouped Sections View Mode
+  const groupedSections = useMemo(() => {
+    if (!isGroupedView) return [];
+
+    const map: Record<string, { id: string; label: string; icon?: any; brandIcon?: string; color?: string; bg?: string; clips: ClipItem[] }> = {};
+
+    filteredClips.forEach(clip => {
+      let key = 'general';
+      let label = 'General';
+      let brandIcon: string | undefined;
+      let icon: any = Bookmark;
+      let color = '#64748B';
+      let bg = 'rgba(100, 116, 139, 0.12)';
+
+      if (groupBy === 'intent') {
+        key = getClipIntent(clip, customCategories);
+        const customCat = customCategories.find(c => c.dimension === 'intent' && c.slug === key);
+        if (customCat) {
+          label = customCat.name.toUpperCase();
+          color = customCat.color;
+          bg = customCat.bgColor || `${customCat.color}18`;
+          icon = Sparkles;
+        } else {
+          label = key.toUpperCase();
+          const style = getIntentBadgeStyle(key as any, isDark, customCategories);
+          color = style.dot;
+        }
+      } else if (groupBy === 'source') {
+        key = getClipSourceKey(clip);
+        const meta = getClipSourceMeta(key as any);
+        label = meta.label;
+        brandIcon = meta.brandIcon;
+        color = meta.color;
+        bg = meta.bg;
+      } else if (groupBy === 'type') {
+        key = getClipContentTypeKey(clip);
+        const customCat = customCategories.find(
+          c => c.dimension === 'type' && (c.slug === key || c.slug === (clip.type || '').toLowerCase())
+        );
+        if (customCat) {
+          label = customCat.name;
+          color = customCat.color;
+          bg = customCat.bgColor || `${customCat.color}18`;
+          icon = Tag;
+        } else {
+          const meta = getClipContentTypeMeta(key as any);
+          label = meta.label;
+          icon = meta.icon;
+          color = meta.color;
+          bg = meta.bg;
+        }
+      } else if (groupBy === 'custom') {
+        key = getClipCustomKey(clip, customPages);
+        if (key === 'unassigned') {
+          label = 'Vault Unassigned';
+          icon = Bookmark;
+        } else {
+          const page = customPages.find(p => p.id === key);
+          label = page?.name || 'Custom Collection';
+          icon = Folder;
+          color = page?.color || '#3B82F6';
+        }
+      }
+
+      if (!map[key]) {
+        map[key] = { id: key, label, icon, brandIcon, color, bg, clips: [] };
+      }
+      map[key].clips.push(clip);
+    });
+
+    return Object.values(map).filter(g => g.clips.length > 0);
+  }, [filteredClips, isGroupedView, groupBy, customPages, customCategories, isDark]);
 
   const toggleFavorite = (id: string) => {
     setClips(prev =>
@@ -444,11 +892,401 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
     }, 2000);
   };
 
-  const isLight = theme === 'light';
-  const isDark = theme === 'dark' || theme === 'terminal';
-  const cardBgClass = isDark ? 'bg-[#121212] border-[#262626] text-white' : 'bg-white border-slate-200 text-slate-900 shadow-sm';
-  const subtextClass = isDark ? 'text-[#888888]' : 'text-slate-600';
-  const innerBgClass = isDark ? 'bg-[#181818] border-[#262626]' : 'bg-slate-50 border-slate-200';
+  const renderClipCard = (clip: ClipItem) => {
+    const intent = getClipIntent(clip, customCategories);
+    const intentStyle = getIntentBadgeStyle(intent, isDark, customCategories);
+    const domain = getDomainFromUrl(clip.url);
+    const formatLabel = getSourceFormatLabel(clip);
+    const sourceKey = getClipSourceKey(clip);
+    const sourceMeta = getClipSourceMeta(sourceKey);
+    const typeKey = getClipContentTypeKey(clip);
+    const typeMeta = getClipContentTypeMeta(typeKey);
+    const TypeIcon = typeMeta.icon;
+    const customPage = customPages.find(p => p.id === clip.pageId || p.slug === clip.pageId);
+
+    return (
+      <motion.div
+        key={clip.id}
+        layout
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        transition={{ duration: 0.2 }}
+        className={`group rounded-2xl border transition-all duration-200 flex flex-col justify-between p-5 relative shadow-sm hover:shadow-md ${
+          isDark 
+            ? 'bg-[#0D0D0D] border-[#222222] hover:border-[#383838] hover:bg-[#121212]' 
+            : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-md'
+        }`}
+      >
+        <div className="flex flex-col gap-3">
+          {/* Top Bar: Source Favicon/BrandIcon, Domain Pill & Star Favorite Toggle */}
+          <div className="flex items-center justify-between gap-2">
+            {/* Domain & Source Pill with Authentic BrandIcon */}
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono shrink-0 max-w-[220px] truncate ${
+              isDark ? 'bg-[#181818] border-[#2B2B2B] text-[#A1A1A1]' : 'bg-slate-100 border-slate-200 text-slate-700'
+            }`}>
+              {sourceKey !== 'other' ? (
+                <div className="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+                  <BrandIcon name={sourceMeta.brandIcon} className="w-3.5 h-3.5" />
+                </div>
+              ) : clip.faviconUrl ? (
+                <img 
+                  src={clip.faviconUrl} 
+                  alt="" 
+                  className="w-3.5 h-3.5 rounded-sm shrink-0" 
+                  onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} 
+                />
+              ) : (
+                <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              )}
+              <span className="truncate">{domain}</span>
+              <span className="opacity-40">•</span>
+              <span className="text-[10px] uppercase font-semibold text-slate-400">{formatLabel}</span>
+            </div>
+
+            {/* Star Favorite Toggle */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => toggleFavorite(clip.id)}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+                  clip.isFavorite
+                    ? 'text-amber-400 bg-amber-400/10'
+                    : isDark
+                      ? 'text-[#666666] hover:text-amber-400 hover:bg-[#1C1B1B]'
+                      : 'text-slate-400 hover:text-amber-500 hover:bg-slate-100'
+                }`}
+                title={clip.isFavorite ? 'Remove from favorites' : 'Mark as favorite'}
+              >
+                <Star className={`w-3.5 h-3.5 transition-transform ${clip.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Title: 2-line clamp */}
+          <h3
+            onClick={() => setDetailModalClip(clip)}
+            className={`font-semibold text-[15px] leading-[22px] line-clamp-2 cursor-pointer transition-colors pt-1 ${
+              isDark ? 'text-white hover:text-[#3FE769]' : 'text-slate-900 hover:text-[#2D6A4F]'
+            }`}
+            style={{ fontFamily: 'Outfit, sans-serif' }}
+            title={clip.title}
+          >
+            {clip.title}
+          </h3>
+
+          {/* Excerpt / Summary: 2-line clamp */}
+          <p className={`text-xs leading-[18px] line-clamp-2 ${isDark ? 'text-[#888888]' : 'text-slate-600'}`}>
+            {clip.summary}
+          </p>
+
+          {/* Intent Badge, Content Type & Extracted Metrics */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {/* Intent Pill */}
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider border ${intentStyle.bg} ${intentStyle.text} ${intentStyle.border}`}>
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: intentStyle.dot }} />
+              <span>{intent}</span>
+            </span>
+
+            {/* Content Type Pill */}
+            <span 
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border"
+              style={{ backgroundColor: typeMeta.bg, color: typeMeta.color, borderColor: `${typeMeta.color}35` }}
+            >
+              <TypeIcon className="w-2.5 h-2.5 shrink-0" />
+              <span>{typeMeta.label}</span>
+            </span>
+
+            {/* Custom Page Pill (if assigned) */}
+            {customPage && (
+              <span 
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border truncate max-w-[140px]"
+                style={{ backgroundColor: `${customPage.color}18`, color: customPage.color, borderColor: `${customPage.color}40` }}
+                title={customPage.name}
+              >
+                <Folder className="w-2.5 h-2.5 shrink-0" />
+                <span className="truncate">{customPage.name}</span>
+              </span>
+            )}
+
+            {/* Salary / Price / Deadline metric if present */}
+            {clip.extractedData?.salary && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
+                {clip.extractedData.salary}
+              </span>
+            )}
+            {clip.extractedData?.price && !clip.extractedData?.salary && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold">
+                {clip.extractedData.price}
+              </span>
+            )}
+            {clip.extractedData?.company && (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono truncate max-w-[130px] border ${
+                isDark ? 'bg-[#181818] border-[#262626] text-[#A1A1A1]' : 'bg-slate-100 border-slate-200 text-slate-600'
+              }`}>
+                {clip.extractedData.company}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Bottom Card Footer: Capture Source, Timestamp, Destination Badge & Actions */}
+        <div className="pt-4 mt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
+          {/* Capture Source & Timestamp */}
+          <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#777777] min-w-0 truncate">
+            {clip.sourceApp.includes('Mobile') ? (
+              <Smartphone className="w-3.5 h-3.5 shrink-0" />
+            ) : (
+              <Laptop className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span className="truncate">{clip.sourceApp.replace('Chrome Extension', 'Chrome').replace('Mobile Share Sheet', 'Mobile')}</span>
+            <span>•</span>
+            <span className="shrink-0">{formatClipDate(clip.createdAt)}</span>
+          </div>
+
+          {/* Destination Badges & Quick Sync */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {clip.syncedTo && clip.syncedTo.length > 0 ? (
+              <div className="flex items-center gap-1">
+                {clip.syncedTo.slice(0, 2).map(dest => (
+                  <span
+                    key={dest}
+                    className="px-2 py-0.5 rounded-full text-[10px] font-mono flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    <span>{dest === 'google_sheets' ? 'Sheets' : dest === 'notion' ? 'Notion' : dest}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleExportClick(clip, 'notion'); }}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-mono border transition-all cursor-pointer flex items-center gap-1 ${
+                  syncedState[`${clip.id}_notion`]
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold'
+                    : isDark
+                      ? 'bg-[#181818] border-[#2B2B2B] text-[#888888] hover:text-white hover:border-[#3FE769]/50'
+                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                }`}
+                title="1-Tap Sync to Notion"
+              >
+                {syncedState[`${clip.id}_notion`] ? <Check className="w-2.5 h-2.5" /> : <Send className="w-2.5 h-2.5" />}
+                <span>{syncedState[`${clip.id}_notion`] ? 'Synced!' : 'Sync'}</span>
+              </button>
+            )}
+
+            {/* Open Drawer Modal Trigger */}
+            <button
+              type="button"
+              onClick={() => setDetailModalClip(clip)}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+              title="Open Clip Drawer"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+
+            {/* External Link */}
+            <a
+              href={clip.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`p-1.5 rounded-lg transition-colors ${
+                isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+              title="Open Source Link"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+
+            {/* Delete */}
+            <button
+              type="button"
+              onClick={() => deleteClip(clip.id)}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                isDark ? 'text-[#888888] hover:text-red-400 hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-red-600 hover:bg-slate-100'
+              }`}
+              title="Delete Clip"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
+  const renderClipRow = (clip: ClipItem) => {
+    const intent = getClipIntent(clip, customCategories);
+    const intentStyle = getIntentBadgeStyle(intent, isDark, customCategories);
+    const domain = getDomainFromUrl(clip.url);
+    const sourceKey = getClipSourceKey(clip);
+    const sourceMeta = getClipSourceMeta(sourceKey);
+    const typeKey = getClipContentTypeKey(clip);
+    const typeMeta = getClipContentTypeMeta(typeKey);
+    const TypeIcon = typeMeta.icon;
+    const customPage = customPages.find(p => p.id === clip.pageId || p.slug === clip.pageId);
+
+    return (
+      <motion.div
+        key={clip.id}
+        layout
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={() => setDetailModalClip(clip)}
+        className={`px-4 py-3 flex items-center justify-between gap-4 transition-all duration-150 cursor-pointer group ${
+          isDark ? 'hover:bg-[#141414]' : 'hover:bg-slate-50'
+        }`}
+      >
+        {/* Left section: Star, Source Icon, Intent badge, Type Badge, Title & Excerpt */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Star toggle */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); toggleFavorite(clip.id); }}
+            className={`p-1 rounded transition-colors shrink-0 cursor-pointer ${
+              clip.isFavorite ? 'text-amber-400' : isDark ? 'text-[#555555] hover:text-amber-400' : 'text-slate-300 hover:text-amber-500'
+            }`}
+          >
+            <Star className={`w-3.5 h-3.5 ${clip.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+          </button>
+
+          {/* Source Favicon / BrandIcon */}
+          <div className="w-4 h-4 rounded shrink-0 flex items-center justify-center">
+            {sourceKey !== 'other' ? (
+              <BrandIcon name={sourceMeta.brandIcon} className="w-3.5 h-3.5" />
+            ) : clip.faviconUrl ? (
+              <img 
+                src={clip.faviconUrl} 
+                alt="" 
+                className="w-3.5 h-3.5 rounded-sm" 
+                onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} 
+              />
+            ) : (
+              <Globe className="w-3.5 h-3.5 text-slate-400" />
+            )}
+          </div>
+
+          {/* Intent Badge */}
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider border shrink-0 ${intentStyle.bg} ${intentStyle.text} ${intentStyle.border}`}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: intentStyle.dot }} />
+            <span>{intent}</span>
+          </span>
+
+          {/* Content Type Pill */}
+          <span 
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border shrink-0"
+            style={{ backgroundColor: typeMeta.bg, color: typeMeta.color, borderColor: `${typeMeta.color}35` }}
+          >
+            <TypeIcon className="w-2.5 h-2.5 shrink-0" />
+            <span>{typeMeta.label}</span>
+          </span>
+
+          {/* Custom Page Pill (if assigned) */}
+          {customPage && (
+            <span 
+              className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border shrink-0 truncate max-w-[120px]"
+              style={{ backgroundColor: `${customPage.color}18`, color: customPage.color, borderColor: `${customPage.color}40` }}
+              title={customPage.name}
+            >
+              <Folder className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">{customPage.name}</span>
+            </span>
+          )}
+
+          {/* Title & Excerpt */}
+          <div className="min-w-0 flex-1 flex items-baseline gap-3">
+            <h4 
+              className={`text-sm font-semibold truncate transition-colors ${
+                isDark ? 'text-white group-hover:text-[#3FE769]' : 'text-slate-900 group-hover:text-[#2D6A4F]'
+              }`}
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              {clip.title}
+            </h4>
+            <p className={`text-xs truncate hidden lg:inline max-w-sm ${isDark ? 'text-[#777777]' : 'text-slate-500'}`}>
+              {clip.summary}
+            </p>
+          </div>
+        </div>
+
+        {/* Right section: Domain, Destination badge, Timestamp & Actions */}
+        <div className="flex items-center gap-3 shrink-0 text-xs font-mono">
+          <span className={`px-2 py-0.5 rounded text-[10px] hidden md:inline border ${
+            isDark ? 'bg-[#181818] border-[#262626] text-[#888888]' : 'bg-slate-100 border-slate-200 text-slate-600'
+          }`}>
+            {domain}
+          </span>
+
+          {clip.syncedTo && clip.syncedTo.length > 0 ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] hidden sm:flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span>{clip.syncedTo[0] === 'google_sheets' ? 'Sheets' : clip.syncedTo[0] === 'notion' ? 'Notion' : clip.syncedTo[0]}</span>
+            </span>
+          ) : null}
+
+          {/* Quick 1-Tap Sync Button */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleExportClick(clip, 'notion'); }}
+            className={`px-2 py-1 rounded-lg text-[10px] border transition-all flex items-center gap-1 cursor-pointer ${
+              syncedState[`${clip.id}_notion`]
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold'
+                : isDark
+                  ? 'bg-[#181818] border-[#2A2A2A] text-[#888888] hover:text-white hover:border-[#3FE769]/50'
+                  : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+            }`}
+            title="1-Tap Sync to Notion"
+          >
+            {syncedState[`${clip.id}_notion`] ? <Check className="w-2.5 h-2.5" /> : <Send className="w-2.5 h-2.5" />}
+            <span>{syncedState[`${clip.id}_notion`] ? 'Synced!' : 'Sync'}</span>
+          </button>
+
+          <span className="text-[11px] text-[#777777] hidden sm:inline">
+            {formatClipDate(clip.createdAt)}
+          </span>
+
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setDetailModalClip(clip); }}
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+            title="Open Drawer Details"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+
+          <a
+            href={clip.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className={`p-1.5 rounded-lg transition-colors ${
+              isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+            title="Open External URL"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); deleteClip(clip.id); }}
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+              isDark ? 'text-[#888888] hover:text-red-400 hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-red-600 hover:bg-slate-100'
+            }`}
+            title="Delete Clip"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  };
 
   return (
     <div className={`w-full min-h-screen px-6 py-8 max-w-[1440px] mx-auto flex flex-col gap-6 ${
@@ -614,17 +1452,104 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
         </div>
 
         {/* ----------------------------------------------------------- */}
-        {/* Intent Grouping Pills Switcher (Stitch Save - Clips Vault)  */}
+        {/* Multi-Dimensional Group By Selector & View Controls         */}
         {/* ----------------------------------------------------------- */}
-        <div className="flex items-center gap-2 overflow-x-auto pt-3 border-t border-black/5 dark:border-[#222222] scrollbar-none">
-          {INTENT_FILTERS.map((intent) => {
-            const isActive = selectedIntent === intent.id;
-            const count = intentCounts[intent.id] ?? intent.defaultCount;
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-3 border-t border-black/5 dark:border-[#222222]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[11px] font-mono uppercase tracking-wider font-semibold ${isDark ? 'text-[#777777]' : 'text-slate-500'}`}>
+              Group By:
+            </span>
+            <div className={`flex items-center p-0.5 rounded-xl border ${isDark ? 'bg-[#121212] border-[#262626]' : 'bg-slate-100 border-slate-200'}`}>
+              <button
+                id="group-by-intent-btn"
+                type="button"
+                onClick={() => handleGroupByChange('intent')}
+                className={`h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                  groupBy === 'intent'
+                    ? isDark ? 'bg-[#222222] text-[#3FE769] shadow-sm' : 'bg-white text-[#2D6A4F] shadow-sm'
+                    : isDark ? 'text-[#888888] hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Target className="w-3.5 h-3.5" />
+                <span>Intent</span>
+              </button>
+              <button
+                id="group-by-source-btn"
+                type="button"
+                onClick={() => handleGroupByChange('source')}
+                className={`h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                  groupBy === 'source'
+                    ? isDark ? 'bg-[#222222] text-[#3FE769] shadow-sm' : 'bg-white text-[#2D6A4F] shadow-sm'
+                    : isDark ? 'text-[#888888] hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>Source</span>
+              </button>
+              <button
+                id="group-by-type-btn"
+                type="button"
+                onClick={() => handleGroupByChange('type')}
+                className={`h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                  groupBy === 'type'
+                    ? isDark ? 'bg-[#222222] text-[#3FE769] shadow-sm' : 'bg-white text-[#2D6A4F] shadow-sm'
+                    : isDark ? 'text-[#888888] hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Content Type</span>
+              </button>
+              <button
+                id="group-by-custom-btn"
+                type="button"
+                onClick={() => handleGroupByChange('custom')}
+                className={`h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                  groupBy === 'custom'
+                    ? isDark ? 'bg-[#222222] text-[#3FE769] shadow-sm' : 'bg-white text-[#2D6A4F] shadow-sm'
+                    : isDark ? 'text-[#888888] hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FolderKanban className="w-3.5 h-3.5" />
+                <span>Custom / Pages</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Sectioned / Grouped View Toggle */}
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              id="toggle-grouped-view-btn"
+              type="button"
+              onClick={() => setIsGroupedView(!isGroupedView)}
+              className={`h-7 px-2.5 rounded-xl flex items-center gap-1.5 text-xs font-medium border transition-all cursor-pointer ${
+                isGroupedView
+                  ? isDark 
+                    ? 'bg-[#2D6A4F]/30 text-[#3FE769] border-[#3FE769]/40 shadow-sm font-semibold' 
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-sm font-semibold'
+                  : isDark 
+                    ? 'bg-[#121212] text-[#888888] border-[#262626] hover:text-white hover:border-[#383838]' 
+                    : 'bg-white text-slate-600 border-slate-200 hover:text-slate-900 shadow-sm'
+              }`}
+              title={isGroupedView ? 'Switch to Flat View with pagination' : 'Switch to Grouped Sections View'}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>{isGroupedView ? 'Grouped Sections' : 'Flat View'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ----------------------------------------------------------- */}
+        {/* Dynamic Group Pills Switcher                                */}
+        {/* ----------------------------------------------------------- */}
+        <div className="flex items-center gap-2 overflow-x-auto pt-2 pb-1 scrollbar-none">
+          {groupBy === 'intent' && dynamicIntentFilters.map((intent) => {
+            const isActive = selectedGroupFilter === intent.id;
+            const count = intentCounts[intent.id] ?? (intent as any).defaultCount ?? 0;
             return (
               <motion.button
                 key={intent.id}
                 id={`intent-pill-${intent.id}`}
-                onClick={() => setSelectedIntent(intent.id)}
+                onClick={() => setSelectedGroupFilter(intent.id)}
                 whileTap={{ scale: 0.95 }}
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs shrink-0 cursor-pointer border transition-all duration-200 select-none ${
                   isActive
@@ -636,7 +1561,6 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
                       : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-slate-200 font-medium'
                 }`}
               >
-                {/* Colored Dot Indicator */}
                 {intent.dotColor && (
                   <span
                     className="w-2 h-2 rounded-full shrink-0 transition-transform duration-200"
@@ -658,9 +1582,161 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
                 >
                   ({count})
                 </span>
+                {(intent as any).isCustom && (
+                  <span
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCustomCategory((intent as any).customId);
+                    }}
+                    className="ml-0.5 hover:text-red-400 p-0.5 rounded-full transition-colors cursor-pointer"
+                    title="Delete custom intent"
+                  >
+                    <X className="w-3 h-3" />
+                  </span>
+                )}
               </motion.button>
             );
           })}
+
+          {groupBy === 'source' && sourceOptions.map((source) => {
+            const isActive = selectedGroupFilter === source.id;
+            return (
+              <motion.button
+                key={source.id}
+                id={`source-pill-${source.id}`}
+                onClick={() => setSelectedGroupFilter(source.id)}
+                whileTap={{ scale: 0.95 }}
+                className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs shrink-0 cursor-pointer border transition-all duration-200 select-none ${
+                  isActive
+                    ? isDark
+                      ? 'bg-[#222222] text-white border-[#3A3A3A] shadow-sm font-semibold'
+                      : 'bg-[#2D6A4F] text-white border-[#2D6A4F] shadow-sm font-semibold'
+                    : isDark
+                      ? 'bg-[#121212] text-[#888888] hover:text-white hover:bg-[#181818] border-[#262626] font-medium'
+                      : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-slate-200 font-medium'
+                }`}
+              >
+                {source.id !== 'all' ? (
+                  <div className="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+                    <BrandIcon name={source.brandIcon} className="w-3.5 h-3.5" />
+                  </div>
+                ) : (
+                  <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                )}
+                <span>{source.label}</span>
+                <span
+                  className={`text-[11px] font-mono transition-colors ${
+                    isActive
+                      ? isDark ? 'text-[#3FE769]' : 'text-emerald-100'
+                      : isDark ? 'text-[#666666]' : 'text-slate-400'
+                  }`}
+                >
+                  ({source.count})
+                </span>
+              </motion.button>
+            );
+          })}
+
+          {groupBy === 'type' && typeOptions.map((typeItem) => {
+            const isActive = selectedGroupFilter === typeItem.id;
+            const IconComp = typeItem.icon;
+            return (
+              <motion.button
+                key={typeItem.id}
+                id={`type-pill-${typeItem.id}`}
+                onClick={() => setSelectedGroupFilter(typeItem.id)}
+                whileTap={{ scale: 0.95 }}
+                className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs shrink-0 cursor-pointer border transition-all duration-200 select-none ${
+                  isActive
+                    ? isDark
+                      ? 'bg-[#222222] text-white border-[#3A3A3A] shadow-sm font-semibold'
+                      : 'bg-[#2D6A4F] text-white border-[#2D6A4F] shadow-sm font-semibold'
+                    : isDark
+                      ? 'bg-[#121212] text-[#888888] hover:text-white hover:bg-[#181818] border-[#262626] font-medium'
+                      : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-slate-200 font-medium'
+                }`}
+              >
+                <IconComp className="w-3.5 h-3.5 shrink-0" style={{ color: isActive ? undefined : typeItem.color }} />
+                <span>{typeItem.label}</span>
+                <span
+                  className={`text-[11px] font-mono transition-colors ${
+                    isActive
+                      ? isDark ? 'text-[#3FE769]' : 'text-emerald-100'
+                      : isDark ? 'text-[#666666]' : 'text-slate-400'
+                  }`}
+                >
+                  ({typeItem.count})
+                </span>
+                {(typeItem as any).isCustom && (
+                  <span
+                    role="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCustomCategory((typeItem as any).customId);
+                    }}
+                    className="ml-0.5 hover:text-red-400 p-0.5 rounded-full transition-colors cursor-pointer"
+                    title="Delete custom content type"
+                  >
+                    <X className="w-3 h-3" />
+                  </span>
+                )}
+              </motion.button>
+            );
+          })}
+
+          {groupBy === 'custom' && customOptions.map((customItem) => {
+            const isActive = selectedGroupFilter === customItem.id;
+            const IconComp = customItem.icon;
+            return (
+              <motion.button
+                key={customItem.id}
+                id={`custom-pill-${customItem.id}`}
+                onClick={() => setSelectedGroupFilter(customItem.id)}
+                whileTap={{ scale: 0.95 }}
+                className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs shrink-0 cursor-pointer border transition-all duration-200 select-none ${
+                  isActive
+                    ? isDark
+                      ? 'bg-[#222222] text-white border-[#3A3A3A] shadow-sm font-semibold'
+                      : 'bg-[#2D6A4F] text-white border-[#2D6A4F] shadow-sm font-semibold'
+                    : isDark
+                      ? 'bg-[#121212] text-[#888888] hover:text-white hover:bg-[#181818] border-[#262626] font-medium'
+                      : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-slate-200 font-medium'
+                }`}
+              >
+                <IconComp className="w-3.5 h-3.5 shrink-0" style={{ color: isActive ? undefined : customItem.color }} />
+                <span>{customItem.label}</span>
+                <span
+                  className={`text-[11px] font-mono transition-colors ${
+                    isActive
+                      ? isDark ? 'text-[#3FE769]' : 'text-emerald-100'
+                      : isDark ? 'text-[#666666]' : 'text-slate-400'
+                  }`}
+                >
+                  ({customItem.count})
+                </span>
+              </motion.button>
+            );
+          })}
+
+          {/* "+ Add Intent" / "+ Add Category" button */}
+          <motion.button
+            type="button"
+            id="add-custom-category-pill-btn"
+            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              setCreateCatDimension(groupBy === 'custom' ? 'intent' : groupBy);
+              setIsCreateCatModalOpen(true);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 cursor-pointer border border-dashed transition-all duration-200 select-none ${
+              isDark
+                ? 'border-[#383838] text-blue-400 hover:text-blue-300 hover:border-blue-500/50 hover:bg-blue-500/10'
+                : 'border-blue-300 text-blue-600 hover:text-blue-700 hover:border-blue-500 hover:bg-blue-50'
+            }`}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Add {groupBy === 'intent' ? 'Intent' : groupBy === 'type' ? 'Content Type' : 'Category'}</span>
+          </motion.button>
         </div>
       </div>
 
@@ -683,13 +1759,13 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
             Try adjusting your search keywords, switching your destination or intent filters, or capture new items using the extension.
           </p>
           <div className="flex items-center gap-2 pt-2">
-            {selectedIntent !== 'all' && (
+            {selectedGroupFilter !== 'all' && (
               <button
                 type="button"
-                onClick={() => setSelectedIntent('all')}
+                onClick={() => setSelectedGroupFilter('all')}
                 className="px-3 py-1.5 rounded-xl text-xs font-medium border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 cursor-pointer transition-all"
               >
-                Clear "{selectedIntent.toUpperCase()}" filter
+                Clear "{selectedGroupFilter.toUpperCase()}" filter
               </button>
             )}
             <button
@@ -705,206 +1781,113 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
             </button>
           </div>
         </div>
+      ) : isGroupedView ? (
+        /* ------------------------------------------------------------- */
+        /* Grouped Sections View: Collapsible Categories matching Mode   */
+        /* ------------------------------------------------------------- */
+        <div className="flex flex-col gap-5">
+          {groupedSections.map((section) => {
+            const isCollapsed = Boolean(collapsedSections[section.id]);
+            const IconComp = section.icon;
+
+            return (
+              <div 
+                key={section.id} 
+                className={`rounded-2xl border transition-all overflow-hidden ${
+                  isDark ? 'bg-[#0B0B0B] border-[#222222]' : 'bg-white border-slate-200 shadow-sm'
+                }`}
+              >
+                {/* Collapsible Section Header */}
+                <div
+                  onClick={() => toggleSectionCollapse(section.id)}
+                  className={`px-5 py-3.5 flex items-center justify-between gap-4 cursor-pointer select-none transition-colors border-b ${
+                    isDark ? 'border-[#1E1E1E] hover:bg-[#141414]' : 'border-slate-100 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <button
+                      type="button"
+                      className={`p-1 rounded-lg transition-colors ${
+                        isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+
+                    {/* Group Icon (BrandIcon for sources, Lucide for types, colored dot for intent, Folder for custom) */}
+                    <div 
+                      className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border"
+                      style={{
+                        backgroundColor: section.bg || (isDark ? '#181818' : '#F1F5F9'),
+                        borderColor: section.color ? `${section.color}35` : isDark ? '#262626' : '#E2E8F0',
+                      }}
+                    >
+                      {section.brandIcon ? (
+                        <BrandIcon name={section.brandIcon} className="w-4 h-4" />
+                      ) : IconComp ? (
+                        <IconComp className="w-4 h-4" style={{ color: section.color || '#10B981' }} />
+                      ) : (
+                        <Bookmark className="w-4 h-4 text-slate-400" />
+                      )}
+                    </div>
+
+                    <h3 className={`font-semibold text-sm sm:text-base tracking-tight truncate ${isDark ? 'text-white' : 'text-slate-900'}`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      {section.label}
+                    </h3>
+
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold ${
+                      isDark ? 'bg-[#181818] text-[#A1A1A1] border border-[#2B2B2B]' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}>
+                      {section.clips.length} {section.clips.length === 1 ? 'clip' : 'clips'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedGroupFilter(section.id);
+                        setIsGroupedView(false);
+                      }}
+                      className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all ${
+                        isDark
+                          ? 'bg-[#181818] border-[#2B2B2B] text-[#888888] hover:text-white hover:border-[#3FE769]/40'
+                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
+                      }`}
+                      title={`Filter exclusively by ${section.label}`}
+                    >
+                      Focus
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section Body */}
+                {!isCollapsed && (
+                  <div className="p-4 sm:p-5">
+                    {viewMode === 'grid' ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {section.clips.map(clip => renderClipCard(clip))}
+                      </div>
+                    ) : (
+                      <div className={`rounded-xl border divide-y overflow-hidden transition-all ${
+                        isDark ? 'bg-[#0F0F0F] border-[#222222] divide-[#1C1B1B]' : 'bg-white border-slate-200 divide-slate-100'
+                      }`}>
+                        {section.clips.map(clip => renderClipRow(clip))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : viewMode === 'grid' ? (
         /* ------------------------------------------------------------- */
         /* Grid View: 3-Column Responsive Cards matching Stitch          */
         /* ------------------------------------------------------------- */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {paginatedClips.map(clip => {
-            const intent = getClipIntent(clip);
-            const intentStyle = getIntentBadgeStyle(intent, isDark);
-            const domain = getDomainFromUrl(clip.url);
-            const formatLabel = getSourceFormatLabel(clip);
-
-            return (
-              <motion.div
-                key={clip.id}
-                layout
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.2 }}
-                className={`group rounded-2xl border transition-all duration-200 flex flex-col justify-between p-5 relative shadow-sm hover:shadow-md ${
-                  isDark 
-                    ? 'bg-[#0D0D0D] border-[#222222] hover:border-[#383838] hover:bg-[#121212]' 
-                    : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-md'
-                }`}
-              >
-                <div className="flex flex-col gap-3">
-                  {/* Top Bar: Source Favicon/Domain Pill & Star Favorite Toggle */}
-                  <div className="flex items-center justify-between gap-2">
-                    {/* Domain & Source Pill */}
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono shrink-0 max-w-[200px] truncate ${
-                      isDark ? 'bg-[#181818] border-[#2B2B2B] text-[#A1A1A1]' : 'bg-slate-100 border-slate-200 text-slate-700'
-                    }`}>
-                      {clip.faviconUrl ? (
-                        <img 
-                          src={clip.faviconUrl} 
-                          alt="" 
-                          className="w-3.5 h-3.5 rounded-sm shrink-0" 
-                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} 
-                        />
-                      ) : (
-                        <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      )}
-                      <span className="truncate">{domain}</span>
-                      <span className="opacity-40">•</span>
-                      <span className="text-[10px] uppercase font-semibold text-slate-400">{formatLabel}</span>
-                    </div>
-
-                    {/* Star Favorite Toggle & Direct Drawer Trigger */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => toggleFavorite(clip.id)}
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                          clip.isFavorite
-                            ? 'text-amber-400 bg-amber-400/10'
-                            : isDark
-                              ? 'text-[#666666] hover:text-amber-400 hover:bg-[#1C1B1B]'
-                              : 'text-slate-400 hover:text-amber-500 hover:bg-slate-100'
-                        }`}
-                        title={clip.isFavorite ? 'Remove from favorites' : 'Mark as favorite'}
-                      >
-                        <Star className={`w-3.5 h-3.5 transition-transform ${clip.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Title: 2-line clamp */}
-                  <h3
-                    onClick={() => setDetailModalClip(clip)}
-                    className={`font-semibold text-[15px] leading-[22px] line-clamp-2 cursor-pointer transition-colors pt-1 ${
-                      isDark ? 'text-white hover:text-[#3FE769]' : 'text-slate-900 hover:text-[#2D6A4F]'
-                    }`}
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                    title={clip.title}
-                  >
-                    {clip.title}
-                  </h3>
-
-                  {/* Excerpt / Summary: 2-line clamp */}
-                  <p className={`text-xs leading-[18px] line-clamp-2 ${isDark ? 'text-[#888888]' : 'text-slate-600'}`}>
-                    {clip.summary}
-                  </p>
-
-                  {/* Intent Badge & Extracted Metrics */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    {/* Intent Pill */}
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider border ${intentStyle.bg} ${intentStyle.text} ${intentStyle.border}`}>
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: intentStyle.dot }} />
-                      <span>{intent}</span>
-                    </span>
-
-                    {/* Salary / Price / Deadline metric if present */}
-                    {clip.extractedData?.salary && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
-                        {clip.extractedData.salary}
-                      </span>
-                    )}
-                    {clip.extractedData?.price && !clip.extractedData?.salary && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold">
-                        {clip.extractedData.price}
-                      </span>
-                    )}
-                    {clip.extractedData?.company && (
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono truncate max-w-[130px] border ${
-                        isDark ? 'bg-[#181818] border-[#262626] text-[#A1A1A1]' : 'bg-slate-100 border-slate-200 text-slate-600'
-                      }`}>
-                        {clip.extractedData.company}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Bottom Card Footer: Capture Source, Timestamp, Destination Badge & Actions */}
-                <div className="pt-4 mt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
-                  {/* Capture Source & Timestamp */}
-                  <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#777777] min-w-0 truncate">
-                    {clip.sourceApp.includes('Mobile') ? (
-                      <Smartphone className="w-3.5 h-3.5 shrink-0" />
-                    ) : (
-                      <Laptop className="w-3.5 h-3.5 shrink-0" />
-                    )}
-                    <span className="truncate">{clip.sourceApp.replace('Chrome Extension', 'Chrome').replace('Mobile Share Sheet', 'Mobile')}</span>
-                    <span>•</span>
-                    <span className="shrink-0">{formatClipDate(clip.createdAt)}</span>
-                  </div>
-
-                  {/* Destination Badges & Quick Sync */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Destination Pill */}
-                    {clip.syncedTo && clip.syncedTo.length > 0 ? (
-                      <div className="flex items-center gap-1">
-                        {clip.syncedTo.slice(0, 2).map(dest => (
-                          <span
-                            key={dest}
-                            className="px-2 py-0.5 rounded-full text-[10px] font-mono flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium"
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                            <span>{dest === 'google_sheets' ? 'Sheets' : dest === 'notion' ? 'Notion' : dest}</span>
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleExportClick(clip, 'notion'); }}
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-mono border transition-all cursor-pointer flex items-center gap-1 ${
-                          syncedState[`${clip.id}_notion`]
-                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold'
-                            : isDark
-                              ? 'bg-[#181818] border-[#2B2B2B] text-[#888888] hover:text-white hover:border-[#3FE769]/50'
-                              : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                        }`}
-                        title="1-Tap Sync to Notion"
-                      >
-                        {syncedState[`${clip.id}_notion`] ? <Check className="w-2.5 h-2.5" /> : <Send className="w-2.5 h-2.5" />}
-                        <span>{syncedState[`${clip.id}_notion`] ? 'Synced!' : 'Sync'}</span>
-                      </button>
-                    )}
-
-                    {/* Open Drawer Modal Trigger */}
-                    <button
-                      type="button"
-                      onClick={() => setDetailModalClip(clip)}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                        isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      }`}
-                      title="Open Clip Drawer"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* External Link */}
-                    <a
-                      href={clip.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`p-1.5 rounded-lg transition-colors ${
-                        isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      }`}
-                      title="Open Source Link"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-
-                    {/* Delete */}
-                    <button
-                      type="button"
-                      onClick={() => deleteClip(clip.id)}
-                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                        isDark ? 'text-[#888888] hover:text-red-400 hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-red-600 hover:bg-slate-100'
-                      }`}
-                      title="Delete Clip"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
+          {paginatedClips.map(clip => renderClipCard(clip))}
         </div>
       ) : (
         /* ------------------------------------------------------------- */
@@ -913,159 +1896,14 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
         <div className={`rounded-2xl border divide-y overflow-hidden shadow-sm transition-all ${
           isDark ? 'bg-[#0F0F0F] border-[#222222] divide-[#1C1B1B]' : 'bg-white border-slate-200 divide-slate-100'
         }`}>
-          {paginatedClips.map(clip => {
-            const intent = getClipIntent(clip);
-            const intentStyle = getIntentBadgeStyle(intent, isDark);
-            const domain = getDomainFromUrl(clip.url);
-
-            return (
-              <motion.div
-                key={clip.id}
-                layout
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setDetailModalClip(clip)}
-                className={`px-4 py-3 flex items-center justify-between gap-4 transition-all duration-150 cursor-pointer group ${
-                  isDark ? 'hover:bg-[#141414]' : 'hover:bg-slate-50'
-                }`}
-              >
-                {/* Left section: Star, Favicon, Intent badge, Title & Excerpt */}
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  {/* Star toggle */}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); toggleFavorite(clip.id); }}
-                    className={`p-1 rounded transition-colors shrink-0 cursor-pointer ${
-                      clip.isFavorite ? 'text-amber-400' : isDark ? 'text-[#555555] hover:text-amber-400' : 'text-slate-300 hover:text-amber-500'
-                    }`}
-                  >
-                    <Star className={`w-3.5 h-3.5 ${clip.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
-                  </button>
-
-                  {/* Source Favicon */}
-                  <div className="w-4 h-4 rounded shrink-0 flex items-center justify-center">
-                    {clip.faviconUrl ? (
-                      <img 
-                        src={clip.faviconUrl} 
-                        alt="" 
-                        className="w-3.5 h-3.5 rounded-sm" 
-                        onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} 
-                      />
-                    ) : (
-                      <Globe className="w-3.5 h-3.5 text-slate-400" />
-                    )}
-                  </div>
-
-                  {/* Intent Badge */}
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider border shrink-0 ${intentStyle.bg} ${intentStyle.text} ${intentStyle.border}`}>
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: intentStyle.dot }} />
-                    <span>{intent}</span>
-                  </span>
-
-                  {/* Title & Excerpt */}
-                  <div className="min-w-0 flex-1 flex items-baseline gap-3">
-                    <h4 
-                      className={`text-sm font-semibold truncate transition-colors ${
-                        isDark ? 'text-white group-hover:text-[#3FE769]' : 'text-slate-900 group-hover:text-[#2D6A4F]'
-                      }`}
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    >
-                      {clip.title}
-                    </h4>
-                    <p className={`text-xs truncate hidden lg:inline max-w-sm ${isDark ? 'text-[#777777]' : 'text-slate-500'}`}>
-                      {clip.summary}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right section: Domain, Destination badge, Timestamp & Actions */}
-                <div className="flex items-center gap-3 shrink-0 text-xs font-mono">
-                  {/* Domain pill */}
-                  <span className={`px-2 py-0.5 rounded text-[10px] hidden md:inline border ${
-                    isDark ? 'bg-[#181818] border-[#262626] text-[#888888]' : 'bg-slate-100 border-slate-200 text-slate-600'
-                  }`}>
-                    {domain}
-                  </span>
-
-                  {/* Destination badge */}
-                  {clip.syncedTo && clip.syncedTo.length > 0 ? (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] hidden sm:flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      <span>{clip.syncedTo[0] === 'google_sheets' ? 'Sheets' : clip.syncedTo[0] === 'notion' ? 'Notion' : clip.syncedTo[0]}</span>
-                    </span>
-                  ) : null}
-
-                  {/* Quick 1-Tap Sync Button */}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); handleExportClick(clip, 'notion'); }}
-                    className={`px-2 py-1 rounded-lg text-[10px] border transition-all flex items-center gap-1 cursor-pointer ${
-                      syncedState[`${clip.id}_notion`]
-                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold'
-                        : isDark
-                          ? 'bg-[#181818] border-[#2A2A2A] text-[#888888] hover:text-white hover:border-[#3FE769]/50'
-                          : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                    }`}
-                    title="1-Tap Sync to Notion"
-                  >
-                    {syncedState[`${clip.id}_notion`] ? <Check className="w-2.5 h-2.5" /> : <Send className="w-2.5 h-2.5" />}
-                    <span>{syncedState[`${clip.id}_notion`] ? 'Synced!' : 'Sync'}</span>
-                  </button>
-
-                  {/* Timestamp */}
-                  <span className="text-[11px] text-[#777777] hidden sm:inline">
-                    {formatClipDate(clip.createdAt)}
-                  </span>
-
-                  {/* Open Drawer button */}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setDetailModalClip(clip); }}
-                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                      isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                    title="Open Drawer Details"
-                  >
-                    <Maximize2 className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* External link */}
-                  <a
-                    href={clip.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                    title="Open External URL"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-
-                  {/* Delete button */}
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); deleteClip(clip.id); }}
-                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                      isDark ? 'text-[#888888] hover:text-red-400 hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-red-600 hover:bg-slate-100'
-                    }`}
-                    title="Delete Clip"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
+          {paginatedClips.map(clip => renderClipRow(clip))}
         </div>
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* 3b. Pagination Controls matching Stitch                       */}
+      {/* 3b. Pagination Controls matching Stitch (Flat View Only)      */}
       {/* ------------------------------------------------------------- */}
-      {filteredClips.length > 0 && (
+      {!isGroupedView && filteredClips.length > 0 && (
         <div 
           id="clips-pagination"
           className={`flex flex-col sm:flex-row items-center justify-between gap-4 py-3 pt-5 border-t text-[13px] transition-colors ${
@@ -1196,9 +2034,26 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
             onToggleFavorite={toggleFavorite}
             onDeleteClip={deleteClip}
             isDark={isDark}
+            customCategories={customCategories}
+            onUpdateClip={handleUpdateClip}
+            onOpenAddCustomCategory={() => {
+              setCreateCatDimension('intent');
+              setIsCreateCatModalOpen(true);
+            }}
           />
         )}
       </AnimatePresence>
+
+      {/* ------------------------------------------------------------- */}
+      {/* 5. Create Custom Category / Intent Modal                      */}
+      {/* ------------------------------------------------------------- */}
+      <CreateCustomCategoryModal
+        isOpen={isCreateCatModalOpen}
+        onClose={() => setIsCreateCatModalOpen(false)}
+        onCreated={handleCreateCustomCategory}
+        defaultDimension={createCatDimension}
+        theme={theme}
+      />
     </div>
   );
 };
@@ -1215,6 +2070,9 @@ const ClipDetailDrawer: React.FC<{
   onToggleFavorite: (id: string) => void;
   onDeleteClip: (id: string) => void;
   isDark?: boolean;
+  customCategories?: CustomCategoryConfig[];
+  onUpdateClip?: (clipId: string, updates: Partial<ClipItem>) => void;
+  onOpenAddCustomCategory?: () => void;
 }> = ({ 
   clip, 
   onClose, 
@@ -1223,7 +2081,10 @@ const ClipDetailDrawer: React.FC<{
   onToggleStorage, 
   onToggleFavorite, 
   onDeleteClip, 
-  isDark = true 
+  isDark = true,
+  customCategories = [],
+  onUpdateClip,
+  onOpenAddCustomCategory,
 }) => {
   const [exportedDest, setExportedDest] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -1254,10 +2115,36 @@ const ClipDetailDrawer: React.FC<{
   };
 
   const isLocal = clip.storageMode === 'local';
-  const intent = getClipIntent(clip);
-  const intentStyle = getIntentBadgeStyle(intent, isDark);
+  const intent = getClipIntent(clip, customCategories);
+  const intentStyle = getIntentBadgeStyle(intent, isDark, customCategories);
   const domain = getDomainFromUrl(clip.url);
   const formatLabel = getSourceFormatLabel(clip);
+  const sourceKey = getClipSourceKey(clip);
+
+  const availableIntents = useMemo(() => {
+    const canonical = [
+      { id: 'apply', label: 'Apply', dotColor: '#B45309' },
+      { id: 'learn', label: 'Learn', dotColor: '#047857' },
+      { id: 'track', label: 'Track', dotColor: '#475569' },
+      { id: 'hire', label: 'Hire', dotColor: '#6D28D9' },
+      { id: 'attend', label: 'Attend', dotColor: '#BE185D' },
+      { id: 'buy', label: 'Buy', dotColor: '#1D4ED8' },
+    ];
+    const custom = customCategories
+      .filter(c => c.dimension === 'intent')
+      .map(c => ({ id: c.slug, label: c.name, dotColor: c.color, isCustom: true }));
+    return [...canonical, ...custom];
+  }, [customCategories]);
+
+  const handleIntentChange = (newIntent: string) => {
+    if (onUpdateClip) {
+      onUpdateClip(clip.id, { intent: newIntent as any });
+    }
+  };
+  const sourceMeta = getClipSourceMeta(sourceKey);
+  const typeKey = getClipContentTypeKey(clip);
+  const typeMeta = getClipContentTypeMeta(typeKey);
+  const TypeIcon = typeMeta.icon;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end font-sans">
@@ -1291,6 +2178,25 @@ const ClipDetailDrawer: React.FC<{
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: intentStyle.dot }} />
               <span>{intent}</span>
             </span>
+
+            {/* Content Type Pill */}
+            <span 
+              className="px-2.5 py-1 rounded-full text-[10px] font-mono border flex items-center gap-1 font-medium"
+              style={{ backgroundColor: typeMeta.bg, color: typeMeta.color, borderColor: `${typeMeta.color}35` }}
+            >
+              <TypeIcon className="w-3 h-3" />
+              <span>{typeMeta.label}</span>
+            </span>
+
+            {/* Source Brand Pill */}
+            {sourceKey !== 'other' && (
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono border flex items-center gap-1 ${
+                isDark ? 'bg-[#181818] border-[#2B2B2B] text-slate-300' : 'bg-white border-slate-200 text-slate-700'
+              }`}>
+                <BrandIcon name={sourceMeta.brandIcon} className="w-3 h-3" />
+                <span>{sourceMeta.label}</span>
+              </span>
+            )}
 
             {/* Source App Pill */}
             <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono border flex items-center gap-1 ${
@@ -1441,6 +2347,53 @@ const ClipDetailDrawer: React.FC<{
                 </div>
                 <span className="text-[10px] opacity-75">Zero telemetry & private</span>
               </button>
+            </div>
+          </div>
+
+          {/* Action Intent Classification & Reassignment Card */}
+          <div className={`p-4 rounded-xl border space-y-3 ${
+            isDark ? 'bg-[#121212] border-[#242424]' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-[11px] font-mono uppercase tracking-wider font-semibold ${isDark ? 'text-[#888888]' : 'text-slate-500'}`}>
+                Action Intent & Category
+              </span>
+              {onOpenAddCustomCategory && (
+                <button
+                  type="button"
+                  onClick={onOpenAddCustomCategory}
+                  className="text-[11px] font-mono text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>+ New Custom Intent</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {availableIntents.map(intItem => {
+                const isSelected = intent === intItem.id;
+                return (
+                  <button
+                    key={intItem.id}
+                    type="button"
+                    onClick={() => handleIntentChange(intItem.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 border transition-all cursor-pointer ${
+                      isSelected
+                        ? isDark
+                          ? 'border-[#3FE769] bg-[#2D6A4F]/30 text-[#3FE769] font-semibold shadow-sm'
+                          : 'border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold shadow-sm'
+                        : isDark
+                        ? 'border-[#222222] bg-[#161616] text-[#888888] hover:border-[#383838] hover:text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: intItem.dotColor }} />
+                    <span>{intItem.label}</span>
+                    {isSelected && <Check className="w-3 h-3 text-[#3FE769] shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
