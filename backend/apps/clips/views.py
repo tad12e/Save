@@ -14,8 +14,13 @@ logger = logging.getLogger(__name__)
 
 from apps.destinations.models import Destination
 
-from .models import Clip, CustomPage
-from .serializers import ClipCreateSerializer, ClipSerializer, CustomPageSerializer
+from .models import Clip, CustomCategory, CustomPage
+from .serializers import (
+    ClipCreateSerializer,
+    ClipSerializer,
+    CustomCategorySerializer,
+    CustomPageSerializer,
+)
 from .services.url import hash_url, normalise_url
 
 User = get_user_model()
@@ -40,7 +45,7 @@ class ClipCreateView(APIView):
             )
         clips_qs = Clip.objects.filter(user=request.user)
 
-        # Action Intent query filter (supports canonical categories or specific action verbs)
+        # Action Intent query filter (supports canonical categories, custom user intents, or specific action verbs)
         intent_param = request.query_params.get('intent', '').strip().lower()
         if intent_param and intent_param != 'all':
             from apps.clips.services.intent_detector import CANONICAL_MAPPING
@@ -48,6 +53,37 @@ class ClipCreateView(APIView):
             if intent_param not in matching_intents:
                 matching_intents.append(intent_param)
             clips_qs = clips_qs.filter(intent__in=matching_intents)
+
+        # Source Platform query filter
+        source_param = (request.query_params.get('source') or request.query_params.get('platform') or '').strip().lower()
+        if source_param and source_param != 'all':
+            SOURCE_DOMAIN_MAP = {
+                'youtube': ['youtube.com', 'youtu.be'],
+                'github': ['github.com', 'gist.github.com'],
+                'x_twitter': ['twitter.com', 'x.com'],
+                'twitter': ['twitter.com', 'x.com'],
+                'x': ['twitter.com', 'x.com'],
+                'linkedin': ['linkedin.com'],
+                'reddit': ['reddit.com'],
+                'arxiv': ['arxiv.org'],
+                'substack': ['substack.com'],
+                'medium': ['medium.com'],
+            }
+            domains = SOURCE_DOMAIN_MAP.get(source_param)
+            if domains:
+                src_q = Q(source_platform__iexact=source_param)
+                for d in domains:
+                    src_q |= Q(url__icontains=d)
+                clips_qs = clips_qs.filter(src_q)
+            else:
+                clips_qs = clips_qs.filter(
+                    Q(source_platform__iexact=source_param) | Q(url__icontains=source_param)
+                )
+
+        # Content Type query filter
+        type_param = (request.query_params.get('type') or request.query_params.get('content_type') or '').strip().lower()
+        if type_param and type_param != 'all':
+            clips_qs = clips_qs.filter(content_type__iexact=type_param)
 
         # Filter by Custom Page if provided
         page_param = (request.query_params.get('page_id') or request.query_params.get('page') or '').strip()
@@ -59,12 +95,26 @@ class ClipCreateView(APIView):
             except (ValueError, TypeError):
                 clips_qs = clips_qs.filter(custom_page__slug=page_param)
 
-        clips = (
+        clips = list(
             clips_qs
             .select_related('destination', 'custom_page')
             .annotate(prefetched_child_count=Count('child_clips'))
             .order_by('-created_at')[:100]
         )
+
+        # Auto-detect intent on the fly for any clips that missed Celery enrichment
+        from apps.clips.services.intent_detector import IntentDetector, clean_action_intent
+        for c in clips:
+            if not c.intent or c.intent == 'other':
+                detected = IntentDetector.detect_heuristic_intent(
+                    url=c.url,
+                    text=f"{c.title or ''} {c.selected_text or ''} {c.summary or ''} {' '.join(c.tags or [])}",
+                    content_type=c.content_type or '',
+                )
+                if detected and detected != 'other':
+                    c.intent = clean_action_intent(detected)
+                    c.save(update_fields=['intent'])
+
         return Response(ClipSerializer(clips, many=True).data)
 
     def post(self, request):
@@ -305,6 +355,14 @@ class ClipDetailView(APIView):
                 clip.custom_page = cpage
             update_fields.append('custom_page')
 
+        if 'content_type' in request.data:
+            clip.content_type = str(request.data['content_type']).strip().lower()
+            update_fields.append('content_type')
+
+        if 'source_platform' in request.data:
+            clip.source_platform = str(request.data['source_platform']).strip().lower()
+            update_fields.append('source_platform')
+
         if update_fields:
             clip.save(update_fields=update_fields)
 
@@ -390,13 +448,55 @@ class DashboardView(APIView):
         music_saved = stats['music_saved']
         articles_saved = stats['articles_saved']
 
-        # Single destination fetch; row count stays identical (len of rows),
-        # provider flags computed in Python instead of 1 COUNT + 4 EXISTS queries.
-        dest_provider_list = list(
-            Destination.objects.filter(user=user, is_active=True).values_list('provider', flat=True)
-        )
-        active_destinations = len(dest_provider_list)
-        dest_providers = set(dest_provider_list)
+        # Real destination fetch and status computation
+        user_dest_objs = list(Destination.objects.filter(user=user))
+        vault_dest = next((d for d in user_dest_objs if d.provider == 'custom_db'), None)
+        destinations_status = [
+            {
+                'id': str(vault_dest.id) if vault_dest else 'dest_save_vault',
+                'provider': 'custom_db',
+                'name': 'Save Vault (Cloud Database)',
+                'connected': True,
+                'status': 'active',
+                'items_synced': total_clips,
+            }
+        ]
+
+        PROVIDER_LABELS = {
+            'google_sheets': 'Google Sheets',
+            'notion': 'Notion Workspace',
+            'airtable': 'Airtable Base',
+            'spotify': 'Spotify',
+            'youtube_music': 'YouTube Music',
+            'webhook': 'Webhook Ingest',
+        }
+
+        for d in user_dest_objs:
+            if d.provider == 'custom_db':
+                continue
+            synced_count = qs.filter(Q(destination=d) | Q(destination_provider=d.provider)).count()
+            destinations_status.append({
+                'id': str(d.id),
+                'provider': d.provider,
+                'name': d.name or PROVIDER_LABELS.get(d.provider, d.provider.replace('_', ' ').title()),
+                'connected': d.is_active,
+                'status': 'active' if d.is_active else 'disconnected',
+                'items_synced': synced_count,
+            })
+
+        configured_provs = {d['provider'] for d in destinations_status}
+        for default_prov in ['google_sheets', 'notion']:
+            if default_prov not in configured_provs:
+                destinations_status.append({
+                    'id': f'dest_{default_prov}',
+                    'provider': default_prov,
+                    'name': PROVIDER_LABELS.get(default_prov, default_prov.replace('_', ' ').title()),
+                    'connected': False,
+                    'status': 'not_configured',
+                    'items_synced': 0,
+                })
+
+        active_destinations = len([d for d in destinations_status if d.get('connected')])
 
         # One annotated base queryset per list below, so the serializer's
         # child-clip count comes from the same query (no N+1 COUNT per clip).
@@ -416,27 +516,6 @@ class DashboardView(APIView):
         music_clips = ClipSerializer(base_clips_qs.filter(content_type='music').order_by('-created_at')[:4], many=True).data
         article_clips = ClipSerializer(base_clips_qs.filter(content_type__in=['article', 'blog']).order_by('-created_at')[:4], many=True).data
 
-        destinations_status = [
-            {
-                'provider': 'google_sheets',
-                'name': 'Google Sheets',
-                'connected': 'google_sheets' in dest_providers,
-                'status': 'active' if 'google_sheets' in dest_providers else 'not_configured',
-            },
-            {
-                'provider': 'notion',
-                'name': 'Notion Workspace',
-                'connected': 'notion' in dest_providers,
-                'status': 'active' if 'notion' in dest_providers else 'not_configured',
-            },
-            {
-                'provider': 'airtable',
-                'name': 'Airtable Base',
-                'connected': False,
-                'status': 'not_configured',
-            },
-        ]
-
         highlight_title = "Weekly AI Digest & Opportunity Highlights"
         highlight_summary = (
             f"You saved {saved_this_week} items this week. Gemini AI detected high-priority opportunities "
@@ -446,7 +525,20 @@ class DashboardView(APIView):
             highlight_summary = f"Latest Opportunity ({recent_clips[0].get('title') or 'Clip'}): {recent_clips[0].get('summary')}"
 
         # Live dynamic aggregation of Action Intents for donut chart & filter counts
-        from apps.clips.services.intent_detector import CANONICAL_INTENTS, normalize_canonical_intent
+        from apps.clips.services.intent_detector import CANONICAL_INTENTS, normalize_canonical_intent, IntentDetector, clean_action_intent
+
+        # Auto-detect intent on the fly for any clips that missed Celery enrichment
+        other_clips = qs.filter(Q(intent='other') | Q(intent__isnull=True) | Q(intent=''))[:100]
+        for c in other_clips:
+            detected = IntentDetector.detect_heuristic_intent(
+                url=c.url,
+                text=f"{c.title or ''} {c.selected_text or ''} {c.summary or ''} {' '.join(c.tags or [])}",
+                content_type=c.content_type or '',
+            )
+            if detected and detected != 'other':
+                c.intent = clean_action_intent(detected)
+                c.save(update_fields=['intent'])
+
         raw_intent_counts = qs.values('intent').annotate(count=Count('id'))
         intent_map = {ci: 0 for ci in CANONICAL_INTENTS}
         for item in raw_intent_counts:
@@ -943,6 +1035,291 @@ class CustomPageDetailView(APIView):
             return Response({'error': 'Custom page not found.'}, status=status.HTTP_404_NOT_FOUND)
         page.delete()
         return Response({'message': 'Custom page deleted successfully.'}, status=status.HTTP_200_OK)
+
+
+class CustomCategoryListCreateView(APIView):
+    """
+    GET /api/clips/custom-categories/
+    Lists custom user categories for grouping dimensions (intent, source, type, custom).
+    Optional query parameter: ?dimension=intent
+
+    POST /api/clips/custom-categories/
+    Creates a new custom user category.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        qs = CustomCategory.objects.filter(user=request.user)
+        dimension = request.query_params.get('dimension', '').strip().lower()
+        if dimension and dimension != 'all':
+            qs = qs.filter(dimension=dimension)
+        return Response(CustomCategorySerializer(qs, many=True).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        name = str(request.data.get('name', '')).strip()
+        if not name:
+            return Response({'error': 'Category name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        dimension = str(request.data.get('dimension', 'intent')).strip().lower()
+        if dimension not in dict(CustomCategory.DIMENSION_CHOICES):
+            dimension = CustomCategory.DIMENSION_INTENT
+
+        import re
+        base_slug = request.data.get('slug') or re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+        if not base_slug:
+            base_slug = 'category'
+
+        slug = base_slug
+        counter = 1
+        while CustomCategory.objects.filter(user=request.user, dimension=dimension, slug=slug).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+
+        keywords = request.data.get('keywords') or []
+        if isinstance(keywords, str):
+            keywords = [k.strip().lower() for k in keywords.split(',') if k.strip()]
+
+        cat = CustomCategory.objects.create(
+            user=request.user,
+            dimension=dimension,
+            name=name,
+            slug=slug,
+            color=request.data.get('color') or '#3B82F6',
+            bg_color=request.data.get('bg_color') or 'rgba(59, 130, 246, 0.15)',
+            icon_name=request.data.get('icon_name') or request.data.get('icon') or 'Tag',
+            description=request.data.get('description', '').strip(),
+            keywords=keywords,
+        )
+        return Response(CustomCategorySerializer(cat).data, status=status.HTTP_201_CREATED)
+
+
+class CustomCategoryDetailView(APIView):
+    """
+    DELETE /api/clips/custom-categories/<uuid:pk>/
+    PATCH /api/clips/custom-categories/<uuid:pk>/
+    """
+    permission_classes = [AllowAny]
+
+    def _get_cat(self, request, pk):
+        if not request.user or not request.user.is_authenticated:
+            return None
+        return CustomCategory.objects.filter(pk=pk, user=request.user).first()
+
+    def patch(self, request, pk):
+        cat = self._get_cat(request, pk)
+        if not cat:
+            return Response({'error': 'Custom category not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        update_fields = []
+        if 'name' in request.data:
+            cat.name = str(request.data['name']).strip()
+            update_fields.append('name')
+        if 'color' in request.data:
+            cat.color = str(request.data['color']).strip()
+            update_fields.append('color')
+        if 'bg_color' in request.data:
+            cat.bg_color = str(request.data['bg_color']).strip()
+            update_fields.append('bg_color')
+        if 'icon_name' in request.data:
+            cat.icon_name = str(request.data['icon_name']).strip()
+            update_fields.append('icon_name')
+        if 'description' in request.data:
+            cat.description = str(request.data['description']).strip()
+            update_fields.append('description')
+        if 'keywords' in request.data:
+            kw = request.data['keywords']
+            if isinstance(kw, str):
+                kw = [k.strip().lower() for k in kw.split(',') if k.strip()]
+            cat.keywords = kw
+            update_fields.append('keywords')
+
+        if update_fields:
+            cat.save(update_fields=update_fields)
+        return Response(CustomCategorySerializer(cat).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        cat = self._get_cat(request, pk)
+        if not cat:
+            return Response({'error': 'Custom category not found.'}, status=status.HTTP_404_NOT_FOUND)
+        cat.delete()
+        return Response({'message': 'Custom category deleted successfully.'}, status=status.HTTP_200_OK)
+
+
+class FeedStreamView(APIView):
+    """
+    GET /api/clips/feed/
+    Returns the comprehensive, algorithmic Activity & Opportunity Feed:
+    - Live Ingestion Stream Metrics
+    - The Daily 5 Spaced Review Queue (Streak-building micro-review)
+    - "Connect the Dots" AI Cross-Clip Synthesis
+    - Stream Timeline Cards filtered by timeframe and category
+    - Destination Sync River activity
+    - Career Opportunity Watchlist
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user = request.user if (request.user and request.user.is_authenticated) else None
+        if not user:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            user = User.objects.first()
+
+        if not user:
+            return Response(
+                {'error': 'No user profile found. Please create an account or sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        timeframe = request.query_params.get('timeframe', 'today').strip().lower()
+        category = request.query_params.get('category', 'all').strip().lower()
+        limit = int(request.query_params.get('limit', 50))
+
+        from .services.feed_engine import FeedEngine
+        feed_data = FeedEngine.get_feed(
+            user=user,
+            timeframe=timeframe,
+            category=category,
+            limit=limit,
+        )
+
+        return Response(feed_data, status=status.HTTP_200_OK)
+
+
+class FeedItemActionView(APIView):
+    """
+    POST /api/clips/feed/<uuid:clip_id>/action/
+    Handles interactive feed actions:
+    - 'review' / 'master': Marks item reviewed in Daily 5, increments habit streak
+    - 'snooze': Temporarily snoozes item for 3 days
+    - 'watchlist': Toggles career opportunity watchlist
+    - 'archive': Marks clip status as DONE
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, clip_id):
+        user = request.user if (request.user and request.user.is_authenticated) else None
+        if not user:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            user = User.objects.first()
+
+        if not user:
+            return Response(
+                {'error': 'Authentication required.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        action = str(request.data.get('action', 'review')).strip().lower()
+        note = str(request.data.get('note', '')).strip()
+
+        from .services.feed_engine import FeedEngine
+        result = FeedEngine.handle_action(
+            user=user,
+            clip_id=str(clip_id),
+            action=action,
+            note=note,
+        )
+
+        if not result.get('success'):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class PlaylistListView(APIView):
+    """
+    GET /api/clips/playlists/
+    Returns all auto-generated knowledge stacks (Daily 5, tag-based, thematic categories)
+    for the user with progress stats and domain previews.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        user = request.user if (request.user and request.user.is_authenticated) else None
+        if not user:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            user = User.objects.first()
+
+        if not user:
+            return Response({'playlists': []}, status=status.HTTP_200_OK)
+
+        from .services.playlist_engine import PlaylistEngine
+        playlists = PlaylistEngine.get_user_playlists(user)
+        return Response({'playlists': playlists}, status=status.HTTP_200_OK)
+
+
+class PlaylistClipsView(APIView):
+    """
+    GET /api/clips/playlists/<str:playlist_id>/clips/
+    Returns ordered swipe cards for a given knowledge stack.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, playlist_id):
+        user = request.user if (request.user and request.user.is_authenticated) else None
+        if not user:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            user = User.objects.first()
+
+        if not user:
+            return Response({'cards': []}, status=status.HTTP_200_OK)
+
+        from .services.playlist_engine import PlaylistEngine
+        cards = PlaylistEngine.get_playlist_clips(user, playlist_id)
+        return Response({'cards': cards, 'total': len(cards), 'playlist_id': playlist_id}, status=status.HTTP_200_OK)
+
+
+class SwipeActionView(APIView):
+    """
+    POST /api/clips/<uuid:clip_id>/swipe-action/
+    Handles interactive swipe actions:
+    like, reviewed, watchlist, snooze, archive, note, share, destination
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, clip_id):
+        user = request.user if (request.user and request.user.is_authenticated) else None
+        if not user:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            user = User.objects.first()
+
+        if not user:
+            return Response(
+                {'error': 'Authentication required.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        action = str(request.data.get('action', 'reviewed')).strip().lower()
+        note = str(request.data.get('note', '')).strip()
+        destination_id = str(request.data.get('destination_id', '')).strip()
+
+        from .services.playlist_engine import PlaylistEngine
+        result = PlaylistEngine.handle_swipe_action(
+            user=user,
+            clip_id=str(clip_id),
+            action=action,
+            note=note,
+            destination_id=destination_id,
+        )
+
+        if not result.get('success'):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
+
+
 
 
 

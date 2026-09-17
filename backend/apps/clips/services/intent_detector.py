@@ -16,16 +16,26 @@ CANONICAL_INTENTS = ['apply', 'learn', 'buy', 'attend', 'hire', 'track', 'other'
 
 # Domain-specific and path heuristic rules
 HEURISTIC_RULES = [
-    # 1. APPLY (Jobs, Grants, Scholarships, Fellowships)
+    # 1. APPLY (Jobs, Grants, Scholarships, Fellowships, Admissions)
     (
-        r'(?i)(?:greenhouse\.io|lever\.co|workday\.com|ashbyhq\.com|smartrecruiters\.com|wellfound\.com|jobs\.lever\.co|ycombinator\.com/companies/.+/jobs)',
+        r'(?i)(?:greenhouse\.io|lever\.co|workday\.com|ashbyhq\.com|smartrecruiters\.com|wellfound\.com|jobs\.lever\.co|ycombinator\.com/companies/.+/jobs|grants\.gov)',
         'apply',
     ),
     (
-        r'(?i)/(?:careers|jobs|internships|scholarships|grants|fellowships|open-positions)(?:/|$|\?)',
+        r'(?i)/(?:careers|jobs|internships|scholarships|grants|fellowships|open-positions|apply)(?:/|$|\?)',
         'apply',
     ),
-    # 2. BUY (E-commerce, SaaS Deals, Hardware, Subscriptions)
+    # 2. HIRE (Talent discovery, profiles, portfolios, freelance)
+    (
+        r'(?i)(?:linkedin\.com/in/|read\.cv|layers\.to|peerlist\.io|contra\.com|dribbble\.com|behance\.net)',
+        'hire',
+    ),
+    # 3. TRACK (Code repositories, packages, dev tools, benchmarks)
+    (
+        r'(?i)(?:github\.com|gitlab\.com|huggingface\.co|npmjs\.com|pypi\.org|crates\.io|producthunt\.com)/[A-Za-z0-9_.-]+',
+        'track',
+    ),
+    # 4. BUY (E-commerce, SaaS Deals, Hardware, Subscriptions)
     (
         r'(?i)(?:amazon\.[a-z.]+|shopify\.com|gumroad\.com|etsy\.com|ebay\.com|aliexpress\.com)',
         'buy',
@@ -34,7 +44,7 @@ HEURISTIC_RULES = [
         r'(?i)/(?:product|products|pricing|cart|checkout|item|buy)(?:/|$|\?)',
         'buy',
     ),
-    # 3. ATTEND (Events, Webinars, Hackathons, Meetups, Livestreams)
+    # 5. ATTEND (Events, Webinars, Hackathons, Meetups, Livestreams)
     (
         r'(?i)(?:eventbrite\.com|lu\.ma|luma\.com|meetup\.com|partiful\.com|hopin\.com)',
         'attend',
@@ -43,37 +53,33 @@ HEURISTIC_RULES = [
         r'(?i)/(?:events|webinar|hackathon|meetup|conference|summit)(?:/|$|\?)',
         'attend',
     ),
-    # 4. LISTEN (Music, Podcasts, Audio streams)
+    # 6. LISTEN (Music, Podcasts, Audio streams)
     (
         r'(?i)(?:open\.spotify\.com|music\.youtube\.com|soundcloud\.com|bandcamp\.com|podcasts\.apple\.com|anchor\.fm)',
         'listen',
     ),
-    # 5. COOK (Recipes, Cooking guides)
+    # 7. COOK (Recipes, Cooking guides)
     (
         r'(?i)(?:allrecipes\.com|foodnetwork\.com|seriouseats\.com|tasty\.co|bonappetit\.com|epicurious\.com|cooking\.nytimes\.com)',
         'cook',
     ),
-    # 6. BUILD (Code repositories, developer tools)
+    # 8. LEARN (Substack, Academic papers, Deep-dive essays, docs)
     (
-        r'(?i)(?:github\.com|gitlab\.com)/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',
-        'build',
-    ),
-    # 7. READ (Substack, Academic papers, Deep-dive essays)
-    (
-        r'(?i)(?:substack\.com|medium\.com|arxiv\.org|biorxiv\.org)',
-        'read',
+        r'(?i)(?:substack\.com|medium\.com|arxiv\.org|biorxiv\.org|dev\.to|hashnode\.dev)',
+        'learn',
     ),
 ]
 
 # Keyword signals in page text or selected excerpt
 KEYWORD_RULES = [
-    (r'(?i)\b(?:apply now|submit application|application deadline|we are hiring|view open roles|eligible batch|internship opportunity)\b', 'apply'),
+    (r'(?i)\b(?:apply now|submit application|application deadline|we are hiring|view open roles|eligible batch|internship opportunity|seed grant|grant proposal|scholarship|fellowship|yc w\d+|y combinator)\b', 'apply'),
+    (r'(?i)\b(?:hire me|freelance availability|my portfolio|design portfolio|candidate profile|looking for work|open to work|resume|cv)\b', 'hire'),
+    (r'(?i)\b(?:repository|release v\d+|cuda graph|tokens/sec|benchmark|benchmarks|framework|orchestrator|github\.com|open source|metrics)\b', 'track'),
     (r'(?i)\b(?:recipe|ingredients|cook time|prep time|instructions|tablespoon|preheat oven)\b', 'cook'),
     (r'(?i)\b(?:add to cart|buy now|in stock|order now|checkout|special discount|\$\d+\s+discount)\b', 'buy'),
-    (r'(?i)\b(?:rsvp|register now|live webinar|save your seat|attend event|hackathon starts)\b', 'attend'),
+    (r'(?i)\b(?:rsvp|register now|live webinar|save your seat|attend event|hackathon starts|summit|conference)\b', 'attend'),
     (r'(?i)\b(?:listen on spotify|listen on apple podcasts|stream track|album release|mezmur)\b', 'listen'),
-    (r'(?i)\b(?:hire me|freelance availability|my portfolio|design portfolio|contact for work)\b', 'hire'),
-    (r'(?i)\b(?:tutorial|how to build|system design|deep dive|step-by-step guide|documentation)\b', 'learn'),
+    (r'(?i)\b(?:tutorial|how to build|system design|deep dive|step-by-step guide|documentation|architecture walkthrough)\b', 'learn'),
 ]
 
 # Canonical parent bucket mapping for dynamic 1-word verbs
@@ -82,15 +88,24 @@ CANONICAL_MAPPING = {
     'apply': 'apply',
     'submit': 'apply',
     'pitch': 'apply',
-    # Learn & Build
+    # Track & Build
+    'track': 'track',
+    'build': 'track',
+    'code': 'track',
+    'deploy': 'track',
+    'install': 'track',
+    'debug': 'track',
+    'monitor': 'track',
+    'compare': 'track',
+    'benchmark': 'track',
+    # Hire & Recruiting
+    'hire': 'hire',
+    'recruit': 'hire',
+    'contact': 'hire',
+    # Learn
     'learn': 'learn',
-    'build': 'learn',
-    'code': 'learn',
-    'deploy': 'learn',
     'read': 'learn',
     'study': 'learn',
-    'install': 'learn',
-    'debug': 'learn',
     # Buy & Commerce
     'buy': 'buy',
     'shop': 'buy',
@@ -101,15 +116,6 @@ CANONICAL_MAPPING = {
     'meet': 'attend',
     'rsvp': 'attend',
     'join': 'attend',
-    # Hire & Recruiting
-    'hire': 'hire',
-    'recruit': 'hire',
-    'contact': 'hire',
-    # Track & Intel
-    'track': 'track',
-    'monitor': 'track',
-    'compare': 'track',
-    'benchmark': 'track',
     # Lifestyle / Media
     'cook': 'learn',
     'listen': 'other',

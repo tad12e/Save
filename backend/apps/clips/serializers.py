@@ -2,8 +2,27 @@ from rest_framework import serializers
 
 from apps.destinations.models import Destination
 
-from .models import Clip, CustomPage
+from .models import Clip, CustomCategory, CustomPage
 from .services.url import hash_url, normalise_url
+
+
+class CustomCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomCategory
+        fields = (
+            'id',
+            'dimension',
+            'name',
+            'slug',
+            'color',
+            'bg_color',
+            'icon_name',
+            'description',
+            'keywords',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
 
 
 class CustomPageSerializer(serializers.ModelSerializer):
