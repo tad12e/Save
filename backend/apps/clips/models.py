@@ -35,6 +35,53 @@ class CustomPage(models.Model):
         return f"{self.name} ({self.user})"
 
 
+class CustomCategory(models.Model):
+    """
+    User-defined category within a grouping dimension (e.g. custom Intent like 'Build',
+    custom Content Type like 'Podcast', custom Source, or general custom tag).
+    """
+    DIMENSION_INTENT = 'intent'
+    DIMENSION_SOURCE = 'source'
+    DIMENSION_TYPE = 'type'
+    DIMENSION_CUSTOM = 'custom'
+
+    DIMENSION_CHOICES = (
+        (DIMENSION_INTENT, 'Intent'),
+        (DIMENSION_SOURCE, 'Source Platform'),
+        (DIMENSION_TYPE, 'Content Type'),
+        (DIMENSION_CUSTOM, 'Custom Dimension'),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='custom_categories',
+    )
+    dimension = models.CharField(
+        max_length=30,
+        choices=DIMENSION_CHOICES,
+        default=DIMENSION_INTENT,
+        db_index=True,
+    )
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100)
+    color = models.CharField(max_length=32, default='#3B82F6')
+    bg_color = models.CharField(max_length=64, default='rgba(59, 130, 246, 0.15)')
+    icon_name = models.CharField(max_length=64, default='Tag')
+    description = models.CharField(max_length=255, blank=True, default='')
+    keywords = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        unique_together = ('user', 'dimension', 'slug')
+
+    def __str__(self):
+        return f"[{self.dimension}] {self.name} ({self.user})"
+
+
 class Clip(models.Model):
     STATUS_PENDING = 'pending'
     STATUS_PROCESSING = 'processing'
