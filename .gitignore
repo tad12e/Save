@@ -43,3 +43,7 @@ mcp_config.json
 # Redis database dump files
 *.rdb
 dump.rdb
+
+# Android bug reports & archive dumps
+bugreport*.zip
+*.zip
