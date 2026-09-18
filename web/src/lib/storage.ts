@@ -124,10 +124,10 @@ export const saveStoredJobs = (jobs: JobCard[]): void => {
 export const getStoredLogs = (): ConnectionSyncLog[] => {
   try {
     const item = localStorage.getItem(LOGS_KEY);
-    return item ? JSON.parse(item) : INITIAL_SYNC_LOGS;
+    return item ? JSON.parse(item) : [];
   } catch (e) {
     console.error('Error loading sync logs', e);
-    return INITIAL_SYNC_LOGS;
+    return [];
   }
 };
 

@@ -489,52 +489,7 @@ export const INITIAL_JOBS: JobCard[] = [
   }
 ];
 
-export const INITIAL_SYNC_LOGS: ConnectionSyncLog[] = [
-  {
-    id: 'log_1',
-    destinationId: 'dest_sheets',
-    destinationName: 'Google Sheets',
-    clipTitle: 'Senior Frontend Engineer (React & TypeScript) - Remote',
-    status: 'success',
-    timestamp: '2026-08-09T04:12:02Z',
-    durationMs: 340,
-    payloadSize: '1.2 KB',
-    details: 'Appended row 143 to "Clipper Opportunities 2026.xlsx"'
-  },
-  {
-    id: 'log_2',
-    destinationId: 'dest_notion',
-    destinationName: 'Notion Database',
-    clipTitle: 'Senior Frontend Engineer (React & TypeScript) - Remote',
-    status: 'success',
-    timestamp: '2026-08-09T04:12:03Z',
-    durationMs: 510,
-    payloadSize: '2.4 KB',
-    details: 'Created database record in "Career & Tech Clips DB"'
-  },
-  {
-    id: 'log_3',
-    destinationId: 'dest_webhook',
-    destinationName: 'Custom Webhook',
-    clipTitle: 'Global AI Founders Hackathon 2026',
-    status: 'success',
-    timestamp: '2026-08-08T18:30:01Z',
-    durationMs: 180,
-    payloadSize: '0.9 KB',
-    details: 'HTTP 200 OK returned from api.mycompany.com'
-  },
-  {
-    id: 'log_4',
-    destinationId: 'dest_sheets',
-    destinationName: 'Google Sheets',
-    clipTitle: 'OpenAI Developer Fellowship 2026',
-    status: 'success',
-    timestamp: '2026-08-08T11:15:02Z',
-    durationMs: 290,
-    payloadSize: '1.4 KB',
-    details: 'Appended row 142 to "Clipper Opportunities 2026.xlsx"'
-  }
-];
+export const INITIAL_SYNC_LOGS: ConnectionSyncLog[] = [];
 
 export const INITIAL_SHARED_BOARDS: SharedBoard[] = [
   {

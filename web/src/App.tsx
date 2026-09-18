@@ -43,6 +43,8 @@ import {
 import { 
   createClipBackend, 
   fetchDestinationsBackend,
+  fetchDestinationLogsBackend,
+  createDestinationLogBackend,
   fetchCustomPagesBackend,
   createCustomPageBackend,
   deleteCustomPageBackend,
@@ -117,12 +119,17 @@ export default function App() {
   // Fetch real destinations, clips, custom pages & dashboard from Django backend on mount
   useEffect(() => {
     async function loadBackendData() {
-      const [backendDestList, backendClips, backendPages, backendDashboard] = await Promise.all([
+      const [backendDestResult, backendClips, backendPages, backendDashboard, backendLogsResult] = await Promise.all([
         fetchDestinationsBackend(),
         fetchClipsBackend(),
         fetchCustomPagesBackend(),
         fetchClipsDashboardBackend(),
+        fetchDestinationLogsBackend(),
       ]);
+
+      const backendDestList = Array.isArray(backendDestResult)
+        ? backendDestResult
+        : (backendDestResult && Array.isArray((backendDestResult as any).data) ? (backendDestResult as any).data : null);
 
       if (backendDashboard) {
         setDashboardData(backendDashboard);
@@ -141,20 +148,20 @@ export default function App() {
         liveClips = backendClips;
       }
 
-      // Sync destinations with true backend status and real clip counts
+      // Sync destinations strictly with true live backend status from Django
       if (backendDestList && Array.isArray(backendDestList)) {
         const defaultBackend = backendDestList.find((b: any) => b.is_default);
 
         setDestinations(prev => {
           return prev.map(localDest => {
-            // Save Vault always uses exact count of active database clips
             if (localDest.id === 'dest_save_vault' || localDest.type === 'custom_db') {
               const match = backendDestList.find((b: any) => b.provider === 'custom_db' || b.id === localDest.id);
+              const isConnected = Boolean(match && match.is_active);
               return {
                 ...localDest,
-                connected: true,
-                status: 'active',
-                isDefault: match ? Boolean(match.is_default) : true,
+                connected: isConnected,
+                status: isConnected ? 'active' : 'disconnected',
+                isDefault: match ? Boolean(match.is_default) : false,
                 itemsSyncedCount: liveClips.length,
               };
             }
@@ -162,20 +169,21 @@ export default function App() {
             const match = backendDestList.find((b: any) => 
               b.id === localDest.id || b.provider === localDest.type || b.name.toLowerCase() === localDest.name.toLowerCase()
             );
-            if (match) {
+            if (match && match.is_active) {
               const isThisDefault = defaultBackend ? match.id === defaultBackend.id : match.is_default;
               const syncedCount = liveClips.filter(c => c.syncedTo?.includes(match.provider)).length;
               return {
                 ...localDest,
                 id: match.id,
                 isDefault: Boolean(isThisDefault),
-                connected: Boolean(match.is_active),
-                status: match.is_active ? 'active' : 'disconnected',
+                connected: true,
+                status: 'active',
                 itemsSyncedCount: syncedCount,
                 targetResourceName: match.config?.target_resource_name || localDest.targetResourceName
               };
             }
 
+            // Strictly disconnected if not in backend database
             return {
               ...localDest,
               isDefault: false,
@@ -185,6 +193,15 @@ export default function App() {
             };
           });
         });
+      } else {
+        // If backend returned error or unauthenticated, disconnect all destinations
+        setDestinations(prev => prev.map(d => ({
+          ...d,
+          connected: false,
+          isDefault: false,
+          status: 'disconnected',
+          itemsSyncedCount: 0
+        })));
       }
 
       // Load custom pages/workspaces from backend
@@ -196,6 +213,13 @@ export default function App() {
           converted.forEach(p => map.set(p.slug || p.id, p));
           return Array.from(map.values());
         });
+      }
+
+      // Sync real persistent destination logs from Django PostgreSQL backend
+      if (backendLogsResult && Array.isArray(backendLogsResult.data)) {
+        setLogs(backendLogsResult.data);
+      } else if (backendLogsResult && backendLogsResult.status === 401) {
+        setLogs([]);
       }
     }
     loadBackendData();
@@ -236,30 +260,55 @@ export default function App() {
       fetchDestinationsBackend(),
       fetchCustomPagesBackend(),
       fetchClipsDashboardBackend(),
-    ]).then(([backendClips, backendDestList, , backendDashboard]) => {
+      fetchDestinationLogsBackend(),
+    ]).then(([backendClips, backendDestResult, , backendDashboard, backendLogsResult]) => {
       if (backendClips && Array.isArray(backendClips)) {
         setClips(backendClips);
       }
       if (backendDashboard) {
         setDashboardData(backendDashboard);
       }
+      if (backendLogsResult && Array.isArray(backendLogsResult.data)) {
+        setLogs(backendLogsResult.data);
+      }
+      const backendDestList = Array.isArray(backendDestResult)
+        ? backendDestResult
+        : (backendDestResult && Array.isArray((backendDestResult as any).data) ? (backendDestResult as any).data : null);
+
       if (backendDestList && Array.isArray(backendDestList)) {
+        const defaultBackend = backendDestList.find((b: any) => b.is_default);
         setDestinations(prev => {
           return prev.map(localDest => {
             if (localDest.id === 'dest_save_vault' || localDest.type === 'custom_db') {
+              const match = backendDestList.find((b: any) => b.provider === 'custom_db' || b.id === localDest.id);
+              const isConnected = Boolean(match && match.is_active);
               return {
                 ...localDest,
-                connected: true,
-                status: 'active',
+                connected: isConnected,
+                status: isConnected ? 'active' : 'disconnected',
+                isDefault: match ? Boolean(match.is_default) : false,
                 itemsSyncedCount: (backendClips || clips).length,
               };
             }
-            const match = backendDestList.find((b: any) => b.id === localDest.id || b.provider === localDest.type);
+            const match = backendDestList.find((b: any) => b.id === localDest.id || b.provider === localDest.type || b.name.toLowerCase() === localDest.name.toLowerCase());
+            if (match && match.is_active) {
+              const isThisDefault = defaultBackend ? match.id === defaultBackend.id : match.is_default;
+              return {
+                ...localDest,
+                id: match.id,
+                isDefault: Boolean(isThisDefault),
+                connected: true,
+                status: 'active',
+                itemsSyncedCount: (backendClips || clips).filter(c => c.syncedTo?.includes(match.provider)).length,
+                targetResourceName: match.config?.target_resource_name || localDest.targetResourceName
+              };
+            }
             return {
               ...localDest,
-              connected: match ? Boolean(match.is_active) : false,
-              status: match?.is_active ? 'active' : 'disconnected',
-              itemsSyncedCount: match ? (backendClips || clips).filter(c => c.syncedTo?.includes(match.provider)).length : 0,
+              isDefault: false,
+              connected: false,
+              status: 'disconnected',
+              itemsSyncedCount: 0,
             };
           });
         });
@@ -332,6 +381,23 @@ export default function App() {
         details: `Saved to the backend and queued for processing and export to ${targetDest.targetResourceName || targetDest.name}`
       };
       setLogs(prev => [newLog, ...prev]);
+
+      createDestinationLogBackend({
+        destinationId: targetDest.id,
+        destinationName: targetDest.name,
+        clipId: backendClip.id,
+        clipTitle: newClip.title,
+        status: 'pending',
+        durationMs: 0,
+        payloadSize: 'Queued',
+        details: `Saved to the backend and queued for processing and export to ${targetDest.targetResourceName || targetDest.name}`
+      }).then(persisted => {
+        if (persisted && persisted.id) {
+          setLogs(prev => prev.map(l => l.id === newLog.id ? persisted : l));
+        }
+      }).catch(err => {
+        console.warn('Could not persist sync log to backend:', err);
+      });
 
       triggerToast(`Saved. Processing and export to ${targetDest.name} are queued.`);
       return true;
@@ -408,6 +474,23 @@ export default function App() {
     };
     setLogs(prev => [newLog, ...prev]);
     triggerToast(`Synced to ${targetDest.name}!`);
+
+    createDestinationLogBackend({
+      destinationId: targetDest.id,
+      destinationName: targetDest.name,
+      clipId: clip.id,
+      clipTitle: clip.title,
+      status: 'success',
+      durationMs: 310,
+      payloadSize: '1.6 KB',
+      details: `Exported clip to ${targetDest.targetResourceName || targetDest.name}`
+    }).then(persisted => {
+      if (persisted && persisted.id) {
+        setLogs(prev => prev.map(l => l.id === newLog.id ? persisted : l));
+      }
+    }).catch(err => {
+      console.warn('Could not persist send log to backend:', err);
+    });
   };
 
   const handleOpenAddClipForPage = (pageId?: string) => {
@@ -426,7 +509,37 @@ export default function App() {
     fetchClipsBackend().then(backendClips => {
       if (backendClips && backendClips.length > 0) setClips(backendClips);
     });
-    fetchDestinationsBackend();
+    fetchDestinationLogsBackend().then(res => {
+      if (res && Array.isArray(res.data)) {
+        setLogs(res.data);
+      }
+    });
+    fetchDestinationsBackend().then(res => {
+      const list = Array.isArray(res) ? res : (res && Array.isArray((res as any).data) ? (res as any).data : null);
+      if (list && Array.isArray(list)) {
+        const defaultBackend = list.find((b: any) => b.is_default);
+        setDestinations(prev => prev.map(localDest => {
+          const match = list.find((b: any) => b.id === localDest.id || b.provider === localDest.type || b.name.toLowerCase() === localDest.name.toLowerCase());
+          if (match && match.is_active) {
+            return {
+              ...localDest,
+              id: match.id,
+              isDefault: defaultBackend ? match.id === defaultBackend.id : Boolean(match.is_default),
+              connected: true,
+              status: 'active',
+              targetResourceName: match.config?.target_resource_name || localDest.targetResourceName
+            };
+          }
+          return {
+            ...localDest,
+            isDefault: false,
+            connected: false,
+            status: 'disconnected',
+            itemsSyncedCount: 0
+          };
+        }));
+      }
+    });
   };
 
   const handleLogout = () => {
@@ -434,6 +547,14 @@ export default function App() {
     localStorage.removeItem('clipper_user');
     localStorage.removeItem('clipper_access_token');
     localStorage.removeItem('clipper_refresh_token');
+    setDestinations(prev => prev.map(d => ({
+      ...d,
+      connected: false,
+      isDefault: false,
+      status: 'disconnected',
+      itemsSyncedCount: 0
+    })));
+    setLogs([]);
     triggerToast('Logged out successfully.');
   };
 

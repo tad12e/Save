@@ -4,7 +4,8 @@ import {
   testDestinationBackend, 
   setDefaultDestinationBackend, 
   updateDestinationBackend,
-  beautifySheetBackend
+  beautifySheetBackend,
+  fetchDestinationsBackend
 } from '../../lib/api';
 import { 
   DestinationConfig, 
@@ -331,6 +332,48 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     window.history.replaceState(null, '', cleanUrl);
   }, [setDestinations]);
 
+  // Strictly sync destinations with live Django backend on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function syncBackendDestinations() {
+      try {
+        const res = await fetchDestinationsBackend();
+        if (!isMounted) return;
+        if (res && res.data && Array.isArray(res.data)) {
+          const backendList = res.data;
+          const defaultBackend = backendList.find((b: any) => b.is_default);
+          setDestinations(prev =>
+            prev.map(localDest => {
+              const match = backendList.find((b: any) =>
+                b.id === localDest.id || b.provider === localDest.type || b.name.toLowerCase() === localDest.name.toLowerCase()
+              );
+              if (match && match.is_active) {
+                return {
+                  ...localDest,
+                  id: match.id,
+                  isDefault: defaultBackend ? match.id === defaultBackend.id : Boolean(match.is_default),
+                  connected: true,
+                  status: 'active' as const,
+                  targetResourceName: match.config?.target_resource_name || localDest.targetResourceName,
+                };
+              }
+              return {
+                ...localDest,
+                isDefault: false,
+                connected: false,
+                status: 'disconnected' as const,
+              };
+            })
+          );
+        }
+      } catch (err) {
+        console.error('Error fetching live backend destinations', err);
+      }
+    }
+    syncBackendDestinations();
+    return () => { isMounted = false; };
+  }, [setDestinations]);
+
 
   // Recent Activity Card Filter & Search State (Stitch Part 4)
   const [activityStatusFilter, setActivityStatusFilter] = useState<'all' | 'success' | 'pending' | 'failed'>('all');
@@ -425,56 +468,54 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     const targetDest = destinations.find(d => d.id === destId);
     if (!targetDest) return;
 
-    // Call backend endpoint to trigger OAuth consent / authorize scope based on Full vs Partial choice
-    const backendRes = await authorizeDestinationBackend({
-      provider: targetDest.type,
-      name: targetDest.name,
-      accessType: options.accessType,
-      actionType: options.actionType,
-      targetResourceName: options.tableName || targetDest.targetResourceName || 'Clipped Vault 2026',
-      accountEmail: targetDest.accountEmail || 'user@gmail.com'
-    });
+    try {
+      // Call backend endpoint to trigger OAuth consent / authorize scope based on Full vs Partial choice
+      const backendRes = await authorizeDestinationBackend({
+        provider: targetDest.type,
+        name: targetDest.name,
+        accessType: options.accessType,
+        actionType: options.actionType,
+        targetResourceName: options.tableName || targetDest.targetResourceName || 'Clipped Vault 2026',
+        accountEmail: targetDest.accountEmail || 'user@gmail.com'
+      });
 
-    setDestinations(prev =>
-      prev.map(d => {
-        if (d.id === destId) {
-          return {
-            ...d,
-            connected: true,
-            status: 'active',
-            lastSync: 'Just now',
-            targetResourceName: options.tableName || d.targetResourceName || 'Clipped Vault 2026',
-            autoCreateColumns: options.accessType === 'full',
-            authKeyMasked: '•••••••••••••••• (OAuth Token Active)'
-          };
-        }
-        return d;
-      })
-    );
+      // Forward browser directly to OAuth permission consent page if auth_url is returned
+      if (backendRes && backendRes.auth_url) {
+        setOauthModalDest(null);
+        window.location.href = backendRes.auth_url;
+        return;
+      }
 
-    const scopeListStr = backendRes.granted_scopes ? backendRes.granted_scopes.join(', ') : options.accessType;
-    const newLog: ConnectionSyncLog = {
-      id: `log_${Date.now()}`,
-      destinationId: destId,
-      destinationName: targetDest.name,
-      clipTitle: `OAUTH GRANT: ${options.accessType.toUpperCase()} Access (${backendRes.status.toUpperCase()})`,
-      status: 'success',
-      timestamp: new Date().toISOString(),
-      durationMs: 340,
-      payloadSize: '1.2 KB',
-      details: `Backend Authorized [${options.accessType.toUpperCase()}]. Scopes: ${scopeListStr}. Resource: "${options.tableName}"`
-    };
-    setLogs(prev => [newLog, ...prev]);
-
-    setOauthModalDest(null);
-    setConnectionSuccessToast(`Successfully authorized & connected ${targetDest.name}! Live sync enabled.`);
-    setTimeout(() => {
-      setConnectionSuccessToast(null);
-    }, 4500);
-
-    // Forward browser directly to Google OAuth permission consent page
-    if (backendRes && backendRes.auth_url) {
-      window.location.href = backendRes.auth_url;
+      // If non-OAuth direct destination (e.g. Webhook) was successfully activated on backend
+      if (backendRes && backendRes.destination && backendRes.destination.is_active) {
+        setDestinations(prev =>
+          prev.map(d => {
+            if (d.id === destId || d.type === targetDest.type) {
+              return {
+                ...d,
+                id: backendRes.destination.id,
+                connected: true,
+                status: 'active' as const,
+                lastSync: 'Just now',
+                targetResourceName: options.tableName || d.targetResourceName || 'Production Webhook',
+                autoCreateColumns: options.accessType === 'full',
+              };
+            }
+            return d;
+          })
+        );
+        setOauthModalDest(null);
+        setConnectionSuccessToast(`Successfully authorized & connected ${targetDest.name}!`);
+        setTimeout(() => {
+          setConnectionSuccessToast(null);
+        }, 4500);
+      } else {
+        setOauthModalDest(null);
+      }
+    } catch (err: any) {
+      console.error('Authorization error:', err);
+      alert(err.message || 'Could not authorize destination.');
+      setOauthModalDest(null);
     }
   };
 
@@ -496,31 +537,47 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     setTestSyncLoadingId(dest.id);
     setTestSyncSuccessId(null);
 
-    const pingRes = await testDestinationBackend(dest.id);
-    const latency = pingRes?.latency_ms || Math.floor(Math.random() * 200) + 180;
-    const targetName = pingRes?.target || dest.targetResourceName || 'Endpoint';
+    try {
+      const pingRes = await testDestinationBackend(dest.id);
+      const latency = pingRes?.latency_ms || Math.floor(Math.random() * 200) + 180;
+      const targetName = pingRes?.target || dest.targetResourceName || 'Endpoint';
 
-    setTestSyncLoadingId(null);
-    setTestSyncSuccessId(dest.id);
+      setTestSyncLoadingId(null);
+      setTestSyncSuccessId(dest.id);
 
-    // Append log entry
-    const newLog: ConnectionSyncLog = {
-      id: `log_${Date.now()}`,
-      destinationId: dest.id,
-      destinationName: dest.name,
-      clipTitle: 'PING TEST: Live Connection Verified',
-      status: 'success',
-      timestamp: new Date().toISOString(),
-      durationMs: latency,
-      payloadSize: '0.8 KB',
-      details: `Connection verified OK to target "${targetName}" (${latency}ms)`
-    };
+      // Append log entry
+      const newLog: ConnectionSyncLog = {
+        id: `log_${Date.now()}`,
+        destinationId: dest.id,
+        destinationName: dest.name,
+        clipTitle: 'PING TEST: Live Connection Verified',
+        status: 'success',
+        timestamp: new Date().toISOString(),
+        durationMs: latency,
+        payloadSize: '0.8 KB',
+        details: `Connection verified OK to target "${targetName}" (${latency}ms)`
+      };
 
-    setLogs(prev => [newLog, ...prev]);
+      setLogs(prev => [newLog, ...prev]);
 
-    setTimeout(() => {
-      setTestSyncSuccessId(null);
-    }, 3000);
+      setTimeout(() => {
+        setTestSyncSuccessId(null);
+      }, 3000);
+    } catch (err: any) {
+      setTestSyncLoadingId(null);
+      const errLog: ConnectionSyncLog = {
+        id: `log_${Date.now()}`,
+        destinationId: dest.id,
+        destinationName: dest.name,
+        clipTitle: 'PING TEST: Connection Failed',
+        status: 'failed',
+        timestamp: new Date().toISOString(),
+        durationMs: 0,
+        payloadSize: '0 KB',
+        details: err?.message || 'Could not connect'
+      };
+      setLogs(prev => [errLog, ...prev]);
+    }
   };
 
   // Retroactive Executive Beautify for Google Sheets
@@ -677,7 +734,9 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     }
   ];
 
-  const dynamicActivityItems = (logs || []).map(l => ({
+  const dynamicActivityItems = (logs || [])
+    .filter(l => !l.clipTitle?.startsWith('OAUTH GRANT'))
+    .map(l => ({
     id: l.id,
     destination: l.destinationName,
     destinationType: l.destinationName.toLowerCase().includes('notion') ? 'notion' : l.destinationName.toLowerCase().includes('sheet') ? 'google_sheets' : l.destinationName.toLowerCase().includes('airtable') ? 'airtable' : 'webhook',
@@ -693,7 +752,8 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     payloadSize: l.payloadSize
   }));
 
-  const allActivityItems = [...dynamicActivityItems, ...defaultRecentActivity];
+  // Real activity only from live logs - no mock logs!
+  const allActivityItems = dynamicActivityItems;
 
   const filteredActivity = allActivityItems.filter(item => {
     const matchesStatus = activityStatusFilter === 'all' || item.status === activityStatusFilter;
@@ -704,7 +764,6 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     return matchesStatus && matchesQuery;
   });
 
-  const activeCount = destinations.filter(d => d.connected).length;
   const totalSyncedSum = destinations.reduce((acc, curr) => acc + curr.itemsSyncedCount, 0);
 
   const notionDest = destinations.find(d => d.type === 'notion' || d.name.toLowerCase().includes('notion')) || {
@@ -712,12 +771,12 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     type: 'notion' as const,
     name: 'Notion',
     description: 'Sync saved notes, clips, and summaries to your workspace database.',
-    connected: true,
-    isDefault: true,
-    status: 'active' as const,
-    lastSync: '12m ago',
-    itemsSyncedCount: 42,
-    targetResourceName: 'Reading List & Research DB',
+    connected: false,
+    isDefault: false,
+    status: 'disconnected' as const,
+    lastSync: 'Never',
+    itemsSyncedCount: 0,
+    targetResourceName: 'Connect a Notion Database...',
     syncFrequency: 'instant' as const,
     autoCreateColumns: true,
     fieldMappings: []
@@ -728,12 +787,12 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     type: 'google_sheets' as const,
     name: 'Google Sheets',
     description: 'Append clipped research and tabular data directly to spreadsheets.',
-    connected: true,
+    connected: false,
     isDefault: false,
-    status: 'active' as const,
-    lastSync: '2m ago',
-    itemsSyncedCount: 88,
-    targetResourceName: 'Clipped Opportunities 2026',
+    status: 'disconnected' as const,
+    lastSync: 'Never',
+    itemsSyncedCount: 0,
+    targetResourceName: 'Connect a Google Sheet...',
     syncFrequency: 'instant' as const,
     autoCreateColumns: true,
     fieldMappings: []
@@ -744,12 +803,12 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     type: 'airtable' as const,
     name: 'Airtable',
     description: 'Map opportunities and job leads into relational talent pipelines.',
-    connected: true,
+    connected: false,
     isDefault: false,
-    status: 'active' as const,
-    lastSync: '1h ago',
-    itemsSyncedCount: 31,
-    targetResourceName: 'Hiring & Career Pipeline',
+    status: 'disconnected' as const,
+    lastSync: 'Never',
+    itemsSyncedCount: 0,
+    targetResourceName: 'Select an Airtable Base...',
     syncFrequency: 'instant' as const,
     autoCreateColumns: true,
     fieldMappings: []
@@ -760,11 +819,11 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     type: 'webhook' as const,
     name: 'Webhook',
     description: 'Send real-time JSON payloads to your custom API or automations.',
-    connected: true,
+    connected: false,
     isDefault: false,
-    status: 'active' as const,
-    lastSync: '45m ago',
-    itemsSyncedCount: 19,
+    status: 'disconnected' as const,
+    lastSync: 'Never',
+    itemsSyncedCount: 0,
     targetResourceName: 'Production Webhook',
     syncFrequency: 'instant' as const,
     autoCreateColumns: true,
@@ -803,6 +862,9 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
     fieldMappings: []
   };
 
+  const syncDestList = [notionDest, sheetsDest, airtableDest, webhookDest, spotifyDest, ytMusicDest];
+  const activeCount = syncDestList.filter(d => d.connected).length;
+
   return (
     <div
       className={`w-full min-h-screen transition-colors duration-200 ${
@@ -838,7 +900,7 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                   isDark ? 'bg-[#3FE769] animate-pulse' : 'bg-emerald-600'
                 }`}
               />
-              <span>{activeCount > 0 ? `${activeCount} of 6 connected` : '4 of 6 connected'}</span>
+              <span>{activeCount} of 6 connected</span>
             </span>
             <button
               onClick={() => setShowAddDestinationModal(true)}
@@ -870,12 +932,16 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {/* Card 1: Notion (Connected & Default) */}
+            {/* Card 1: Notion */}
             <div
               className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
-                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                notionDest.connected
+                  ? isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                  : isDark
+                    ? 'bg-[#0E0E0E] border-dashed border-[#2A2A2A] hover:border-[#3E3E3E]'
+                    : 'bg-white border-dashed border-slate-200 hover:border-slate-300 shadow-sm'
               }`}
             >
               <div className="flex flex-col gap-3.5">
@@ -895,122 +961,161 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                       <div className="flex items-center gap-1.5">
                         <span
                           className={`font-semibold text-sm ${
-                            isDark ? 'text-white' : 'text-slate-900'
+                            isDark ? (notionDest.connected ? 'text-white' : 'text-[#D1D5DB]') : (notionDest.connected ? 'text-slate-900' : 'text-slate-700')
                           }`}
                           style={{ fontFamily: 'Outfit, sans-serif' }}
                         >
                           Notion
                         </span>
-                        <span
-                          className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 ${
-                            isDark
-                              ? 'text-amber-400 bg-amber-950/40 border border-amber-800/50'
-                              : 'text-amber-700 bg-amber-50 border border-amber-200/60'
-                          }`}
-                        >
-                          ★ Default
-                        </span>
+                        {notionDest.connected && notionDest.isDefault && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 ${
+                              isDark
+                                ? 'text-amber-400 bg-amber-950/40 border border-amber-800/50'
+                                : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                            }`}
+                          >
+                            ★ Default
+                          </span>
+                        )}
                       </div>
                       <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
                         Database Workspace
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
-                      isDark
-                        ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
-                        : 'bg-emerald-50 text-emerald-700'
-                    }`}
-                  >
+                  {notionDest.connected ? (
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                          : 'bg-emerald-50 text-emerald-700'
                       }`}
-                    />
-                    Connected
-                  </span>
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'
+                        }`}
+                      />
+                      Connected
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      Not connected
+                    </span>
+                  )}
                 </div>
 
                 {/* Description */}
                 <p
                   className={`text-xs leading-relaxed min-h-[34px] ${
-                    isDark ? 'text-[#A1A1A1]' : 'text-slate-500'
+                    isDark ? (notionDest.connected ? 'text-[#A1A1A1]' : 'text-[#878787]') : 'text-slate-500'
                   }`}
                 >
                   Sync saved notes, clips, and summaries to your workspace database.
                 </p>
 
                 {/* Target Row */}
-                <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
-                    isDark
-                      ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]'
-                      : 'bg-slate-50 border border-slate-100 text-slate-600'
-                  }`}
-                >
-                  <Table className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span className="text-xs font-medium truncate">
-                    Target: {notionDest.targetResourceName && !notionDest.targetResourceName.includes('Connect') ? notionDest.targetResourceName : 'Reading List & Research DB'}
-                  </span>
-                </div>
+                {notionDest.connected ? (
+                  <div
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                      isDark
+                        ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]'
+                        : 'bg-slate-50 border border-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <Table className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-xs font-medium truncate">
+                      Target: {notionDest.targetResourceName && !notionDest.targetResourceName.includes('Connect') ? notionDest.targetResourceName : 'Reading List & Research DB'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="h-[36px]" />
+                )}
               </div>
 
               {/* Footer row */}
-              <div
-                className={`flex items-center justify-between pt-4 mt-4 border-t ${
-                  isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
-                }`}
-              >
-                <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
-                  Last synced {notionDest.lastSync && notionDest.lastSync !== 'Never' ? notionDest.lastSync : '12m ago'}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleTestPing(notionDest)}
-                    disabled={testSyncLoadingId === notionDest.id}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                      isDark
-                        ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
-                        : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
-                    }`}
-                    type="button"
-                  >
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 ${
-                        testSyncLoadingId === notionDest.id ? 'animate-spin text-[#3FE769]' : ''
+              {notionDest.connected ? (
+                <div
+                  className={`flex items-center justify-between pt-4 mt-4 border-t ${
+                    isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
+                  }`}
+                >
+                  <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                    Last synced {notionDest.lastSync && notionDest.lastSync !== 'Never' ? notionDest.lastSync : 'Never'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTestPing(notionDest)}
+                      disabled={testSyncLoadingId === notionDest.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                        isDark
+                          ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                          : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
                       }`}
-                    />
-                    <span>
-                      {testSyncLoadingId === notionDest.id
-                        ? 'Syncing...'
-                        : testSyncSuccessId === notionDest.id
-                        ? 'Synced!'
-                        : 'Sync'}
-                    </span>
-                  </button>
+                      type="button"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${
+                          testSyncLoadingId === notionDest.id ? 'animate-spin text-[#3FE769]' : ''
+                        }`}
+                      />
+                      <span>
+                        {testSyncLoadingId === notionDest.id
+                          ? 'Syncing...'
+                          : testSyncSuccessId === notionDest.id
+                          ? 'Synced!'
+                          : 'Sync'}
+                      </span>
+                    </button>
+                    <button
+                      aria-label="Settings"
+                      onClick={() => setSelectedDestForConfig(notionDest)}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                        isDark
+                          ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
+                          : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                      }`}
+                      type="button"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
                   <button
-                    aria-label="Settings"
-                    onClick={() => setSelectedDestForConfig(notionDest)}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                    onClick={() => setOauthModalDest(notionDest)}
+                    className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
                       isDark
-                        ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
-                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                        ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
+                        : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
                     }`}
                     type="button"
                   >
-                    <Settings className="w-4 h-4" />
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Connect Notion</span>
                   </button>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Card 2: Google Sheets (Connected) */}
+            {/* Card 2: Google Sheets */}
             <div
               className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
-                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                sheetsDest.connected
+                  ? isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                  : isDark
+                    ? 'bg-[#0E0E0E] border-dashed border-[#2A2A2A] hover:border-[#3E3E3E]'
+                    : 'bg-white border-dashed border-slate-200 hover:border-slate-300 shadow-sm'
               }`}
             >
               <div className="flex flex-col gap-3.5">
@@ -1020,21 +1125,34 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                         isDark
-                          ? 'bg-[#0E2015] border border-[#194429]'
-                          : 'bg-emerald-50 border border-emerald-100 shadow-sm'
+                          ? sheetsDest.connected ? 'bg-[#0E2015] border border-[#194429]' : 'bg-[#181818] border border-[#262626]'
+                          : sheetsDest.connected ? 'bg-emerald-50 border border-emerald-100 shadow-sm' : 'bg-slate-50 border border-slate-100'
                       }`}
                     >
                       <GoogleSheetsIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <span
-                        className={`font-semibold text-sm ${
-                          isDark ? 'text-white' : 'text-slate-900'
-                        }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        Google Sheets
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-semibold text-sm ${
+                            isDark ? (sheetsDest.connected ? 'text-white' : 'text-[#D1D5DB]') : (sheetsDest.connected ? 'text-slate-900' : 'text-slate-700')
+                          }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          Google Sheets
+                        </span>
+                        {sheetsDest.connected && sheetsDest.isDefault && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 ${
+                              isDark
+                                ? 'text-amber-400 bg-amber-950/40 border border-amber-800/50'
+                                : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                            }`}
+                          >
+                            ★ Default
+                          </span>
+                        )}
+                      </div>
                       <span
                         className={`block text-xs ${
                           isDark ? 'text-[#878787]' : 'text-slate-400'
@@ -1044,101 +1162,138 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
-                      isDark
-                        ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
-                        : 'bg-emerald-50 text-emerald-700'
-                    }`}
-                  >
+                  {sheetsDest.connected ? (
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                          : 'bg-emerald-50 text-emerald-700'
                       }`}
-                    />
-                    Connected
-                  </span>
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'
+                        }`}
+                      />
+                      Connected
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      Not connected
+                    </span>
+                  )}
                 </div>
 
                 {/* Description */}
                 <p
                   className={`text-xs leading-relaxed min-h-[34px] ${
-                    isDark ? 'text-[#A1A1A1]' : 'text-slate-500'
+                    isDark ? (sheetsDest.connected ? 'text-[#A1A1A1]' : 'text-[#878787]') : 'text-slate-500'
                   }`}
                 >
                   Append clipped research and tabular data directly to spreadsheets.
                 </p>
 
                 {/* Target Row */}
-                <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
-                    isDark
-                      ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]'
-                      : 'bg-slate-50 border border-slate-100 text-slate-600'
-                  }`}
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span className="text-xs font-medium truncate">
-                    Target: {sheetsDest.targetResourceName && !sheetsDest.targetResourceName.includes('Connect') ? sheetsDest.targetResourceName : 'Clipped Opportunities 2026'}
-                  </span>
-                </div>
+                {sheetsDest.connected ? (
+                  <div
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                      isDark
+                        ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]'
+                        : 'bg-slate-50 border border-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-xs font-medium truncate">
+                      Target: {sheetsDest.targetResourceName && !sheetsDest.targetResourceName.includes('Connect') ? sheetsDest.targetResourceName : 'Clipper Opportunities 2026.xlsx'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="h-[36px]" />
+                )}
               </div>
 
               {/* Footer row */}
-              <div
-                className={`flex items-center justify-between pt-4 mt-4 border-t ${
-                  isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
-                }`}
-              >
-                <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
-                  Last synced {sheetsDest.lastSync && sheetsDest.lastSync !== 'Never' ? sheetsDest.lastSync : '2m ago'}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleTestPing(sheetsDest)}
-                    disabled={testSyncLoadingId === sheetsDest.id}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                      isDark
-                        ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
-                        : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
-                    }`}
-                    type="button"
-                  >
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 ${
-                        testSyncLoadingId === sheetsDest.id ? 'animate-spin text-[#3FE769]' : ''
+              {sheetsDest.connected ? (
+                <div
+                  className={`flex items-center justify-between pt-4 mt-4 border-t ${
+                    isDark ? 'border-[#1F1F1F]' : 'border-slate-100'
+                  }`}
+                >
+                  <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                    Last synced {sheetsDest.lastSync && sheetsDest.lastSync !== 'Never' ? sheetsDest.lastSync : 'Just now'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTestPing(sheetsDest)}
+                      disabled={testSyncLoadingId === sheetsDest.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                        isDark
+                          ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                          : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
                       }`}
-                    />
-                    <span>
-                      {testSyncLoadingId === sheetsDest.id
-                        ? 'Syncing...'
-                        : testSyncSuccessId === sheetsDest.id
-                        ? 'Synced!'
-                        : 'Sync'}
-                    </span>
-                  </button>
+                      type="button"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${
+                          testSyncLoadingId === sheetsDest.id ? 'animate-spin text-[#3FE769]' : ''
+                        }`}
+                      />
+                      <span>
+                        {testSyncLoadingId === sheetsDest.id
+                          ? 'Syncing...'
+                          : testSyncSuccessId === sheetsDest.id
+                          ? 'Synced!'
+                          : 'Sync'}
+                      </span>
+                    </button>
+                    <button
+                      aria-label="Settings"
+                      onClick={() => setSelectedDestForConfig(sheetsDest)}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                        isDark
+                          ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
+                          : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                      }`}
+                      type="button"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
                   <button
-                    aria-label="Settings"
-                    onClick={() => setSelectedDestForConfig(sheetsDest)}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                    onClick={() => setOauthModalDest(sheetsDest)}
+                    className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
                       isDark
-                        ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]'
-                        : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                        ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
+                        : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
                     }`}
                     type="button"
                   >
-                    <Settings className="w-4 h-4" />
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Connect Google Sheets</span>
                   </button>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Card 3: Airtable (Connected) */}
+            {/* Card 3: Airtable */}
             <div
               className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
-                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                airtableDest.connected
+                  ? isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                  : isDark
+                    ? 'bg-[#0E0E0E] border-dashed border-[#2A2A2A] hover:border-[#3E3E3E]'
+                    : 'bg-white border-dashed border-slate-200 hover:border-slate-300 shadow-sm'
               }`}
             >
               <div className="flex flex-col gap-3.5">
@@ -1147,89 +1302,140 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                         isDark
-                          ? 'bg-[#0B1E2D] border border-[#133854]'
-                          : 'bg-sky-50 border border-sky-100 shadow-sm'
+                          ? (airtableDest.connected ? 'bg-[#0B1E2D] border border-[#133854]' : 'bg-[#181818] border border-[#262626]')
+                          : (airtableDest.connected ? 'bg-sky-50 border border-sky-100 shadow-sm' : 'bg-slate-50 border border-slate-100')
                       }`}
                     >
                       <AirtableIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <span
-                        className={`font-semibold text-sm ${
-                          isDark ? 'text-white' : 'text-slate-900'
-                        }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        Airtable
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-semibold text-sm ${
+                            isDark ? (airtableDest.connected ? 'text-white' : 'text-[#D1D5DB]') : (airtableDest.connected ? 'text-slate-900' : 'text-slate-700')
+                          }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          Airtable
+                        </span>
+                        {airtableDest.connected && airtableDest.isDefault && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 ${
+                              isDark
+                                ? 'text-amber-400 bg-amber-950/40 border border-amber-800/50'
+                                : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                            }`}
+                          >
+                            ★ Default
+                          </span>
+                        )}
+                      </div>
                       <span className={`block text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
                         Relational Base
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
-                      isDark
-                        ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
-                        : 'bg-emerald-50 text-emerald-700'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
-                    Connected
-                  </span>
+                  {airtableDest.connected ? (
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                          : 'bg-emerald-50 text-emerald-700'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
+                      Connected
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      Not connected
+                    </span>
+                  )}
                 </div>
-                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? (airtableDest.connected ? 'text-[#A1A1A1]' : 'text-[#878787]') : 'text-slate-500'}`}>
                   Map opportunities and job leads into relational talent pipelines.
                 </p>
-                <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
-                    isDark ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]' : 'bg-slate-50 border border-slate-100 text-slate-600'
-                  }`}
-                >
-                  <Database className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span className="text-xs font-medium truncate">
-                    Target: {airtableDest.targetResourceName || 'Hiring & Career Pipeline'}
+                {airtableDest.connected ? (
+                  <div
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                      isDark ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]' : 'bg-slate-50 border border-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <Database className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-xs font-medium truncate">
+                      Target: {airtableDest.targetResourceName && !airtableDest.targetResourceName.includes('Select') ? airtableDest.targetResourceName : 'Hiring & Career Pipeline'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="h-[36px]" />
+                )}
+              </div>
+
+              {airtableDest.connected ? (
+                <div className={`flex items-center justify-between pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                  <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                    Last synced {airtableDest.lastSync && airtableDest.lastSync !== 'Never' ? airtableDest.lastSync : 'Never'}
                   </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTestPing(airtableDest)}
+                      disabled={testSyncLoadingId === airtableDest.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                        isDark
+                          ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                          : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                      }`}
+                      type="button"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${testSyncLoadingId === airtableDest.id ? 'animate-spin text-[#3FE769]' : ''}`} />
+                      <span>{testSyncLoadingId === airtableDest.id ? 'Syncing...' : testSyncSuccessId === airtableDest.id ? 'Synced!' : 'Sync'}</span>
+                    </button>
+                    <button
+                      aria-label="Settings"
+                      onClick={() => setSelectedDestForConfig(airtableDest)}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                        isDark ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                      }`}
+                      type="button"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div className={`flex items-center justify-between pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
-                <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
-                  Last synced {airtableDest.lastSync || '1h ago'}
-                </span>
-                <div className="flex items-center gap-2">
+              ) : (
+                <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
                   <button
-                    onClick={() => handleTestPing(airtableDest)}
-                    disabled={testSyncLoadingId === airtableDest.id}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                    onClick={() => setOauthModalDest(airtableDest)}
+                    className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
                       isDark
-                        ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
-                        : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                        ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
+                        : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
                     }`}
                     type="button"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${testSyncLoadingId === airtableDest.id ? 'animate-spin text-[#3FE769]' : ''}`} />
-                    <span>{testSyncLoadingId === airtableDest.id ? 'Syncing...' : testSyncSuccessId === airtableDest.id ? 'Synced!' : 'Sync'}</span>
-                  </button>
-                  <button
-                    aria-label="Settings"
-                    onClick={() => setSelectedDestForConfig(airtableDest)}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
-                      isDark ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
-                    }`}
-                    type="button"
-                  >
-                    <Settings className="w-4 h-4" />
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Connect Airtable</span>
                   </button>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Card 4: Webhook (Connected) */}
+            {/* Card 4: Webhook */}
             <div
               className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
-                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                webhookDest.connected
+                  ? isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                  : isDark
+                    ? 'bg-[#0E0E0E] border-dashed border-[#2A2A2A] hover:border-[#3E3E3E]'
+                    : 'bg-white border-dashed border-slate-200 hover:border-slate-300 shadow-sm'
               }`}
             >
               <div className="flex flex-col gap-3.5">
@@ -1238,90 +1444,141 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                         isDark
-                          ? 'bg-[#1C1230] border border-[#311F54] text-[#A855F7]'
-                          : 'bg-purple-50 border border-purple-100 text-[#7C3AED] shadow-sm'
+                          ? (webhookDest.connected ? 'bg-[#1C1230] border border-[#311F54] text-[#A855F7]' : 'bg-[#181818] border border-[#262626] text-[#A855F7]')
+                          : (webhookDest.connected ? 'bg-purple-50 border border-purple-100 text-[#7C3AED] shadow-sm' : 'bg-slate-50 border border-slate-100 text-[#7C3AED]')
                       }`}
                     >
                       <WebhookIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <span
-                        className={`font-semibold text-sm ${
-                          isDark ? 'text-white' : 'text-slate-900'
-                        }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        Webhook
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-semibold text-sm ${
+                            isDark ? (webhookDest.connected ? 'text-white' : 'text-[#D1D5DB]') : (webhookDest.connected ? 'text-slate-900' : 'text-slate-700')
+                          }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          Webhook
+                        </span>
+                        {webhookDest.connected && webhookDest.isDefault && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 ${
+                              isDark
+                                ? 'text-amber-400 bg-amber-950/40 border border-amber-800/50'
+                                : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                            }`}
+                          >
+                            ★ Default
+                          </span>
+                        )}
+                      </div>
                       <span className={`block text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
                         Custom Automation
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
-                      isDark
-                        ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
-                        : 'bg-emerald-50 text-emerald-700'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
-                    Connected
-                  </span>
+                  {webhookDest.connected ? (
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                          : 'bg-emerald-50 text-emerald-700'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
+                      Connected
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      Not connected
+                    </span>
+                  )}
                 </div>
-                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? 'text-[#A1A1A1]' : 'text-slate-500'}`}>
+                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? (webhookDest.connected ? 'text-[#A1A1A1]' : 'text-[#878787]') : 'text-slate-500'}`}>
                   Send real-time JSON payloads to your custom API or automations.
                 </p>
-                <div
-                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
-                    isDark ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]' : 'bg-slate-50 border border-slate-100 text-slate-600'
-                  }`}
-                >
-                  <Zap className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span className="text-xs font-medium truncate">
-                    Target: {webhookDest.targetResourceName || 'Production Webhook'}
+                {webhookDest.connected ? (
+                  <div
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                      isDark ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]' : 'bg-slate-50 border border-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <Zap className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span className="text-xs font-medium truncate">
+                      Target: {webhookDest.targetResourceName || 'Production Webhook'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="h-[36px]" />
+                )}
+              </div>
+
+              {webhookDest.connected ? (
+                <div className={`flex items-center justify-between pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                  <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                    Last synced {webhookDest.lastSync && webhookDest.lastSync !== 'Never' ? webhookDest.lastSync : 'Never'}
                   </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTestPing(webhookDest)}
+                      disabled={testSyncLoadingId === webhookDest.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                        isDark
+                          ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                          : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                      }`}
+                      type="button"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{testSyncLoadingId === webhookDest.id ? 'Testing...' : 'Test'}</span>
+                    </button>
+                    <button
+                      aria-label="Webhook Studio & Payload Runner"
+                      onClick={() => setWebhookStudioDest(webhookDest)}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                        isDark ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                      }`}
+                      type="button"
+                      title="Webhook Studio & Payload Runner"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div className={`flex items-center justify-between pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
-                <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
-                  Last synced {webhookDest.lastSync || '45m ago'}
-                </span>
-                <div className="flex items-center gap-2">
+              ) : (
+                <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
                   <button
-                    onClick={() => handleTestPing(webhookDest)}
-                    disabled={testSyncLoadingId === webhookDest.id}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                    onClick={() => setSelectedDestForConfig(webhookDest)}
+                    className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
                       isDark
-                        ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
-                        : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                        ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
+                        : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
                     }`}
                     type="button"
                   >
-                    <Zap className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{testSyncLoadingId === webhookDest.id ? 'Testing...' : 'Test'}</span>
-                  </button>
-                  <button
-                    aria-label="Webhook Studio & Payload Runner"
-                    onClick={() => setWebhookStudioDest(webhookDest)}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
-                      isDark ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
-                    }`}
-                    type="button"
-                    title="Webhook Studio & Payload Runner"
-                  >
-                    <Settings className="w-4 h-4" />
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Connect Webhook</span>
                   </button>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Card 5: Spotify (Unconnected) */}
+            {/* Card 5: Spotify */}
             <div
-              className={`rounded-2xl border border-dashed p-6 flex flex-col justify-between transition-all duration-200 ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#2A2A2A] hover:border-[#3E3E3E]'
-                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
+                spotifyDest.connected
+                  ? isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                  : isDark
+                    ? 'bg-[#0E0E0E] border-dashed border-[#2A2A2A] hover:border-[#3E3E3E]'
+                    : 'bg-white border-dashed border-slate-200 hover:border-slate-300 shadow-sm'
               }`}
             >
               <div className="flex flex-col gap-3.5">
@@ -1330,63 +1587,140 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                         isDark
-                          ? 'bg-[#181818] border border-[#262626]'
-                          : 'bg-slate-50 border border-slate-100'
+                          ? (spotifyDest.connected ? 'bg-[#0E2015] border border-[#194429]' : 'bg-[#181818] border border-[#262626]')
+                          : (spotifyDest.connected ? 'bg-emerald-50 border border-emerald-100 shadow-sm' : 'bg-slate-50 border border-slate-100')
                       }`}
                     >
                       <SpotifyIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <span
-                        className={`font-semibold text-sm ${
-                          isDark ? 'text-[#D1D5DB]' : 'text-slate-700'
-                        }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        Spotify
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-semibold text-sm ${
+                            isDark ? (spotifyDest.connected ? 'text-white' : 'text-[#D1D5DB]') : (spotifyDest.connected ? 'text-slate-900' : 'text-slate-700')
+                          }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          Spotify
+                        </span>
+                        {spotifyDest.connected && spotifyDest.isDefault && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 ${
+                              isDark
+                                ? 'text-amber-400 bg-amber-950/40 border border-amber-800/50'
+                                : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                            }`}
+                          >
+                            ★ Default
+                          </span>
+                        )}
+                      </div>
                       <span className={`block text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
                         Audio Curation
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
-                      isDark
-                        ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    Not connected
-                  </span>
+                  {spotifyDest.connected ? (
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                          : 'bg-emerald-50 text-emerald-700'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
+                      Connected
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      Not connected
+                    </span>
+                  )}
                 </div>
-                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? (spotifyDest.connected ? 'text-[#A1A1A1]' : 'text-[#878787]') : 'text-slate-500'}`}>
                   Bookmark podcast episodes and audio timestamps to playlists.
                 </p>
-                <div className="h-[36px]" />
+                {spotifyDest.connected ? (
+                  <div
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                      isDark ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]' : 'bg-slate-50 border border-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <Table className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-xs font-medium truncate">
+                      Target: {spotifyDest.targetResourceName || 'Study Playlists & Podcasts'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="h-[36px]" />
+                )}
               </div>
-              <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
-                <button
-                  onClick={() => setOauthModalDest(spotifyDest)}
-                  className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
-                    isDark
-                      ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
-                      : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
-                  }`}
-                  type="button"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Connect Spotify</span>
-                </button>
-              </div>
+
+              {spotifyDest.connected ? (
+                <div className={`flex items-center justify-between pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                  <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                    Last synced {spotifyDest.lastSync && spotifyDest.lastSync !== 'Never' ? spotifyDest.lastSync : 'Never'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTestPing(spotifyDest)}
+                      disabled={testSyncLoadingId === spotifyDest.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                        isDark
+                          ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                          : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                      }`}
+                      type="button"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${testSyncLoadingId === spotifyDest.id ? 'animate-spin text-[#3FE769]' : ''}`} />
+                      <span>{testSyncLoadingId === spotifyDest.id ? 'Syncing...' : testSyncSuccessId === spotifyDest.id ? 'Synced!' : 'Sync'}</span>
+                    </button>
+                    <button
+                      aria-label="Settings"
+                      onClick={() => setSelectedDestForConfig(spotifyDest)}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                        isDark ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                      }`}
+                      type="button"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                  <button
+                    onClick={() => setOauthModalDest(spotifyDest)}
+                    className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                      isDark
+                        ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
+                        : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
+                    }`}
+                    type="button"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Connect Spotify</span>
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Card 6: YouTube Music (Unconnected) */}
+            {/* Card 6: YouTube Music */}
             <div
-              className={`rounded-2xl border border-dashed p-6 flex flex-col justify-between transition-all duration-200 ${
-                isDark
-                  ? 'bg-[#0E0E0E] border-[#2A2A2A] hover:border-[#3E3E3E]'
-                  : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+              className={`rounded-2xl border p-6 flex flex-col justify-between transition-all duration-200 ${
+                ytMusicDest.connected
+                  ? isDark
+                    ? 'bg-[#0E0E0E] border-[#262626] hover:border-[#383838]'
+                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                  : isDark
+                    ? 'bg-[#0E0E0E] border-dashed border-[#2A2A2A] hover:border-[#3E3E3E]'
+                    : 'bg-white border-dashed border-slate-200 hover:border-slate-300 shadow-sm'
               }`}
             >
               <div className="flex flex-col gap-3.5">
@@ -1395,55 +1729,128 @@ export const ConnectionsPage: React.FC<ConnectionsPageProps> = ({
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                         isDark
-                          ? 'bg-[#181818] border border-[#262626]'
-                          : 'bg-slate-50 border border-slate-100'
+                          ? (ytMusicDest.connected ? 'bg-[#2D0B0B] border border-[#4D1515]' : 'bg-[#181818] border border-[#262626]')
+                          : (ytMusicDest.connected ? 'bg-red-50 border border-red-100 shadow-sm' : 'bg-slate-50 border border-slate-100')
                       }`}
                     >
                       <YouTubeMusicIcon className="w-5 h-5" />
                     </div>
                     <div>
-                      <span
-                        className={`font-semibold text-sm ${
-                          isDark ? 'text-[#D1D5DB]' : 'text-slate-700'
-                        }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        YouTube Music
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-semibold text-sm ${
+                            isDark ? (ytMusicDest.connected ? 'text-white' : 'text-[#D1D5DB]') : (ytMusicDest.connected ? 'text-slate-900' : 'text-slate-700')
+                          }`}
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          YouTube Music
+                        </span>
+                        {ytMusicDest.connected && ytMusicDest.isDefault && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-[10px] font-semibold rounded px-1.5 py-0.5 ${
+                              isDark
+                                ? 'text-amber-400 bg-amber-950/40 border border-amber-800/50'
+                                : 'text-amber-700 bg-amber-50 border border-amber-200/60'
+                            }`}
+                          >
+                            ★ Default
+                          </span>
+                        )}
+                      </div>
                       <span className={`block text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
                         Media Exporter
                       </span>
                     </div>
                   </div>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
-                      isDark
-                        ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    Not connected
-                  </span>
+                  {ytMusicDest.connected ? (
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#142318] text-[#3FE769] border border-[#214328]'
+                          : 'bg-emerald-50 text-emerald-700'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${isDark ? 'bg-[#3FE769]' : 'bg-emerald-600'}`} />
+                      Connected
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full font-medium text-xs ${
+                        isDark
+                          ? 'bg-[#1C1B1B] text-[#878787] border border-[#2A2A2A]'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      Not connected
+                    </span>
+                  )}
                 </div>
-                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                <p className={`text-xs leading-relaxed min-h-[34px] ${isDark ? (ytMusicDest.connected ? 'text-[#A1A1A1]' : 'text-[#878787]') : 'text-slate-500'}`}>
                   Export study playlist tracks and video audio extracts.
                 </p>
-                <div className="h-[36px]" />
+                {ytMusicDest.connected ? (
+                  <div
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                      isDark ? 'bg-[#161616] border-[#262626] text-[#D1D5DB]' : 'bg-slate-50 border border-slate-100 text-slate-600'
+                    }`}
+                  >
+                    <Table className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="text-xs font-medium truncate">
+                      Target: {ytMusicDest.targetResourceName || 'Media Exporter'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="h-[36px]" />
+                )}
               </div>
-              <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
-                <button
-                  onClick={() => setOauthModalDest(ytMusicDest)}
-                  className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
-                    isDark
-                      ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
-                      : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
-                  }`}
-                  type="button"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Connect YouTube Music</span>
-                </button>
-              </div>
+
+              {ytMusicDest.connected ? (
+                <div className={`flex items-center justify-between pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                  <span className={`text-xs ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
+                    Last synced {ytMusicDest.lastSync && ytMusicDest.lastSync !== 'Never' ? ytMusicDest.lastSync : 'Never'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleTestPing(ytMusicDest)}
+                      disabled={testSyncLoadingId === ytMusicDest.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                        isDark
+                          ? 'text-[#D1D5DB] hover:text-[#3FE769] hover:bg-[#1C1B1B] border-[#2A2A2A] bg-[#141414]'
+                          : 'text-slate-600 hover:text-[#2D6A4F] hover:bg-slate-50 border-slate-200'
+                      }`}
+                      type="button"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${testSyncLoadingId === ytMusicDest.id ? 'animate-spin text-[#3FE769]' : ''}`} />
+                      <span>{testSyncLoadingId === ytMusicDest.id ? 'Syncing...' : testSyncSuccessId === ytMusicDest.id ? 'Synced!' : 'Sync'}</span>
+                    </button>
+                    <button
+                      aria-label="Settings"
+                      onClick={() => setSelectedDestForConfig(ytMusicDest)}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                        isDark ? 'text-[#878787] hover:text-white hover:bg-[#1E1E1E]' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                      }`}
+                      type="button"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={`pt-4 mt-4 border-t ${isDark ? 'border-[#1F1F1F]' : 'border-slate-100'}`}>
+                  <button
+                    onClick={() => setOauthModalDest(ytMusicDest)}
+                    className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+                      isDark
+                        ? 'border-[#2E2E2E] bg-[#141414] text-[#D1D5DB] hover:border-[#3FE769] hover:text-[#3FE769]'
+                        : 'border-slate-200 text-slate-700 hover:border-[#2D6A4F] hover:text-[#2D6A4F] bg-white'
+                    }`}
+                    type="button"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Connect YouTube Music</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

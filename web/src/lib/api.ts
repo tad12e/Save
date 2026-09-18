@@ -1,4 +1,4 @@
-import type { CustomPageConfig, CustomCategoryConfig, ClipItem, ClipType } from '../types';
+import type { CustomPageConfig, CustomCategoryConfig, ClipItem, ClipType, ConnectionSyncLog } from '../types';
 
 export interface AuthorizeParams {
   provider: string;
@@ -32,44 +32,25 @@ function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<strin
 }
 
 export async function authorizeDestinationBackend(params: AuthorizeParams): Promise<AuthorizeResponse> {
-  try {
-    const response = await fetch(`${BASE_URL}/api/destinations/authorize/`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        provider: params.provider,
-        name: params.name,
-        access_type: params.accessType,
-        action_type: params.actionType,
-        target_resource_name: params.targetResourceName,
-        account_email: params.accountEmail,
-      }),
-    });
-    if (!response.ok) {
-      return {
-        status: 'authorized',
-        provider: params.provider,
-        access_type: params.accessType,
-        granted_scopes: ['read', 'write'],
-        target_resource_name: params.targetResourceName,
-        is_real_oauth: false,
-        destination: null,
-      };
-    }
-    return await response.json();
-  } catch (error) {
-    console.warn('Could not authorize destination on backend:', error);
-    return {
-      status: 'authorized',
+  const response = await fetch(`${BASE_URL}/api/destinations/authorize/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
       provider: params.provider,
+      name: params.name,
       access_type: params.accessType,
-      granted_scopes: ['read', 'write'],
+      action_type: params.actionType,
       target_resource_name: params.targetResourceName,
-      is_real_oauth: false,
-      destination: null,
-    };
+      account_email: params.accountEmail,
+    }),
+  });
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => ({}));
+    const errorMsg = errJson.error || errJson.detail || `Server returned ${response.status} (${response.statusText})`;
+    throw new Error(`Could not connect: ${errorMsg}`);
   }
+  return await response.json();
 }
 
 export async function createClipBackend(clipData: {
@@ -236,94 +217,204 @@ export async function fetchDashboardCardsBackend() {
 }
 
 
-export async function fetchDestinationsBackend() {
+export interface DestinationsResponse {
+  data: any[] | null;
+  error: string | null;
+  status: number;
+}
+
+export async function fetchDestinationsBackend(): Promise<DestinationsResponse> {
   try {
     const response = await fetch(`${BASE_URL}/api/destinations/`, {
       credentials: 'include',
       headers: getAuthHeaders(),
     });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    console.warn('Could not fetch destinations from backend:', error);
-    return null;
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      const msg = errData.error || errData.detail || (response.status === 401 ? 'Authentication required. Please sign in.' : `Error (${response.status})`);
+      return { data: null, error: `Could not connect: ${msg}`, status: response.status };
+    }
+    const data = await response.json();
+    return { data: Array.isArray(data) ? data : [], error: null, status: response.status };
+  } catch (error: any) {
+    return { data: null, error: 'Could not connect to backend server. Make sure the server is running.', status: 0 };
   }
 }
 
 export async function setDefaultDestinationBackend(destinationId: string) {
-  try {
-    const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/set-default/`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    console.warn('Could not set default destination on backend:', error);
-    return null;
+  const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/set-default/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || errData.detail || `Could not set default (status ${response.status})`);
   }
+  return await response.json();
 }
 
 export async function testDestinationBackend(destinationId: string) {
-  try {
-    const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/test/`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders(),
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    console.warn('Could not test destination on backend:', error);
-    return null;
+  const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/test/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.message || errData.error || `Could not connect: Test failed (${response.status})`);
   }
+  return await response.json();
 }
 
 export async function beautifySheetBackend(destinationId: string) {
-  try {
-    const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/beautify/`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({}),
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    console.warn('Could not beautify sheet on backend:', error);
-    return null;
+  const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/beautify/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.message || errData.error || `Beautify failed (${response.status})`);
   }
+  return await response.json();
 }
 
 export async function updateDestinationBackend(destinationId: string, data: any) {
-  try {
-    const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    console.warn('Could not update destination on backend:', error);
-    return null;
+  const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || errData.detail || `Update failed (${response.status})`);
   }
+  return await response.json();
 }
 
-export async function deleteDestinationBackend(destinationId: string) {
+export async function createDestinationBackend(payload: {
+  provider: string;
+  name: string;
+  config?: Record<string, any>;
+  is_default?: boolean;
+  is_active?: boolean;
+}): Promise<any> {
+  const response = await fetch(`${BASE_URL}/api/destinations/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    const msg = errData.error || errData.detail || (response.status === 401 ? 'Authentication required. Please sign in.' : `Create failed (${response.status})`);
+    throw new Error(msg);
+  }
+  return await response.json();
+}
+
+export async function deleteDestinationBackend(destinationId: string, hard = false) {
+  const url = `${BASE_URL}/api/destinations/${destinationId}/${hard ? '?hard=true' : ''}`;
+  const response = await fetch(url, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || errData.detail || `Delete failed (${response.status})`);
+  }
+  return true;
+}
+
+// Destination Sync Logs API (Persistent PostgreSQL Backend)
+export interface DestinationLogsResponse {
+  data: ConnectionSyncLog[] | null;
+  error: string | null;
+  status: number;
+}
+
+export async function fetchDestinationLogsBackend(params?: {
+  destinationId?: string;
+  status?: string;
+  limit?: number;
+}): Promise<DestinationLogsResponse> {
   try {
-    const response = await fetch(`${BASE_URL}/api/destinations/${destinationId}/`, {
-      method: 'DELETE',
+    const searchParams = new URLSearchParams();
+    if (params?.destinationId) searchParams.append('destinationId', params.destinationId);
+    if (params?.status && params.status.toLowerCase() !== 'all') searchParams.append('status', params.status);
+    if (params?.limit) searchParams.append('limit', String(params.limit));
+
+    const qs = searchParams.toString();
+    const url = `${BASE_URL}/api/destinations/logs/${qs ? `?${qs}` : ''}`;
+
+    const response = await fetch(url, {
       credentials: 'include',
       headers: getAuthHeaders(),
     });
-    return response.ok;
-  } catch (error) {
-    console.warn('Could not delete destination on backend:', error);
-    return false;
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      const msg = errData.error || errData.detail || (response.status === 401 ? 'Authentication required. Please sign in.' : `Error (${response.status})`);
+      return { data: null, error: `Could not connect: ${msg}`, status: response.status };
+    }
+
+    const data = await response.json();
+    return { data: Array.isArray(data) ? data : [], error: null, status: response.status };
+  } catch (error: any) {
+    return { data: null, error: 'Could not connect to backend server. Make sure the server is running.', status: 0 };
   }
+}
+
+export const fetchLogsBackend = fetchDestinationLogsBackend;
+
+export async function createDestinationLogBackend(logData: {
+  destinationId?: string;
+  destinationName?: string;
+  clipId?: string;
+  clipTitle: string;
+  status: 'pending' | 'success' | 'failed' | 'retrying';
+  durationMs?: number;
+  payloadSize?: string;
+  details?: string;
+  errorMessage?: string;
+}): Promise<ConnectionSyncLog> {
+  const response = await fetch(`${BASE_URL}/api/destinations/logs/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(logData),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    const msg = errData.error || errData.detail || (response.status === 401 ? 'Authentication required. Please sign in.' : `Record log failed (${response.status})`);
+    throw new Error(msg);
+  }
+
+  return await response.json();
+}
+
+export const createLogBackend = createDestinationLogBackend;
+
+export async function clearDestinationLogsBackend(destinationId?: string): Promise<boolean> {
+  const url = `${BASE_URL}/api/destinations/logs/${destinationId ? `?destinationId=${encodeURIComponent(destinationId)}` : ''}`;
+  const response = await fetch(url, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    const msg = errData.error || errData.detail || (response.status === 401 ? 'Authentication required. Please sign in.' : `Clear logs failed (${response.status})`);
+    throw new Error(msg);
+  }
+
+  return true;
 }
 
 // User Authentication Backend APIs (Calls exact same Django views as Extension)
@@ -681,6 +772,7 @@ export async function createCustomPageBackend(pageData: {
   description?: string;
   content_types?: string[];
   ai_goal_prompt?: string;
+  is_system_default?: boolean;
 }) {
   try {
     const response = await fetch(`${BASE_URL}/api/clips/pages/`, {
