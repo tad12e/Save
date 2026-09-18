@@ -9,20 +9,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from django.contrib.auth import get_user_model
-from .models import Destination
-from .serializers import DestinationCreateSerializer, DestinationSerializer
+from django.db.models import Q
+from .models import Destination, DestinationSyncLog
+from .serializers import (
+    DestinationCreateSerializer,
+    DestinationSerializer,
+    DestinationSyncLogSerializer,
+)
 
 User = get_user_model()
 
 logger = logging.getLogger(__name__)
-
-
-# def get_or_create_demo_user():
-#     user, _ = User.objects.get_or_create(
-#         email='tadiwos@save.app',
-#         defaults={'name': 'Tadiwos User', 'is_active': True},
-#     )
-#     return user
 
 
 class DestinationListCreateView(APIView):
@@ -35,7 +32,6 @@ class DestinationListCreateView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         user = request.user
-        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
         destinations = Destination.objects.filter(user=user)
         if not destinations.exists():
             Destination.objects.create(
@@ -56,6 +52,11 @@ class DestinationListCreateView(APIView):
         return Response(DestinationSerializer(destinations, many=True).data)
 
     def post(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         serializer = DestinationCreateSerializer(
             data=request.data,
             context={'request': request},
@@ -203,37 +204,84 @@ class DestinationAuthorizeView(APIView):
                 )
                 encoded_spotify_redirect = urllib.parse.quote(spotify_redirect_uri, safe='')
                 auth_url = f"https://accounts.spotify.com/authorize?response_type=code&client_id={client_id}&scope={encoded_scopes}&redirect_uri={encoded_spotify_redirect}&show_dialog=true&state={state_str}"
+        elif provider in ('youtube_music', 'youtube'):
+            client_id = os.getenv('GOOGLE_CLIENT_ID', getattr(settings, 'GOOGLE_CLIENT_ID', ''))
+            if client_id:
+                is_real_oauth = True
+                prompt = 'consent select_account'
+                scopes_str = 'email profile https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.readonly'
+                encoded_scopes = urllib.parse.quote(scopes_str)
+                auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}&scope={encoded_scopes}&access_type=offline&prompt={prompt}&state={state_str}"
 
-        destination_record, _ = Destination.objects.update_or_create(
-            user=user,
-            name=name,
-            defaults={
+        # If it's an OAuth provider, it CANNOT be active until the real OAuth flow is completed via callback!
+        oauth_providers = ('google_sheets', 'spotify', 'notion', 'airtable', 'youtube_music', 'youtube')
+        if provider in oauth_providers:
+            if not is_real_oauth or not auth_url:
+                provider_display = provider.replace('_', ' ').title()
+                return Response(
+                    {'error': f'OAuth credentials not configured on backend server for {provider_display}. Real OAuth credentials are required.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Create or update destination as pending (is_active = False). ONLY the verified OAuth callback can activate it!
+            destination_record, _ = Destination.objects.update_or_create(
+                user=user,
+                provider=provider,
+                defaults={
+                    'name': name,
+                    'config': config,
+                    'is_active': False
+                }
+            )
+            serialized_dest = DestinationSerializer(destination_record).data
+            return Response({
+                'status': 'pending_oauth',
                 'provider': provider,
-                'config': config,
-                'is_active': True
-            }
-        )
-        serialized_dest = DestinationSerializer(destination_record).data
-
-        return Response({
-            'status': 'authorized',
-            'provider': provider,
-            'access_type': access_type,
-            'is_real_oauth': is_real_oauth,
-            'granted_scopes': granted_scopes,
-            'target_resource_name': target_resource_name,
-            'auth_url': auth_url,
-            'destination': serialized_dest
-        }, status=status.HTTP_200_OK)
+                'access_type': access_type,
+                'is_real_oauth': True,
+                'granted_scopes': granted_scopes,
+                'target_resource_name': target_resource_name,
+                'auth_url': auth_url,
+                'destination': serialized_dest
+            }, status=status.HTTP_200_OK)
+        else:
+            # Non-OAuth direct destinations (e.g. Webhook)
+            destination_record, _ = Destination.objects.update_or_create(
+                user=user,
+                provider=provider,
+                defaults={
+                    'name': name,
+                    'config': config,
+                    'is_active': True
+                }
+            )
+            serialized_dest = DestinationSerializer(destination_record).data
+            return Response({
+                'status': 'authorized',
+                'provider': provider,
+                'access_type': access_type,
+                'is_real_oauth': False,
+                'granted_scopes': granted_scopes,
+                'target_resource_name': target_resource_name,
+                'auth_url': None,
+                'destination': serialized_dest
+            }, status=status.HTTP_200_OK)
 
 
 class DestinationDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get_object(self, request, destination_id):
-        if request.user and request.user.is_authenticated:
+        from django.http import Http404
+        if not request.user or not request.user.is_authenticated:
+            raise Http404("Authentication required. Please sign in.")
+        try:
             return Destination.objects.get(pk=destination_id, user=request.user)
-        return Destination.objects.get(pk=destination_id)
+        except Destination.DoesNotExist:
+            raise Http404("Destination not found")
+
+    def get(self, request, destination_id):
+        destination = self.get_object(request, destination_id)
+        return Response(DestinationSerializer(destination).data)
 
     def patch(self, request, destination_id):
         destination = self.get_object(request, destination_id)
@@ -249,9 +297,13 @@ class DestinationDetailView(APIView):
 
     def delete(self, request, destination_id):
         destination = self.get_object(request, destination_id)
-        destination.is_active = False
-        destination.is_default = False
-        destination.save(update_fields=['is_active', 'is_default'])
+        hard = request.query_params.get('hard', '').lower() in ('1', 'true', 'yes') or (hasattr(request, 'data') and isinstance(request.data, dict) and request.data.get('hard', False))
+        if hard:
+            destination.delete()
+        else:
+            destination.is_active = False
+            destination.is_default = False
+            destination.save(update_fields=['is_active', 'is_default'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -265,7 +317,6 @@ class DestinationSetDefaultView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         user = request.user
-        # user = request.user if (request.user and request.user.is_authenticated) else get_or_create_demo_user()
         try:
             destination = Destination.objects.get(pk=destination_id, user=user)
         except Destination.DoesNotExist:
@@ -282,11 +333,13 @@ class DestinationTestPingView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, destination_id):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         try:
-            if request.user and request.user.is_authenticated:
-                dest = Destination.objects.get(pk=destination_id, user=request.user)
-            else:
-                dest = Destination.objects.get(pk=destination_id)
+            dest = Destination.objects.get(pk=destination_id, user=request.user)
         except Destination.DoesNotExist:
             return Response({'status': 'error', 'message': 'Destination not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -331,11 +384,13 @@ class DestinationBeautifySheetView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, destination_id):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         try:
-            if request.user and request.user.is_authenticated:
-                dest = Destination.objects.get(pk=destination_id, user=request.user)
-            else:
-                dest = Destination.objects.get(pk=destination_id)
+            dest = Destination.objects.get(pk=destination_id, user=request.user)
         except Destination.DoesNotExist:
             return Response({'status': 'error', 'message': 'Destination not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -801,6 +856,79 @@ class CategoryRoutingRulesView(APIView):
             'rules': rules,
             'message': 'Category routing rules saved to backend successfully.'
         }, status=status.HTTP_200_OK)
+
+
+class DestinationSyncLogListCreateView(APIView):
+    """
+    Real Destination Sync Logs Endpoint.
+    GET: Retrieves real destination sync logs filtered by authenticated user,
+         with optional query params: 'destination_id', 'status', and 'limit'.
+    POST: Records a new real sync log in PostgreSQL for the user.
+    DELETE: Clears sync logs for the authenticated user (optionally filtered by destination_id).
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        queryset = DestinationSyncLog.objects.filter(user=request.user)
+
+        dest_id = request.query_params.get('destination_id') or request.query_params.get('destinationId')
+        if dest_id:
+            queryset = queryset.filter(Q(destination_id=dest_id) | Q(destination__id=dest_id))
+
+        status_param = request.query_params.get('status')
+        if status_param and status_param.lower() != 'all':
+            queryset = queryset.filter(status__iexact=status_param.strip())
+
+        try:
+            limit = min(int(request.query_params.get('limit', 50)), 200)
+        except (ValueError, TypeError):
+            limit = 50
+
+        logs = queryset.select_related('destination', 'clip')[:limit]
+        serializer = DestinationSyncLogSerializer(logs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        serializer = DestinationSyncLogSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        log_instance = serializer.save()
+        return Response(
+            DestinationSyncLogSerializer(log_instance).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def delete(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        queryset = DestinationSyncLog.objects.filter(user=request.user)
+        dest_id = request.query_params.get('destination_id') or request.query_params.get('destinationId')
+        if dest_id:
+            queryset = queryset.filter(Q(destination_id=dest_id) | Q(destination__id=dest_id))
+
+        deleted_count, _ = queryset.delete()
+        return Response(
+            {'deleted': deleted_count, 'status': 'success'},
+            status=status.HTTP_200_OK,
+        )
 
 
 

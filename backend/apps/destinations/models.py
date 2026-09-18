@@ -55,3 +55,62 @@ class Destination(models.Model):
                     is_default=False,
                 )
         super().save(*args, **kwargs)
+
+
+class DestinationSyncLog(models.Model):
+    STATUS_PENDING = 'pending'
+    STATUS_SUCCESS = 'success'
+    STATUS_FAILED = 'failed'
+    STATUS_RETRYING = 'retrying'
+
+    STATUS_CHOICES = (
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_SUCCESS, 'Success'),
+        (STATUS_FAILED, 'Failed'),
+        (STATUS_RETRYING, 'Retrying'),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='destination_sync_logs',
+        null=True,
+        blank=True
+    )
+    destination = models.ForeignKey(
+        Destination,
+        on_delete=models.SET_NULL,
+        related_name='sync_logs',
+        null=True,
+        blank=True
+    )
+    destination_name = models.CharField(max_length=255, blank=True, default='')
+    clip = models.ForeignKey(
+        'clips.Clip',
+        on_delete=models.SET_NULL,
+        related_name='destination_sync_logs',
+        null=True,
+        blank=True
+    )
+    clip_title = models.CharField(max_length=512, blank=True, default='')
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_SUCCESS)
+    duration_ms = models.PositiveIntegerField(default=0)
+    payload_size = models.CharField(max_length=64, blank=True, default='0 KB')
+    details = models.TextField(blank=True, default='')
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.status.upper()}] {self.destination_name} - {self.clip_title or 'Sync'} ({self.created_at})"
+
+    def save(self, *args, **kwargs):
+        if not self.destination_name and self.destination:
+            self.destination_name = self.destination.name
+        if not self.clip_title and self.clip:
+            self.clip_title = getattr(self.clip, 'title', '') or ''
+        super().save(*args, **kwargs)

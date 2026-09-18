@@ -6,6 +6,7 @@ from .views import (
     DestinationAuthorizeView,
     DestinationTestPingView,
     DestinationBeautifySheetView,
+    DestinationSyncLogListCreateView,
     GoogleOAuthCallbackView,
     SpotifyOAuthCallbackView,
     SpotifyPlaylistsView,
@@ -19,6 +20,7 @@ app_name = 'destinations'
 
 urlpatterns = [
     path('', DestinationListCreateView.as_view(), name='destination-list-create'),
+    path('logs/', DestinationSyncLogListCreateView.as_view(), name='destination-logs'),
     path('authorize/', DestinationAuthorizeView.as_view(), name='destination-authorize'),
     path('category-rules/', CategoryRoutingRulesView.as_view(), name='category-rules'),
     path('set-music-provider/', SetMusicProviderView.as_view(), name='set-music-provider'),

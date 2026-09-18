@@ -580,10 +580,10 @@ class FeedEngine:
         Calculates consecutive active days with saved or reviewed clips.
         """
         active_dates = set()
-        for c in clips_qs.only('created_at', 'extra_metadata'):
-            if c.created_at:
-                active_dates.add(c.created_at.date())
-            meta = c.extra_metadata or {}
+        for created_at, meta in clips_qs.values_list('created_at', 'extra_metadata'):
+            if created_at:
+                active_dates.add(created_at.date())
+            meta = meta or {}
             rev_str = meta.get('feed_reviewed_at')
             if rev_str:
                 try:

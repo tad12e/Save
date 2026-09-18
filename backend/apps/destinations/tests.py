@@ -310,4 +310,101 @@ class GoogleSheetsFormattingTestCase(TestCase):
         self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_400_BAD_REQUEST])
 
 
+class DestinationSyncLogTestCase(TestCase):
+    def setUp(self):
+        self.user1 = User.objects.create_user(email='synclog1@save.app', password='password123')
+        self.user2 = User.objects.create_user(email='synclog2@save.app', password='password123')
+
+        self.dest1 = Destination.objects.create(
+            user=self.user1,
+            provider='google_sheets',
+            name='My Work Google Sheet',
+            is_active=True,
+        )
+        self.dest2 = Destination.objects.create(
+            user=self.user1,
+            provider='notion',
+            name='Notion Knowledge Base',
+            is_active=True,
+        )
+
+        self.client = APIClient()
+
+    def test_synclog_unauthenticated_rejected(self):
+        response = self.client.get('/api/destinations/logs/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        post_res = self.client.post('/api/destinations/logs/', {'status': 'success'})
+        self.assertEqual(post_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_synclog_create_and_list_authenticated(self):
+        self.client.force_authenticate(user=self.user1)
+
+        # 1. Post a new log entry
+        payload = {
+            'destinationId': str(self.dest1.id),
+            'clipTitle': 'Anthropic Prompt Engineering Paper',
+            'status': 'success',
+            'durationMs': 320,
+            'payloadSize': '1.2 KB',
+            'details': 'Exported successfully to tab Clips'
+        }
+        res = self.client.post('/api/destinations/logs/', payload, format='json')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.json()
+        self.assertEqual(data['status'], 'success')
+        self.assertEqual(data['clipTitle'], 'Anthropic Prompt Engineering Paper')
+        self.assertEqual(data['destinationName'], 'My Work Google Sheet')
+        self.assertEqual(data['durationMs'], 320)
+        self.assertEqual(data['payloadSize'], '1.2 KB')
+
+        # 2. Query logs via GET
+        get_res = self.client.get('/api/destinations/logs/')
+        self.assertEqual(get_res.status_code, status.HTTP_200_OK)
+        logs = get_res.json()
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0]['destinationName'], 'My Work Google Sheet')
+
+        # 3. User2 should not see User1's logs
+        client2 = APIClient()
+        client2.force_authenticate(user=self.user2)
+        u2_res = client2.get('/api/destinations/logs/')
+        self.assertEqual(u2_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(u2_res.json()), 0)
+
+    def test_synclog_filter_by_destination_and_status(self):
+        self.client.force_authenticate(user=self.user1)
+
+        from apps.destinations.models import DestinationSyncLog
+
+        # Create log 1 for dest1 (success)
+        DestinationSyncLog.objects.create(
+            user=self.user1,
+            destination=self.dest1,
+            destination_name=self.dest1.name,
+            clip_title='Item 1',
+            status='success',
+        )
+        # Create log 2 for dest2 (failed)
+        DestinationSyncLog.objects.create(
+            user=self.user1,
+            destination=self.dest2,
+            destination_name=self.dest2.name,
+            clip_title='Item 2',
+            status='failed',
+        )
+
+        # Filter by destinationId
+        res_dest = self.client.get(f'/api/destinations/logs/?destinationId={self.dest1.id}')
+        self.assertEqual(res_dest.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_dest.json()), 1)
+        self.assertEqual(res_dest.json()[0]['destinationName'], self.dest1.name)
+
+        # Filter by status
+        res_failed = self.client.get('/api/destinations/logs/?status=failed')
+        self.assertEqual(res_failed.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_failed.json()), 1)
+        self.assertEqual(res_failed.json()[0]['status'], 'failed')
+
+
 
