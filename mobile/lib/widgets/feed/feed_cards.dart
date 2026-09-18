@@ -4,14 +4,21 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/theme.dart';
 import '../../models/feed_models.dart';
 
-// ─── Shared bits ───
+// ─── Shared bits (light white+green, matches AppTheme + web) ───
 
-const _cardBg = Color(0xFF11131E);
-const _cardBorder = Color(0xFF272A3A);
-const _muted = Color(0xFF94A3B8);
-const _faint = Color(0xFF64748B);
+const _cardBg = Color(0xFFFFFFFF);
+const _cardBorder = Color(0xFFE2E8F0);
+const _muted = Color(0xFF64748B);
+const _faint = Color(0xFF94A3B8);
+const _title = Color(0xFF0F172A);
+const _body = Color(0xFF475569);
+const _green = Color(0xFF2D6A4F);
+const _greenLight = Color(0xFF40916C);
+const _mintBg = Color(0xFFDCFCE7);
+const _chipBg = Color(0xFFF1F5F9);
 
 Future<void> _openExternal(BuildContext context, String url) async {
   final uri = Uri.tryParse(url.trim());
@@ -45,6 +52,13 @@ class _CardShell extends StatelessWidget {
         color: _cardBg,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: accentBorder ?? _cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,7 +189,7 @@ class FeedOpportunityCard extends StatelessWidget {
                     item.title.isEmpty ? 'Untitled Opportunity' : item.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -206,7 +220,7 @@ class FeedOpportunityCard extends StatelessWidget {
             if (deadline.isNotEmpty)
               _Badge(
                 label: deadline,
-                color: item.isExpired || urgent ? const Color(0xFFF43F5E) : const Color(0xFF38BDF8),
+                color: item.isExpired || urgent ? const Color(0xFFF43F5E) : const Color(0xFF2D6A4F),
               ),
           ],
         ),
@@ -216,7 +230,7 @@ class FeedOpportunityCard extends StatelessWidget {
             item.summary,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFFCBD5E1), height: 1.45),
+            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.45),
           ),
         ],
         if (item.keyTakeaway.isNotEmpty) ...[
@@ -239,7 +253,7 @@ class FeedOpportunityCard extends StatelessWidget {
                     item.keyTakeaway,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFE2E8F0)),
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0F172A)),
                   ),
                 ),
               ],
@@ -254,7 +268,7 @@ class FeedOpportunityCard extends StatelessWidget {
                 height: 42,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF7C3AED),
+                    backgroundColor: const Color(0xFF2D6A4F),
                     foregroundColor: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -278,9 +292,9 @@ class FeedOpportunityCard extends StatelessWidget {
               height: 42,
               child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: item.isReviewed ? const Color(0xFF6EE7B7) : Colors.white,
+                  foregroundColor: item.isReviewed ? const Color(0xFF059669) : const Color(0xFF0F172A),
                   side: BorderSide(
-                    color: item.isReviewed ? const Color(0xFF10B981) : const Color(0xFF2E334D),
+                    color: item.isReviewed ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
                   ),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
@@ -334,10 +348,10 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                color: const Color(0xFFDCFCE7),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(LucideIcons.fileText, size: 18, color: Color(0xFF38BDF8)),
+              child: const Icon(LucideIcons.fileText, size: 18, color: Color(0xFF16A34A)),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -348,7 +362,7 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
                     item.title.isEmpty ? 'Untitled' : item.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -370,7 +384,7 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
           spacing: 6,
           runSpacing: 6,
           children: [
-            _Badge(label: item.contentType.toUpperCase(), color: const Color(0xFF38BDF8)),
+            _Badge(label: item.contentType.toUpperCase(), color: const Color(0xFF2D6A4F)),
             if (item.timeAgo.isNotEmpty) _Badge(label: item.timeAgo, color: _muted),
           ],
         ),
@@ -380,7 +394,7 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
             item.summary,
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFFCBD5E1), height: 1.45),
+            style: GoogleFonts.inter(fontSize: 13, color: const Color(0xFF475569), height: 1.45),
           ),
         ],
         if (takeaway.isNotEmpty) ...[
@@ -389,9 +403,9 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
             width: double.infinity,
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFF38BDF8).withValues(alpha: 0.07),
+              color: const Color(0xFF2D6A4F).withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
-              border: const Border(left: BorderSide(color: Color(0xFF38BDF8), width: 2.5)),
+              border: const Border(left: BorderSide(color: Color(0xFF2D6A4F), width: 2.5)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -415,14 +429,14 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
                       },
                       child: Row(
                         children: [
-                          Icon(_copied ? LucideIcons.check : LucideIcons.copy, size: 13, color: _copied ? const Color(0xFF6EE7B7) : _muted),
+                          Icon(_copied ? LucideIcons.check : LucideIcons.copy, size: 13, color: _copied ? const Color(0xFF059669) : _muted),
                           const SizedBox(width: 4),
                           Text(
                             _copied ? 'Copied' : 'Copy',
                             style: GoogleFonts.inter(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: _copied ? const Color(0xFF6EE7B7) : _muted,
+                              color: _copied ? const Color(0xFF059669) : _muted,
                             ),
                           ),
                         ],
@@ -435,7 +449,7 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
                   takeaway,
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFE2E8F0), height: 1.45),
+                  style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF0F172A), height: 1.45),
                 ),
               ],
             ),
@@ -450,11 +464,11 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1C1F2E),
+                  color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF2A2E44)),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
-                child: Text('#$t', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFA78BFA))),
+                child: Text('#$t', style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF2D6A4F))),
               );
             }).toList(),
           ),
@@ -467,8 +481,8 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
                 height: 42,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Color(0xFF2E334D)),
+                    foregroundColor: const Color(0xFF0F172A),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () {
@@ -490,7 +504,7 @@ class _FeedArticleCardState extends State<FeedArticleCard> {
               height: 42,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: item.isReviewed ? const Color(0xFF065F46) : const Color(0xFF7C3AED),
+                  backgroundColor: item.isReviewed ? const Color(0xFF065F46) : const Color(0xFF2D6A4F),
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -573,10 +587,10 @@ class _FeedAudioCardState extends State<FeedAudioCard> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: const Color(0xFFA855F7).withValues(alpha: 0.18),
+                color: const Color(0xFFDCFCE7),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(LucideIcons.headphones, size: 20, color: Color(0xFFA855F7)),
+              child: const Icon(LucideIcons.headphones, size: 20, color: Color(0xFF2D6A4F)),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -587,7 +601,7 @@ class _FeedAudioCardState extends State<FeedAudioCard> {
                     item.title.isEmpty ? 'Audio Clip' : item.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -605,7 +619,7 @@ class _FeedAudioCardState extends State<FeedAudioCard> {
                 width: 42,
                 height: 42,
                 decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFFA855F7)]),
+                  gradient: LinearGradient(colors: [Color(0xFF2D6A4F), Color(0xFF40916C)]),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(_isPlaying ? LucideIcons.pause : LucideIcons.play, size: 18, color: Colors.white),
@@ -619,7 +633,7 @@ class _FeedAudioCardState extends State<FeedAudioCard> {
             item.summary,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFCBD5E1)),
+            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569)),
           ),
         ],
         const SizedBox(height: 12),
@@ -628,8 +642,8 @@ class _FeedAudioCardState extends State<FeedAudioCard> {
           height: 42,
           child: OutlinedButton(
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: const BorderSide(color: Color(0xFF2E334D)),
+              foregroundColor: const Color(0xFF0F172A),
+              side: const BorderSide(color: Color(0xFFE2E8F0)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             onPressed: () {

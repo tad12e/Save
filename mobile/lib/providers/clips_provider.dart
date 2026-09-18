@@ -27,17 +27,31 @@ class ClipsProvider extends ChangeNotifier {
     }).toList();
   }
 
+  List<ClipModel> get allClips => _clips;
+  int get totalClipsCount => _clips.length;
+
+  int get savedThisWeekCount {
+    final now = DateTime.now();
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    return _clips.where((c) => c.createdAt.isAfter(sevenDaysAgo)).length;
+  }
+
+  String? _error;
+  String? get error => _error;
+
   bool get isLoading => _isLoading;
   String get selectedCategory => _selectedCategory;
   String get searchQuery => _searchQuery;
 
   Future<void> loadClips() async {
     _isLoading = true;
+    _error = null;
     notifyListeners();
 
     try {
       _clips = await ApiService.fetchClips();
     } catch (e) {
+      _error = e.toString();
       if (kDebugMode) print('Error loading clips: $e');
     } finally {
       _isLoading = false;

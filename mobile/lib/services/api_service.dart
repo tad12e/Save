@@ -14,15 +14,19 @@ class ApiService {
 
   static String get defaultBaseUrl {
     if (kIsWeb) return 'http://localhost:8000';
-    // 127.0.0.1 routes directly through the ADB reverse tunnel (adb reverse tcp:8000 tcp:8000)
+    // Android emulator has its own loopback: 127.0.0.1 = the emulator itself.
+    // 10.0.2.2 is the special alias for the host PC's 127.0.0.1.
+    // (Only use 127.0.0.1 on Android if you ran `adb reverse tcp:8000 tcp:8000`.)
+    try {
+      if (Platform.isAndroid) return 'http://10.0.2.2:8000';
+    } catch (_) {}
     return 'http://127.0.0.1:8000';
   }
 
   static Future<String> getBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_keyBaseUrl);
-    // If the emulator address 10.0.2.2 was previously stored, auto-migrate to 127.0.0.1
-    if (saved != null && saved.isNotEmpty && !saved.contains('10.0.2.2')) {
+    if (saved != null && saved.isNotEmpty) {
       return saved;
     }
     return defaultBaseUrl;

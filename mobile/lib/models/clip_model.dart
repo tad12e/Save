@@ -69,6 +69,22 @@ class ClipModel {
     };
   }
 
+  DateTime? get deadlineDate {
+    final raw = extraMetadata['deadline'] ?? extraMetadata['deadline_date'];
+    if (raw != null && raw.toString().isNotEmpty) {
+      return DateTime.tryParse(raw.toString());
+    }
+    return null;
+  }
+
+  String get intent {
+    final raw = extraMetadata['intent'];
+    if (raw != null && raw.toString().isNotEmpty) {
+      return raw.toString().toLowerCase();
+    }
+    return 'learn';
+  }
+
   static String _cleanTitle(dynamic rawTitle, dynamic rawSummary, dynamic rawUrl) {
     final titleStr = (rawTitle?.toString() ?? '').trim();
     final summaryStr = (rawSummary?.toString() ?? '').trim();

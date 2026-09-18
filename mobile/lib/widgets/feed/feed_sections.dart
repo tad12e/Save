@@ -4,12 +4,15 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/feed_models.dart';
 
-const _cardBg = Color(0xFF11131E);
-const _cardBorder = Color(0xFF272A3A);
-const _muted = Color(0xFF94A3B8);
-const _faint = Color(0xFF64748B);
+const _cardBg = Color(0xFFFFFFFF);
+const _cardBorder = Color(0xFFE2E8F0);
+const _muted = Color(0xFF64748B);
+const _faint = Color(0xFF94A3B8);
+const _title = Color(0xFF0F172A);
+const _body = Color(0xFF475569);
+const _green = Color(0xFF2D6A4F);
 
-Color _hexColor(String hex, [Color fallback = const Color(0xFF7C3AED)]) {
+Color _hexColor(String hex, [Color fallback = const Color(0xFF2D6A4F)]) {
   try {
     var clean = hex.replaceAll('#', '').trim();
     if (clean.length == 6) clean = 'FF$clean';
@@ -39,11 +42,11 @@ class _SectionTitle extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: _title),
             ),
           ),
           if (trailing != null)
-            Text(trailing!, style: GoogleFonts.inter(fontSize: 11, color: _faint)),
+            Text(trailing!, style: GoogleFonts.inter(fontSize: 11, color: _muted)),
         ],
       ),
     );
@@ -88,23 +91,23 @@ class _DailyReviewCarouselState extends State<DailyReviewCarousel> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF065F46).withValues(alpha: 0.25),
+          color: const Color(0xFFDCFCE7),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
         ),
         child: Column(
           children: [
-            const Icon(LucideIcons.partyPopper, size: 30, color: Color(0xFF6EE7B7)),
+            const Icon(LucideIcons.partyPopper, size: 30, color: Color(0xFF059669)),
             const SizedBox(height: 8),
             Text(
               'Daily Review Complete 🎉',
-              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: _title),
             ),
             const SizedBox(height: 4),
             Text(
               'All ${widget.items.length} items reviewed. Streak kept alive.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFA7F3D0)),
+              style: GoogleFonts.inter(fontSize: 12, color: _body),
             ),
           ],
         ),
@@ -139,7 +142,7 @@ class _DailyReviewCarouselState extends State<DailyReviewCarousel> {
               height: 7,
               margin: const EdgeInsets.symmetric(horizontal: 3),
               decoration: BoxDecoration(
-                color: active ? const Color(0xFF7C3AED) : const Color(0xFF2A2E44),
+                color: active ? const Color(0xFF2D6A4F) : const Color(0xFFE2E8F0),
                 borderRadius: BorderRadius.circular(4),
               ),
             );
@@ -203,7 +206,7 @@ class _ReviewCard extends StatelessWidget {
             item.title.isEmpty ? 'Untitled' : item.title,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+            style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: _title),
           ),
           if (item.keyTakeaway.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -211,7 +214,7 @@ class _ReviewCard extends StatelessWidget {
               item.keyTakeaway,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFCBD5E1)),
+              style: GoogleFonts.inter(fontSize: 12, color: _body),
             ),
           ],
           const Spacer(),
@@ -222,7 +225,7 @@ class _ReviewCard extends StatelessWidget {
                   height: 38,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: item.isReviewed ? const Color(0xFF065F46) : const Color(0xFF7C3AED),
+                      backgroundColor: item.isReviewed ? const Color(0xFF065F46) : const Color(0xFF2D6A4F),
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -240,8 +243,8 @@ class _ReviewCard extends StatelessWidget {
                 height: 38,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Color(0xFF2E334D)),
+                    foregroundColor: _title,
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () => onAction(item.id, 'snooze'),
@@ -285,39 +288,36 @@ class FeedSynthesisBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E1B4B), Color(0xFF11131E)],
-        ),
+        color: const Color(0xFFDCFCE7),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.4)),
+        border: Border.all(color: const Color(0xFF2D6A4F).withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(LucideIcons.sparkles, size: 15, color: Color(0xFFA78BFA)),
+              const Icon(LucideIcons.sparkles, size: 15, color: Color(0xFF059669)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   synthesis.title.isEmpty ? 'AI Digest' : synthesis.title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: _title),
                 ),
               ),
               if (synthesis.itemCount > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF7C3AED).withValues(alpha: 0.25),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF2D6A4F).withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     '${synthesis.itemCount} items',
-                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFFC4B5FD)),
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF166534)),
                   ),
                 ),
             ],
@@ -328,7 +328,7 @@ class FeedSynthesisBanner extends StatelessWidget {
               synthesis.abstract,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFCBD5E1), height: 1.45),
+              style: GoogleFonts.inter(fontSize: 12, color: _body, height: 1.45),
             ),
           ],
           if (synthesis.takeaways.isNotEmpty) ...[
@@ -344,7 +344,7 @@ class FeedSynthesisBanner extends StatelessWidget {
                       height: 18,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                        color: const Color(0xFF2D6A4F).withValues(alpha: 0.3),
                         shape: BoxShape.circle,
                       ),
                       child: Text(
@@ -358,7 +358,7 @@ class FeedSynthesisBanner extends StatelessWidget {
                         e.value,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFFE2E8F0)),
+                        style: GoogleFonts.inter(fontSize: 12, color: _title),
                       ),
                     ),
                   ],
@@ -427,7 +427,7 @@ class FeedWatchlistWidget extends StatelessWidget {
                         w.title.isEmpty ? 'Opportunity' : w.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                        style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: _title),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -496,7 +496,7 @@ class FeedSyncRiverList extends StatelessWidget {
                       s.title.isEmpty ? 'Synced clip' : s.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                      style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: _title),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -516,7 +516,7 @@ class FeedSyncRiverList extends StatelessWidget {
                 ),
                 child: Text(
                   '✓ Active',
-                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF6EE7B7)),
+                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF059669)),
                 ),
               ),
             ],
