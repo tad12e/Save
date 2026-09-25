@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -94,6 +95,41 @@ class _SaveMobileAppState extends State<SaveMobileApp> {
       navigatorKey: navigatorKey,
       title: 'Clipper',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        if (kIsWeb) {
+          final mediaQuery = MediaQuery.of(context);
+          if (mediaQuery.size.width > 500) {
+            return Scaffold(
+              backgroundColor: const Color(0xFF0B0F19),
+              body: Center(
+                child: Container(
+                  width: 412,
+                  height: mediaQuery.size.height > 880 ? 840 : mediaQuery.size.height * 0.94,
+                  decoration: BoxDecoration(
+                    color: AppTheme.background,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 3,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.55),
+                        blurRadius: 32,
+                        spreadRadius: 4,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
+            );
+          }
+        }
+        return child ?? const SizedBox.shrink();
+      },
       theme: isDirectShare
           // Transparent canvas so Instagram stays visible behind the sheet.
           ? AppTheme.lightTheme.copyWith(

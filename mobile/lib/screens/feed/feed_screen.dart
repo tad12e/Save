@@ -615,6 +615,13 @@ class XStyleInAppBrowserModal extends StatefulWidget {
     bool isFavorited = false,
     VoidCallback? onToggleFavorite,
   }) {
+    if (kIsWeb) {
+      final uri = Uri.tryParse(clip.url);
+      if (uri != null && uri.hasScheme) {
+        launchUrl(uri, mode: LaunchMode.platformDefault);
+        return;
+      }
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -633,7 +640,7 @@ class XStyleInAppBrowserModal extends StatefulWidget {
 }
 
 class _XStyleInAppBrowserModalState extends State<XStyleInAppBrowserModal> {
-  late final WebViewController _webViewController;
+  WebViewController? _webViewController;
   bool _isLoading = true;
   double _progress = 0.0;
   bool _isDockedExpanded = true;
@@ -644,38 +651,42 @@ class _XStyleInAppBrowserModalState extends State<XStyleInAppBrowserModal> {
   void initState() {
     super.initState();
     _isFavorited = widget.isFavorited;
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (int progress) {
-            if (mounted) {
-              setState(() {
-                _progress = progress / 100.0;
-              });
-            }
-          },
-          onPageStarted: (String url) {
-            if (mounted) {
-              setState(() {
-                _isLoading = true;
-              });
-            }
-          },
-          onPageFinished: (String url) {
-            if (mounted) {
-              setState(() {
-                _isLoading = false;
-              });
-            }
-          },
-        ),
-      );
+    if (!kIsWeb) {
+      _webViewController = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.white)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onProgress: (int progress) {
+              if (mounted) {
+                setState(() {
+                  _progress = progress / 100.0;
+                });
+              }
+            },
+            onPageStarted: (String url) {
+              if (mounted) {
+                setState(() {
+                  _isLoading = true;
+                });
+              }
+            },
+            onPageFinished: (String url) {
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                });
+              }
+            },
+          ),
+        );
 
-    final uri = Uri.tryParse(widget.clip.url);
-    if (uri != null) {
-      _webViewController.loadRequest(uri);
+      final uri = Uri.tryParse(widget.clip.url);
+      if (uri != null) {
+        _webViewController!.loadRequest(uri);
+      }
+    } else {
+      _isLoading = false;
     }
   }
 
@@ -688,8 +699,9 @@ class _XStyleInAppBrowserModalState extends State<XStyleInAppBrowserModal> {
   }
 
   void _handleRefresh() async {
+    if (_webViewController == null) return;
     setState(() => _isRefreshing = true);
-    _webViewController.reload();
+    _webViewController!.reload();
     await Future.delayed(const Duration(milliseconds: 600));
     if (mounted) {
       setState(() => _isRefreshing = false);
@@ -865,15 +877,63 @@ class _XStyleInAppBrowserModalState extends State<XStyleInAppBrowserModal> {
           Expanded(
             child: Stack(
               children: [
-                // Live WebView Engine rendering the real website with full scroll support
-                WebViewWidget(
-                  controller: _webViewController,
-                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                    Factory<OneSequenceGestureRecognizer>(
-                      () => EagerGestureRecognizer(),
+                if (!kIsWeb && _webViewController != null)
+                  // Live WebView Engine rendering the real website with full scroll support
+                  WebViewWidget(
+                    controller: _webViewController!,
+                    gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                      Factory<OneSequenceGestureRecognizer>(
+                        () => EagerGestureRecognizer(),
+                      ),
+                    },
+                  )
+                else
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFDCFCE7),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(LucideIcons.globe, size: 36, color: Color(0xFF16A34A)),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            widget.clip.title,
+                            style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.clip.summary,
+                            style: GoogleFonts.inter(fontSize: 13, color: AppTheme.textMuted),
+                            textAlign: TextAlign.center,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              final uri = Uri.tryParse(widget.clip.url);
+                              if (uri != null) launchUrl(uri, mode: LaunchMode.platformDefault);
+                            },
+                            icon: const Icon(LucideIcons.externalLink, size: 16),
+                            label: const Text('Open External Link'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF16A34A),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  },
-                ),
+                  ),
 
                 // Top Loading progress bar
                 if (_isLoading && _progress < 1.0)
@@ -920,8 +980,8 @@ class _XStyleInAppBrowserModalState extends State<XStyleInAppBrowserModal> {
                             IconButton(
                               icon: const Icon(LucideIcons.arrowLeft, color: Color(0xFF0F172A), size: 20),
                               onPressed: () async {
-                                if (await _webViewController.canGoBack()) {
-                                  await _webViewController.goBack();
+                                if (_webViewController != null && await _webViewController!.canGoBack()) {
+                                  await _webViewController!.goBack();
                                 } else {
                                   if (context.mounted) Navigator.pop(context);
                                 }
