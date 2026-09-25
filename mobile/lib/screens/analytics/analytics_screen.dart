@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -217,71 +218,71 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     const SizedBox(height: 14),
 
                     // Section 2: Mascot Speech Bubble
-                    _buildMascotSpeechBubble(),
+                    AnalyticsInteractiveCard(child: _buildMascotSpeechBubble()),
                     const SizedBox(height: 16),
 
                     // Section 3: 5-Metric Quick Stats Card Row
-                    _buildQuickStatsCardRow(totalCount),
+                    AnalyticsInteractiveCard(child: _buildQuickStatsCardRow(totalCount)),
                     const SizedBox(height: 16),
 
                     // Section 3.5: Streak & Momentum Analytics (Fitness Rings, +34% Momentum)
-                    _buildStreakAndMomentumCard(),
+                    AnalyticsInteractiveCard(child: _buildStreakAndMomentumCard()),
                     const SizedBox(height: 16),
 
                     // Section 4: Daily Saving Goal Circular Ring Card
-                    _buildDailyFocusCard(),
+                    AnalyticsInteractiveCard(child: _buildDailyFocusCard()),
                     const SizedBox(height: 16),
 
                     // Section 4.5: Hourly Activity Heatmap (6am - 11pm) & Peak Window
-                    _buildHourlyActivityHeatmapCard(),
+                    AnalyticsInteractiveCard(child: _buildHourlyActivityHeatmapCard()),
                     const SizedBox(height: 16),
 
                     // Section 5: Consistency Heatmap Matrix Card
-                    _buildConsistencyHeatmapCard(),
+                    AnalyticsInteractiveCard(child: _buildConsistencyHeatmapCard()),
                     const SizedBox(height: 16),
 
                     // Section 6: Density Area Curve & Weekday Rhythm Split Cards
-                    _buildDensityAndRhythmSection(),
+                    AnalyticsInteractiveCard(child: _buildDensityAndRhythmSection()),
                     const SizedBox(height: 16),
 
                     // Section 6.5: Opportunity Outcome Analytics (Funnel, Action Rates, Missed Opportunities, Value Score)
-                    _buildOpportunityOutcomeSection(),
+                    AnalyticsInteractiveCard(child: _buildOpportunityOutcomeSection()),
                     const SizedBox(height: 16),
 
                     // Section 6.6: Content Intelligence & 10-Axis Knowledge Graph Radar
-                    _buildContentIntelligenceSection(),
+                    AnalyticsInteractiveCard(child: _buildContentIntelligenceSection()),
                     const SizedBox(height: 16),
 
                     // Section 8 [NEW]: Clips Over Time Interactive Line Chart (Total | By Type)
-                    _buildClipsOverTimeCard(),
+                    AnalyticsInteractiveCard(child: _buildClipsOverTimeCard()),
                     const SizedBox(height: 16),
 
                     // Section 9 [NEW]: Content Type Donut Chart with interactive legend
-                    _buildContentTypeDonutCard(),
+                    AnalyticsInteractiveCard(child: _buildContentTypeDonutCard()),
                     const SizedBox(height: 16),
 
                     // Section 7: Content Breakdown & Specialty Radar Polygon Card
-                    _buildFocusDistributionCard(),
+                    AnalyticsInteractiveCard(child: _buildFocusDistributionCard()),
                     const SizedBox(height: 16),
 
                     // Section 8: Popular Tags Analytics Breakdown
-                    _buildPopularTagsSection(context),
+                    AnalyticsInteractiveCard(child: _buildPopularTagsSection(context)),
                     const SizedBox(height: 16),
 
                     // Section 9: Destination & Sync Health Analytics
-                    _buildDestinationAndSyncSection(),
+                    AnalyticsInteractiveCard(child: _buildDestinationAndSyncSection()),
                     const SizedBox(height: 16),
 
                     // Section 10: Personal Records & Achievement Badges (Gamification)
-                    _buildPersonalRecordsAndBadgesSection(),
+                    AnalyticsInteractiveCard(child: _buildPersonalRecordsAndBadgesSection()),
                     const SizedBox(height: 16),
 
                     // Section 20 [NEW]: Board Leaderboard & Global 78% Percentile
-                    _buildBoardLeaderboardCard(),
+                    AnalyticsInteractiveCard(child: _buildBoardLeaderboardCard()),
                     const SizedBox(height: 16),
 
                     // Section 11: Predictive Analytics & Forecast (Next Week Saves, Deadlines, Optimal Saving)
-                    _buildPredictiveAnalyticsSection(),
+                    AnalyticsInteractiveCard(child: _buildPredictiveAnalyticsSection()),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -3892,6 +3893,100 @@ class _ContentTypeDonutPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _ContentTypeDonutPainter oldDelegate) =>
       oldDelegate.selectedIndex != selectedIndex;
+}
+
+// -----------------------------------------------------------------------------
+// Interactive Tactile Card Component (Framer-Motion style spring physics)
+// -----------------------------------------------------------------------------
+class AnalyticsInteractiveCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double scaleDownFactor;
+
+  const AnalyticsInteractiveCard({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.scaleDownFactor = 0.985,
+  });
+
+  @override
+  State<AnalyticsInteractiveCard> createState() => _AnalyticsInteractiveCardState();
+}
+
+class _AnalyticsInteractiveCardState extends State<AnalyticsInteractiveCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 200),
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: widget.scaleDownFactor,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+      reverseCurve: Curves.easeOutBack,
+    ));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleTapDown(TapDownDetails _) {
+    _controller.forward();
+    try {
+      HapticFeedback.selectionClick();
+    } catch (_) {}
+  }
+
+  void _handleTapUp(TapUpDetails _) {
+    _controller.reverse();
+    widget.onTap?.call();
+  }
+
+  void _handleTapCancel() {
+    _controller.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTapDown: _handleTapDown,
+        onTapUp: _handleTapUp,
+        onTapCancel: _handleTapCancel,
+        behavior: HitTestBehavior.translucent,
+        child: AnimatedBuilder(
+          animation: _scaleAnimation,
+          builder: (context, child) {
+            double scale = _scaleAnimation.value;
+            if (_isHovered && !_controller.isAnimating && _controller.value == 0.0) {
+              scale = 1.006;
+            }
+            return Transform.scale(
+              scale: scale,
+              child: child,
+            );
+          },
+          child: widget.child,
+        ),
+      ),
+    );
+  }
 }
 
 
