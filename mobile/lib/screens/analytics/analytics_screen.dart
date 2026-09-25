@@ -492,8 +492,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
+          AnimatedCountText(
+            rawText: value,
             style: GoogleFonts.outfit(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -578,8 +578,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   children: [
                     const Icon(LucideIcons.circleCheck, size: 12, color: Color(0xFF16A34A)),
                     const SizedBox(width: 4),
-                    Text(
-                      '$rate%',
+                    AnimatedCountText(
+                      value: rate,
+                      suffix: '%',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -610,8 +611,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          '$completed',
+                        AnimatedCountText(
+                          value: completed,
                           style: GoogleFonts.outfit(
                             fontSize: 26,
                             fontWeight: FontWeight.bold,
@@ -3988,5 +3989,128 @@ class _AnalyticsInteractiveCardState extends State<AnalyticsInteractiveCard> wit
     );
   }
 }
+
+// -----------------------------------------------------------------------------
+// Animated Rolling Number Counter (matches Web's Framer useSpring counter)
+// -----------------------------------------------------------------------------
+class AnimatedCountText extends StatefulWidget {
+  final num? value;
+  final String? rawText;
+  final String prefix;
+  final String suffix;
+  final int fractionDigits;
+  final TextStyle? style;
+  final Duration duration;
+
+  const AnimatedCountText({
+    super.key,
+    this.value,
+    this.rawText,
+    this.prefix = '',
+    this.suffix = '',
+    this.fractionDigits = 0,
+    this.style,
+    this.duration = const Duration(milliseconds: 1100),
+  });
+
+  @override
+  State<AnimatedCountText> createState() => _AnimatedCountTextState();
+}
+
+class _AnimatedCountTextState extends State<AnimatedCountText> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  double _fromValue = 0.0;
+  double _toValue = 0.0;
+  String _parsedPrefix = '';
+  String _parsedSuffix = '';
+  bool _isFloat = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _extractValues();
+    _animation = Tween<double>(begin: _fromValue, end: _toValue).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    );
+    _controller.forward();
+  }
+
+  void _extractValues() {
+    if (widget.value != null) {
+      _toValue = widget.value!.toDouble();
+      _parsedPrefix = widget.prefix;
+      _parsedSuffix = widget.suffix;
+      _isFloat = widget.fractionDigits > 0 || (widget.value is double && widget.value! % 1 != 0);
+      return;
+    }
+
+    final raw = widget.rawText?.trim() ?? '';
+    final match = RegExp(r'^([^0-9.-]*)([-+]?[0-9]*\.?[0-9]+)(.*)$').firstMatch(raw);
+    if (match != null) {
+      _parsedPrefix = widget.prefix.isNotEmpty ? widget.prefix : (match.group(1) ?? '');
+      final numStr = match.group(2) ?? '0';
+      _toValue = double.tryParse(numStr) ?? 0.0;
+      _parsedSuffix = widget.suffix.isNotEmpty ? widget.suffix : (match.group(3) ?? '');
+      _isFloat = numStr.contains('.') || widget.fractionDigits > 0;
+    } else {
+      _parsedPrefix = raw;
+      _toValue = 0.0;
+      _parsedSuffix = '';
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedCountText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldTo = _toValue;
+    _extractValues();
+    if (oldTo != _toValue) {
+      _fromValue = oldTo;
+      _animation = Tween<double>(begin: _fromValue, end: _toValue).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+      );
+      _controller.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _formatNumber(double val) {
+    if (_isFloat) {
+      final digits = widget.fractionDigits > 0 ? widget.fractionDigits : 1;
+      return val.toStringAsFixed(digits);
+    } else {
+      final intVal = val.round();
+      final str = intVal.toString();
+      final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+      return str.replaceAllMapped(reg, (Match m) => '${m[1]},');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.rawText != null && !RegExp(r'\d').hasMatch(widget.rawText!)) {
+      return Text(widget.rawText!, style: widget.style);
+    }
+
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, _) {
+        final formatted = _formatNumber(_animation.value);
+        return Text(
+          '$_parsedPrefix$formatted$_parsedSuffix',
+          style: widget.style,
+        );
+      },
+    );
+  }
+}
+
 
 
