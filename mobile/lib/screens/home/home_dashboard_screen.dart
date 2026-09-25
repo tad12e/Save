@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../models/clip_model.dart';
 import '../../providers/clips_provider.dart';
 import '../../widgets/app_header.dart';
+import '../clips/clips_screen.dart';
 import '../feed/feed_screen.dart';
 
 /// Mobile Home Page matching Web Home Dashboard architecture.
@@ -238,7 +239,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         if (hasError) {
           clips.loadClips();
         } else {
-          widget.onNavigateTab(1); // Jump to Feed/Clips view
+          widget.onNavigateTab(2);
         }
       },
     );
@@ -877,7 +878,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               ),
             ),
             GestureDetector(
-              onTap: () => widget.onNavigateTab(1),
+              onTap: () => widget.onNavigateTab(2),
               child: Row(
                 children: [
                   Text(

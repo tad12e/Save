@@ -14,6 +14,8 @@ class ClipModel {
   final DateTime createdAt;
   final Map<String, dynamic> extraMetadata;
 
+  bool isFavorite;
+
   ClipModel({
     required this.id,
     required this.url,
@@ -29,6 +31,7 @@ class ClipModel {
     required this.exportStatus,
     required this.createdAt,
     this.extraMetadata = const {},
+    this.isFavorite = false,
   });
 
   factory ClipModel.fromJson(Map<String, dynamic> json) {
@@ -47,6 +50,7 @@ class ClipModel {
       exportStatus: json['export_status'] ?? 'pending',
       createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
       extraMetadata: json['extra_metadata'] is Map ? Map<String, dynamic>.from(json['extra_metadata']) : {},
+      isFavorite: json['is_favorite'] == true || json['is_starred'] == true,
     );
   }
 
@@ -66,7 +70,44 @@ class ClipModel {
       'export_status': exportStatus,
       'created_at': createdAt.toIso8601String(),
       'extra_metadata': extraMetadata,
+      'is_favorite': isFavorite,
     };
+  }
+
+  ClipModel copyWith({
+    String? id,
+    String? url,
+    String? title,
+    String? summary,
+    String? contentType,
+    List<String>? tags,
+    String? sourcePlatform,
+    String? sourceAuthor,
+    String? parentClipId,
+    int? childClipsCount,
+    String? status,
+    String? exportStatus,
+    DateTime? createdAt,
+    Map<String, dynamic>? extraMetadata,
+    bool? isFavorite,
+  }) {
+    return ClipModel(
+      id: id ?? this.id,
+      url: url ?? this.url,
+      title: title ?? this.title,
+      summary: summary ?? this.summary,
+      contentType: contentType ?? this.contentType,
+      tags: tags ?? this.tags,
+      sourcePlatform: sourcePlatform ?? this.sourcePlatform,
+      sourceAuthor: sourceAuthor ?? this.sourceAuthor,
+      parentClipId: parentClipId ?? this.parentClipId,
+      childClipsCount: childClipsCount ?? this.childClipsCount,
+      status: status ?? this.status,
+      exportStatus: exportStatus ?? this.exportStatus,
+      createdAt: createdAt ?? this.createdAt,
+      extraMetadata: extraMetadata ?? this.extraMetadata,
+      isFavorite: isFavorite ?? this.isFavorite,
+    );
   }
 
   DateTime? get deadlineDate {
@@ -83,6 +124,33 @@ class ClipModel {
       return raw.toString().toLowerCase();
     }
     return 'learn';
+  }
+
+  String get domain {
+    try {
+      if (url.isNotEmpty) {
+        final uri = Uri.parse(url);
+        final host = uri.host.toLowerCase();
+        return host.startsWith('www.') ? host.substring(4) : host;
+      }
+    } catch (_) {}
+    return 'web';
+  }
+
+  String? get company {
+    return extraMetadata['company'] ?? extraMetadata['organization'];
+  }
+
+  String? get salary {
+    return extraMetadata['salary'] ?? extraMetadata['compensation'];
+  }
+
+  List<String> get destinations {
+    final raw = extraMetadata['synced_to'] ?? extraMetadata['destinations'];
+    if (raw is List) {
+      return raw.map((e) => e.toString()).toList();
+    }
+    return [];
   }
 
   static String _cleanTitle(dynamic rawTitle, dynamic rawSummary, dynamic rawUrl) {

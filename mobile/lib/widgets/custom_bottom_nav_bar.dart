@@ -62,11 +62,11 @@ class CustomBottomNavBar extends StatelessWidget {
                 isSelected: selectedIndex == 1,
               ),
 
-              // Tab 2: Tasks
+              // Tab 2: Clips
               _buildTabItem(
                 index: 2,
-                label: 'Tasks',
-                icon: LucideIcons.circleCheck,
+                label: 'Clips',
+                icon: LucideIcons.bookmark,
                 isSelected: selectedIndex == 2,
               ),
 

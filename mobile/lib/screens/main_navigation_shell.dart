@@ -6,7 +6,7 @@ import '../widgets/floating_audio_bubble.dart';
 import '../widgets/save_clip_bottom_sheet.dart';
 import 'home/home_dashboard_screen.dart';
 import 'feed/feed_screen.dart';
-import 'jobs/jobs_screen.dart';
+import 'clips/clips_screen.dart';
 import 'analytics/analytics_screen.dart';
 import 'profile/profile_screen.dart';
 
@@ -48,7 +48,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final shell = Scaffold(
       backgroundColor: AppTheme.background,
       body: Stack(
         children: [
@@ -59,7 +59,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
                 onNavigateTab: _onTabSelected,
               ),
               const FeedScreen(), // Tab 1: Feed
-              const JobsScreen(), // Tab 2: Tasks
+              const ClipsScreen(), // Tab 2: Clips (Replaced Tasks)
               const AnalyticsScreen(), // Tab 3: Analytics
               const ProfileScreen(), // Tab 4: Profile
             ],
@@ -72,6 +72,35 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
         onTabSelected: _onTabSelected,
         onSavePressed: _openSaveBottomSheet,
       ),
+    );
+
+    // Responsive layout: on wide desktop browser screens (like Brave),
+    // automatically frame as a centered mobile phone device (max 440px).
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 500) {
+          return Scaffold(
+            backgroundColor: const Color(0xFF0F172A),
+            body: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 440),
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 32,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ClipRect(child: shell),
+              ),
+            ),
+          );
+        }
+        return shell;
+      },
     );
   }
 }
