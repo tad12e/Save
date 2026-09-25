@@ -1,4 +1,13 @@
-import type { CustomPageConfig, CustomCategoryConfig, ClipItem, ClipType, ConnectionSyncLog } from '../types';
+import type {
+  CustomPageConfig,
+  CustomCategoryConfig,
+  ClipItem,
+  ClipType,
+  ConnectionSyncLog,
+  BulkImportUploadParams,
+  BulkImportJobResponse,
+  BulkImportJobStatus,
+} from '../types';
 
 export interface AuthorizeParams {
   provider: string;
@@ -943,5 +952,68 @@ export async function updateClipBackend(clipId: string, data: {
   }
 }
 
+export async function uploadBulkImportBackend(params: BulkImportUploadParams): Promise<BulkImportJobResponse> {
+  const formData = new FormData();
+  if (params.file) {
+    formData.append('file', params.file);
+  }
+  if (params.raw_data) {
+    formData.append('raw_data', params.raw_data);
+  }
+  if (params.source_platform) {
+    formData.append('source_platform', params.source_platform);
+  }
 
+  const headers = getAuthHeaders();
 
+  const response = await fetch(`${BASE_URL}/api/clips/import/upload/`, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const message = err.error || err.detail || `Upload failed (HTTP ${response.status}: ${response.statusText})`;
+    throw new Error(message);
+  }
+
+  return await response.json();
+}
+
+export async function fetchBulkImportStatusBackend(jobId: string): Promise<BulkImportJobStatus> {
+  const response = await fetch(`${BASE_URL}/api/clips/import/${jobId}/`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const message = err.error || err.detail || `Status check failed (HTTP ${response.status})`;
+    throw new Error(message);
+  }
+
+  return await response.json();
+}
+
+export async function fetchBulkImportHistoryBackend(): Promise<BulkImportJobStatus[]> {
+  try {
+    const response = await fetch(`${BASE_URL}/api/clips/import/history/`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.warn('Could not fetch bulk import history:', error);
+    return [];
+  }
+}

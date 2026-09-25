@@ -17,6 +17,7 @@ import { ManualAddClipModal } from './components/modals/ManualAddClipModal';
 import { CreatePageModal } from './components/modals/CreatePageModal';
 import { AuthModal } from './components/modals/AuthModal';
 import { MusicRadarModal } from './components/modals/MusicRadarModal';
+import { BulkImportModal } from './components/modals/BulkImportModal';
 
 import { 
   DestinationConfig, 
@@ -99,6 +100,7 @@ export default function App() {
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showMusicRadarModal, setShowMusicRadarModal] = useState(false);
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(() => {
     const storedUser = localStorage.getItem('clipper_user');
     return storedUser ? JSON.parse(storedUser) : { name: 'Tadiwos User', email: 'tadiwos@save.app' };
@@ -590,6 +592,7 @@ export default function App() {
           setSearchQuery={setSearchQuery}
           destinations={destinations}
           onQuickAddClip={() => handleOpenAddClipForPage()}
+          onOpenBulkImport={() => setShowBulkImportModal(true)}
           onOpenMusicRadar={() => setShowMusicRadarModal(true)}
           onRefreshSync={handleRefreshSync}
           isRefreshing={isRefreshing}
@@ -763,6 +766,22 @@ export default function App() {
       <MusicRadarModal
         isOpen={showMusicRadarModal}
         onClose={() => setShowMusicRadarModal(false)}
+      />
+
+      {/* Bulk Import Bookmarks Modal (connected to live Django backend) */}
+      <BulkImportModal
+        isOpen={showBulkImportModal}
+        onClose={() => setShowBulkImportModal(false)}
+        onImportComplete={() => {
+          handleRefreshSync();
+          triggerToast('Bulk import completed! Vault refreshed with newly imported bookmarks.');
+        }}
+        onOpenAuthModal={() => {
+          setShowBulkImportModal(false);
+          setShowAuthModal(true);
+        }}
+        currentUser={currentUser}
+        theme={theme}
       />
 
       {/* Toast Notification Banner */}

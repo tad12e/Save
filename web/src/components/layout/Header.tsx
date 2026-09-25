@@ -10,6 +10,7 @@ import {
   PanelLeftOpen,
   Sun,
   Moon,
+  Upload,
 } from 'lucide-react';
 import { DestinationConfig } from '../../types';
 
@@ -18,6 +19,7 @@ interface HeaderProps {
   setSearchQuery: (query: string) => void;
   destinations: DestinationConfig[];
   onQuickAddClip: () => void;
+  onOpenBulkImport?: () => void;
   onOpenMusicRadar?: () => void;
   onRefreshSync: () => void;
   isRefreshing: boolean;
@@ -35,6 +37,7 @@ export const Header: React.FC<HeaderProps> = (props) => {
   const {
     searchQuery,
     setSearchQuery,
+    onOpenBulkImport,
     onRefreshSync,
     isRefreshing,
     theme,
@@ -105,6 +108,22 @@ export const Header: React.FC<HeaderProps> = (props) => {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
+        {onOpenBulkImport && (
+          <button
+            id="bulk-import-header-btn"
+            onClick={onOpenBulkImport}
+            className={`h-9 px-3 sm:px-3.5 flex items-center gap-1.5 sm:gap-2 rounded-xl text-xs font-sans font-medium transition-all duration-150 cursor-pointer shadow-sm ${
+              isDark
+                ? 'bg-gradient-to-r from-emerald-500/15 to-[#3FE769]/10 hover:from-emerald-500/25 hover:to-[#3FE769]/20 text-[#3FE769] border border-[#3FE769]/30 hover:border-[#3FE769]/60 hover:shadow-[0_0_12px_rgba(63,231,105,0.15)]'
+                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 hover:border-emerald-400'
+            }`}
+            title="Bulk import bookmarks from Browser, Twitter/X, Reddit, or CSV"
+          >
+            <Upload className={`w-3.5 h-3.5 ${isDark ? 'text-[#3FE769]' : 'text-emerald-700'}`} />
+            <span className="font-semibold whitespace-nowrap">Bulk Import</span>
+          </button>
+        )}
+
         <div
           className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] leading-[14px] border ${
             isDark

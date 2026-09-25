@@ -152,3 +152,35 @@ export interface WeeklyDigestStats {
   topMatches: { title: string; company?: string; score: number; url: string }[];
   aiInsightText: string;
 }
+
+export interface BulkImportUploadParams {
+  file?: File;
+  raw_data?: string;
+  source_platform?: string;
+}
+
+export interface BulkImportJobResponse {
+  job_id: string;
+  status: 'pending' | 'processing' | 'done' | 'failed';
+  source_platform: string;
+  total_items: number;
+  created_items: number;
+  skipped_duplicates: number;
+  message: string;
+}
+
+export interface BulkImportJobStatus {
+  id: string;
+  status: 'pending' | 'processing' | 'done' | 'failed';
+  source_platform: string;
+  file_name: string;
+  total_items: number;
+  created_items: number;
+  skipped_duplicates: number;
+  processed_items: number;
+  failed_items: number;
+  error_log?: string;
+  created_at: string;
+  completed_at?: string | null;
+}
+
