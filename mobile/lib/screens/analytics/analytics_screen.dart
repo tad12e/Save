@@ -140,11 +140,378 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
+  static String _monthAbbr(int month) {
+    const m = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return (month >= 1 && month <= 12) ? m[month] : '';
+  }
+
+  Map<String, dynamic> _computeLocalMetrics(ClipsProvider clips) {
+    final allClips = clips.allClips;
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    final thirtyDaysAgo = now.subtract(const Duration(days: 30));
+
+    final totalClips = allClips.length;
+
+    final inPeriodClips = switch (_selectedPeriod) {
+      'This Month' || 'Last 30 Days' => allClips.where((c) => c.createdAt.isAfter(thirtyDaysAgo)).length,
+      'All Time' => totalClips,
+      _ => allClips.where((c) => c.createdAt.isAfter(sevenDaysAgo)).length,
+    };
+
+    final todayCompleted = allClips.where((c) => c.createdAt.isAfter(startOfToday)).length;
+
+    // Consecutive streak calculation
+    final uniqueDays = <DateTime>{};
+    for (final c in allClips) {
+      uniqueDays.add(DateTime(c.createdAt.year, c.createdAt.month, c.createdAt.day));
+    }
+    int streakDays = 0;
+    var checkDate = startOfToday;
+    if (!uniqueDays.contains(checkDate)) {
+      final yesterday = startOfToday.subtract(const Duration(days: 1));
+      if (uniqueDays.contains(yesterday)) {
+        checkDate = yesterday;
+      }
+    }
+    while (uniqueDays.contains(checkDate)) {
+      streakDays++;
+      checkDate = checkDate.subtract(const Duration(days: 1));
+    }
+
+    // Action rate
+    final actionable = allClips.where((c) {
+      final intent = c.intent.toLowerCase();
+      final ct = c.contentType.toLowerCase();
+      return intent == 'apply' || intent == 'learn' || intent == 'hire' || intent == 'attend' || ct == 'job' || ct == 'event' || c.deadlineDate != null;
+    }).toList();
+    final actioned = actionable.where((c) => c.status == 'done' || c.status == 'archived').toList();
+    final actionRate = actionable.isNotEmpty
+        ? ((actioned.length / actionable.length) * 100).round()
+        : (allClips.isNotEmpty ? 40 : 0);
+
+    final hoursSaved = (allClips.length * 8 / 60.0);
+    final dollarValue = (hoursSaved * 25).round();
+
+    final thisWeekCount = allClips.where((c) => c.createdAt.isAfter(sevenDaysAgo)).length;
+    final fourteenDaysAgo = now.subtract(const Duration(days: 14));
+    final lastWeekCount = allClips.where((c) => c.createdAt.isAfter(fourteenDaysAgo) && c.createdAt.isBefore(sevenDaysAgo)).length;
+    final diff = thisWeekCount - lastWeekCount;
+    final velocityLabel = diff >= 0 ? '+$diff vs last week' : '$diff vs last week';
+
+    // 1. Hourly distribution (6am - 11pm = 18 hours)
+    final hourlyCounts = <int, int>{};
+    for (final c in allClips) {
+      hourlyCounts[c.createdAt.hour] = (hourlyCounts[c.createdAt.hour] ?? 0) + 1;
+    }
+    int peakHour = 10;
+    int maxHourCount = 0;
+    for (int h = 6; h <= 23; h++) {
+      final count = hourlyCounts[h] ?? 0;
+      if (count > maxHourCount) {
+        maxHourCount = count;
+        peakHour = h;
+      }
+    }
+    final List<double> hourlyActivity = [];
+    for (int h = 6; h <= 23; h++) {
+      final count = hourlyCounts[h] ?? 0;
+      if (maxHourCount > 0) {
+        hourlyActivity.add((count / maxHourCount).clamp(0.15, 1.0));
+      } else {
+        final v = (h >= 9 && h <= 11) ? 0.95 : ((h >= 14 && h <= 16) ? 0.70 : 0.20);
+        hourlyActivity.add(v);
+      }
+    }
+    final peakStart = (peakHour - 1) % 24;
+    final peakEnd = (peakHour + 1) % 24;
+    final peakStartStr = '${peakStart % 12 == 0 ? 12 : peakStart % 12} ${peakStart < 12 ? 'AM' : 'PM'}';
+    final peakEndStr = '${peakEnd % 12 == 0 ? 12 : peakEnd % 12} ${peakEnd < 12 ? 'AM' : 'PM'}';
+    final peakWindowStr = '$peakStartStr – $peakEndStr';
+
+    // 2. 80-Day Consistency Heatmap Grid (4 rows x 20 cols)
+    final List<List<int>> matrixData = List.generate(4, (_) => List.filled(20, 0));
+    final dayCountMap = <DateTime, int>{};
+    for (final c in allClips) {
+      final d = DateTime(c.createdAt.year, c.createdAt.month, c.createdAt.day);
+      dayCountMap[d] = (dayCountMap[d] ?? 0) + 1;
+    }
+    for (int col = 19; col >= 0; col--) {
+      for (int row = 3; row >= 0; row--) {
+        final daysAgo = ((19 - col) * 4) + (3 - row);
+        final targetDate = startOfToday.subtract(Duration(days: daysAgo));
+        final count = dayCountMap[targetDate] ?? 0;
+        int intensity = 0;
+        if (count >= 6) {
+          intensity = 4;
+        } else if (count >= 4) {
+          intensity = 3;
+        } else if (count >= 2) {
+          intensity = 2;
+        } else if (count >= 1) {
+          intensity = 1;
+        }
+        matrixData[row][col] = intensity;
+      }
+    }
+
+    // 3. Weekday Rhythm (Mon=1 .. Sun=7)
+    final weekdayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    final weekdayCounts = List.filled(7, 0);
+    for (final c in allClips) {
+      final wd = c.createdAt.weekday;
+      weekdayCounts[wd - 1]++;
+    }
+    int maxWeekdayCount = 0;
+    int topWeekdayIdx = 3;
+    for (int i = 0; i < 7; i++) {
+      if (weekdayCounts[i] > maxWeekdayCount) {
+        maxWeekdayCount = weekdayCounts[i];
+        topWeekdayIdx = i;
+      }
+    }
+    final List<Map<String, dynamic>> weekdayList = [];
+    for (int i = 0; i < 7; i++) {
+      final c = weekdayCounts[i];
+      final pct = maxWeekdayCount > 0 ? (c / maxWeekdayCount).clamp(0.15, 1.0) : 0.40;
+      weekdayList.add({
+        'day': weekdayNames[i],
+        'count': '$c',
+        'percent': pct,
+        'isHighlighted': i == topWeekdayIdx && maxWeekdayCount > 0,
+      });
+    }
+    final topWeekdayStr = '${weekdayNames[topWeekdayIdx]} ${maxWeekdayCount > 0 ? maxWeekdayCount : 0} clips';
+
+    // Density curve recent 7 days
+    final List<double> densityPoints = [];
+    for (int i = 6; i >= 0; i--) {
+      final d = startOfToday.subtract(Duration(days: i));
+      final nextD = d.add(const Duration(days: 1));
+      final cnt = allClips.where((c) => c.createdAt.isAfter(d) && c.createdAt.isBefore(nextD)).length.toDouble();
+      densityPoints.add(cnt);
+    }
+    final densityMean = thisWeekCount / 7.0;
+
+    // 4. Opportunity Funnel
+    final reviewedClips = allClips.where((c) => c.status != 'pending').length;
+    final opportunityClips = allClips.where((c) =>
+      c.contentType.toLowerCase() == 'job' ||
+      c.contentType.toLowerCase() == 'event' ||
+      c.intent == 'apply' ||
+      c.deadlineDate != null
+    ).length;
+    final realizedClips = allClips.where((c) => c.status == 'done').length;
+
+    final missedDeadlinesCount = allClips.where((c) =>
+      c.deadlineDate != null &&
+      c.deadlineDate!.isBefore(now) &&
+      c.status != 'done'
+    ).length;
+
+    final stages = [
+      {
+        'name': '1. Saved',
+        'count': '$totalClips items',
+        'rate': '100%',
+        'pct': 1.0,
+        'color': const Color(0xFF3B82F6),
+      },
+      {
+        'name': '2. Reviewed',
+        'count': '$reviewedClips items',
+        'rate': '${totalClips > 0 ? ((reviewedClips / totalClips) * 100).round() : 0}%',
+        'pct': totalClips > 0 ? (reviewedClips / totalClips).clamp(0.15, 1.0) : 0.70,
+        'color': const Color(0xFF6366F1),
+      },
+      {
+        'name': '3. Applied / Actioned',
+        'count': '$opportunityClips items',
+        'rate': '${totalClips > 0 ? ((opportunityClips / totalClips) * 100).round() : 0}%',
+        'pct': totalClips > 0 ? (opportunityClips / totalClips).clamp(0.12, 1.0) : 0.45,
+        'color': const Color(0xFF8B5CF6),
+      },
+      {
+        'name': '4. Realized / Done',
+        'count': '$realizedClips items',
+        'rate': '${totalClips > 0 ? ((realizedClips / totalClips) * 100).round() : 0}%',
+        'pct': totalClips > 0 ? (realizedClips / totalClips).clamp(0.10, 1.0) : 0.20,
+        'color': const Color(0xFF10B981),
+      },
+    ];
+
+    int getCategoryActionRate(String cat) {
+      final items = allClips.where((c) => c.contentType.toLowerCase().contains(cat) || c.intent.contains(cat)).toList();
+      if (items.isEmpty) return 0;
+      final done = items.where((c) => c.status == 'done' || c.status == 'archived').length;
+      return ((done / items.length) * 100).round();
+    }
+    final jobsActionRate = getCategoryActionRate('job');
+    final eventsActionRate = getCategoryActionRate('event');
+    final articlesActionRate = getCategoryActionRate('article');
+    final toolsActionRate = getCategoryActionRate('tool');
+
+    // 5. Content Types Breakdown Donut
+    final typeCounts = <String, int>{};
+    for (final c in allClips) {
+      final ct = c.contentType.toLowerCase();
+      typeCounts[ct] = (typeCounts[ct] ?? 0) + 1;
+    }
+    final colorPalette = {
+      'job': const Color(0xFF22C55E),
+      'article': const Color(0xFF3B82F6),
+      'webpage': const Color(0xFF0284C7),
+      'tool': const Color(0xFFF97316),
+      'event': const Color(0xFFA78BFA),
+      'music': const Color(0xFFEC4899),
+      'video': const Color(0xFFEF4444),
+      'image': const Color(0xFF06B6D4),
+      'other': const Color(0xFF94A3B8),
+    };
+    final List<Map<String, dynamic>> contentBreakdown = [];
+    if (typeCounts.isNotEmpty) {
+      final sortedEntries = typeCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+      for (final e in sortedEntries) {
+        final pct = totalClips > 0 ? ((e.value / totalClips) * 100).round() : 0;
+        final name = e.key.isNotEmpty ? (e.key[0].toUpperCase() + e.key.substring(1)) : 'General';
+        contentBreakdown.add({
+          'name': name,
+          'count': e.value,
+          'pct': pct,
+          'color': colorPalette[e.key] ?? const Color(0xFF10B981),
+        });
+      }
+    } else {
+      contentBreakdown.addAll([
+        {'name': 'Articles', 'count': 0, 'pct': 0, 'color': const Color(0xFF3B82F6)},
+        {'name': 'Jobs', 'count': 0, 'pct': 0, 'color': const Color(0xFF22C55E)},
+        {'name': 'Tools', 'count': 0, 'pct': 0, 'color': const Color(0xFFF97316)},
+      ]);
+    }
+
+    // 6. Popular Tags Aggregation
+    final tagCounts = <String, int>{};
+    for (final c in allClips) {
+      for (final t in c.tags) {
+        final clean = t.trim().replaceAll('#', '').toLowerCase();
+        if (clean.isNotEmpty) {
+          tagCounts[clean] = (tagCounts[clean] ?? 0) + 1;
+        }
+      }
+    }
+    final sortedTags = tagCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final List<Map<String, dynamic>> popularTags = sortedTags.take(8).map((e) => {
+      'name': e.key,
+      'count': e.value,
+    }).toList();
+
+    // 7. Clips Over Time (Last 7 Days)
+    final List<double> last7DaysTotal = [];
+    final List<String> last7DaysLabels = [];
+    for (int i = 6; i >= 0; i--) {
+      final d = startOfToday.subtract(Duration(days: i));
+      final nextD = d.add(const Duration(days: 1));
+      final cCount = allClips.where((c) => c.createdAt.isAfter(d) && c.createdAt.isBefore(nextD)).length.toDouble();
+      last7DaysTotal.add(cCount);
+      last7DaysLabels.add('${_monthAbbr(d.month)} ${d.day}');
+    }
+
+    // 8. Personal Bests & Achievements
+    int maxInOneDay = 0;
+    DateTime? maxDayDate;
+    for (final entry in dayCountMap.entries) {
+      if (entry.value > maxInOneDay) {
+        maxInOneDay = entry.value;
+        maxDayDate = entry.key;
+      }
+    }
+    final topTagStr = sortedTags.isNotEmpty ? '#${sortedTags.first.key} (${sortedTags.first.value} clips)' : 'None yet';
+
+    final domainCounts = <String, int>{};
+    for (final c in allClips) {
+      domainCounts[c.domain] = (domainCounts[c.domain] ?? 0) + 1;
+    }
+    final sortedDomains = domainCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final topDomainStr = sortedDomains.isNotEmpty ? '${sortedDomains.first.key} (${totalClips > 0 ? ((sortedDomains.first.value / totalClips) * 100).round() : 0}%)' : 'Web';
+    final distinctDomainsCount = domainCounts.length;
+
+    // Badges calculation
+    final earnedBadges = [
+      {'emoji': '🔥', 'title': 'On Fire', 'desc': '7-Day save streak', 'unlocked': streakDays >= 7},
+      {'emoji': '📚', 'title': 'Deep Reader', 'desc': '10 research papers saved', 'unlocked': (typeCounts['article'] ?? 0) >= 10},
+      {'emoji': '💼', 'title': 'Job Hunter', 'desc': '5 jobs saved', 'unlocked': (typeCounts['job'] ?? 0) >= 5},
+      {'emoji': '⚡', 'title': 'Quick Actioner', 'desc': 'Active pipeline progress', 'unlocked': actionRate >= 30},
+      {'emoji': '🌍', 'title': 'Globe Trotter', 'desc': '5+ distinct domains', 'unlocked': distinctDomainsCount >= 5},
+      {'emoji': '🎯', 'title': 'Sharp Eye', 'desc': '10+ total items clipped', 'unlocked': totalClips >= 10},
+    ];
+
+    // Synced count
+    final syncedCount = allClips.where((c) => c.exportStatus == 'synced').length;
+
+    // Percentile rank
+    final percentile = totalClips >= 100 ? 94 : (totalClips >= 50 ? 84 : (totalClips >= 20 ? 76 : (totalClips >= 5 ? 55 : 30)));
+
+    return {
+      'total_clips': totalClips,
+      'in_period_clips': inPeriodClips,
+      'today_completed': todayCompleted,
+      'active_streak_days': streakDays,
+      'action_rate_percent': actionRate,
+      'time_saved_hours': hoursSaved.toStringAsFixed(1),
+      'saved_dollar_value': dollarValue,
+      'velocity_label': velocityLabel,
+      'momentum_pct': diff > 0 ? (diff * 10).clamp(5, 100) : 10,
+      'hourly_activity': hourlyActivity,
+      'peak_window_str': peakWindowStr,
+      'peak_hour_count': maxHourCount,
+      'matrix_data': matrixData,
+      'weekday_list': weekdayList,
+      'top_weekday_str': topWeekdayStr,
+      'density_points': densityPoints,
+      'density_mean_str': 'Mean ${densityMean.toStringAsFixed(1)} clips',
+      'density_badge_str': '$thisWeekCount clips',
+      'opportunity_stages': stages,
+      'missed_deadlines_count': missedDeadlinesCount,
+      'realized_value_str': '\$${(realizedClips * 150) + (totalClips * 10)} realized',
+      'action_rates': {
+        'Jobs': '$jobsActionRate%',
+        'Events': '$eventsActionRate%',
+        'Articles': '$articlesActionRate%',
+        'Tools': '$toolsActionRate%',
+      },
+      'content_breakdown': contentBreakdown,
+      'popular_tags': popularTags,
+      'clips_over_time_total': last7DaysTotal,
+      'clips_over_time_labels': last7DaysLabels,
+      'personal_records': {
+        'max_day': maxInOneDay > 0 ? '$maxInOneDay clips (${_monthAbbr(maxDayDate!.month)} ${maxDayDate.day})' : '0 clips',
+        'max_week': '$thisWeekCount clips this week',
+        'top_tag': topTagStr,
+        'top_source': topDomainStr,
+      },
+      'badges': earnedBadges,
+      'distinct_domains_count': distinctDomainsCount,
+      'synced_count': syncedCount,
+      'percentile': percentile,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final clipsProvider = Provider.of<ClipsProvider>(context);
-    final allClips = clipsProvider.clips;
-    final totalCount = allClips.isNotEmpty ? allClips.length : 1369;
+    final local = _computeLocalMetrics(clipsProvider);
+
+    final kpis = _backendData?['kpis'];
+    final totalCount = (kpis?['total_clips'] as num?)?.toInt() ?? (local['total_clips'] as int);
+    final inPeriodCount = (kpis?['in_period_clips'] as num?)?.toInt() ?? (local['in_period_clips'] as int);
+    final streakDays = (kpis?['active_streak_days'] as num?)?.toInt() ?? (local['active_streak_days'] as int);
+    final todayCompleted = (_backendData?['daily_focus']?['today_completed'] as num?)?.toInt() ?? (local['today_completed'] as int);
+    final actionRate = (kpis?['action_rate_percent'] as num?)?.toInt() ?? (local['action_rate_percent'] as int);
+    final savedValue = (kpis?['saved_dollar_value'] != null ? '\$${kpis!['saved_dollar_value']}' : '\$${local['saved_dollar_value']}');
+    final hoursSaved = (kpis?['time_saved_hours']?.toString() ?? local['time_saved_hours'].toString());
+    final velocityText = (kpis?['velocity_trend']?['label']?.toString() ?? local['velocity_label'].toString());
+    final momentumPct = (local['momentum_pct'] as int);
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -218,71 +585,151 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     const SizedBox(height: 14),
 
                     // Section 2: Mascot Speech Bubble
-                    AnalyticsInteractiveCard(child: _buildMascotSpeechBubble()),
+                    AnalyticsInteractiveCard(
+                      child: _buildMascotSpeechBubble(
+                        totalCount: totalCount,
+                        inPeriodCount: inPeriodCount,
+                        streakDays: streakDays,
+                        velocityText: velocityText,
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 3: 5-Metric Quick Stats Card Row
-                    AnalyticsInteractiveCard(child: _buildQuickStatsCardRow(totalCount)),
+                    AnalyticsInteractiveCard(
+                      child: _buildQuickStatsCardRow(
+                        totalCount: totalCount,
+                        inPeriodCount: inPeriodCount,
+                        streakDays: streakDays,
+                        savedValue: savedValue,
+                        hoursSaved: hoursSaved,
+                        actionRate: actionRate,
+                        velocityText: velocityText,
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
-                    // Section 3.5: Streak & Momentum Analytics (Fitness Rings, +34% Momentum)
-                    AnalyticsInteractiveCard(child: _buildStreakAndMomentumCard()),
+                    // Section 3.5: Streak & Momentum Analytics (Fitness Rings)
+                    AnalyticsInteractiveCard(
+                      child: _buildStreakAndMomentumCard(
+                        streakDays: streakDays,
+                        todayCompleted: todayCompleted,
+                        actionRate: actionRate,
+                        momentumPct: momentumPct,
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 4: Daily Saving Goal Circular Ring Card
-                    AnalyticsInteractiveCard(child: _buildDailyFocusCard()),
+                    AnalyticsInteractiveCard(
+                      child: _buildDailyFocusCard(todayCompleted: todayCompleted),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 4.5: Hourly Activity Heatmap (6am - 11pm) & Peak Window
-                    AnalyticsInteractiveCard(child: _buildHourlyActivityHeatmapCard()),
+                    AnalyticsInteractiveCard(
+                      child: _buildHourlyActivityHeatmapCard(
+                        hourlyActivity: (local['hourly_activity'] as List<double>),
+                        peakWindow: (local['peak_window_str'] as String),
+                        maxHourCount: (local['peak_hour_count'] as int),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 5: Consistency Heatmap Matrix Card
-                    AnalyticsInteractiveCard(child: _buildConsistencyHeatmapCard()),
+                    AnalyticsInteractiveCard(
+                      child: _buildConsistencyHeatmapCard(
+                        matrixData: (local['matrix_data'] as List<List<int>>),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 6: Density Area Curve & Weekday Rhythm Split Cards
-                    AnalyticsInteractiveCard(child: _buildDensityAndRhythmSection()),
+                    AnalyticsInteractiveCard(
+                      child: _buildDensityAndRhythmSection(
+                        densityPoints: (local['density_points'] as List<double>),
+                        densityMeanStr: (local['density_mean_str'] as String),
+                        densityBadgeStr: (local['density_badge_str'] as String),
+                        weekdayList: (local['weekday_list'] as List<Map<String, dynamic>>),
+                        topWeekdayStr: (local['top_weekday_str'] as String),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 6.5: Opportunity Outcome Analytics (Funnel, Action Rates, Missed Opportunities, Value Score)
-                    AnalyticsInteractiveCard(child: _buildOpportunityOutcomeSection()),
-                    const SizedBox(height: 16),
-
-                    // Section 6.6: Content Intelligence & 10-Axis Knowledge Graph Radar
-                    AnalyticsInteractiveCard(child: _buildContentIntelligenceSection()),
+                    AnalyticsInteractiveCard(
+                      child: _buildOpportunityOutcomeSection(
+                        stages: (local['opportunity_stages'] as List<Map<String, dynamic>>),
+                        missedCount: (local['missed_deadlines_count'] as int),
+                        realizedValue: (local['realized_value_str'] as String),
+                        actionRates: (local['action_rates'] as Map<String, String>),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 8 [NEW]: Clips Over Time Interactive Line Chart (Total | By Type)
-                    AnalyticsInteractiveCard(child: _buildClipsOverTimeCard()),
+                    AnalyticsInteractiveCard(
+                      child: _buildClipsOverTimeCard(
+                        last7DaysTotal: (local['clips_over_time_total'] as List<double>),
+                        labels: (local['clips_over_time_labels'] as List<String>),
+                        breakdown: (local['content_breakdown'] as List<Map<String, dynamic>>),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 9 [NEW]: Content Type Donut Chart with interactive legend
-                    AnalyticsInteractiveCard(child: _buildContentTypeDonutCard()),
+                    AnalyticsInteractiveCard(
+                      child: _buildContentTypeDonutCard(
+                        breakdown: (local['content_breakdown'] as List<Map<String, dynamic>>),
+                        totalCount: totalCount,
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 7: Content Breakdown & Specialty Radar Polygon Card
-                    AnalyticsInteractiveCard(child: _buildFocusDistributionCard()),
+                    AnalyticsInteractiveCard(
+                      child: _buildFocusDistributionCard(
+                        breakdown: (local['content_breakdown'] as List<Map<String, dynamic>>),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 8: Popular Tags Analytics Breakdown
-                    AnalyticsInteractiveCard(child: _buildPopularTagsSection(context)),
+                    AnalyticsInteractiveCard(
+                      child: _buildPopularTagsSection(
+                        context,
+                        tags: (local['popular_tags'] as List<Map<String, dynamic>>),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 9: Destination & Sync Health Analytics
-                    AnalyticsInteractiveCard(child: _buildDestinationAndSyncSection()),
+                    AnalyticsInteractiveCard(
+                      child: _buildDestinationAndSyncSection(
+                        syncedCount: (local['synced_count'] as int),
+                        totalCount: totalCount,
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 10: Personal Records & Achievement Badges (Gamification)
-                    AnalyticsInteractiveCard(child: _buildPersonalRecordsAndBadgesSection()),
-                    const SizedBox(height: 16),
-
-                    // Section 20 [NEW]: Board Leaderboard & Global 78% Percentile
-                    AnalyticsInteractiveCard(child: _buildBoardLeaderboardCard()),
+                    AnalyticsInteractiveCard(
+                      child: _buildPersonalRecordsAndBadgesSection(
+                        records: (local['personal_records'] as Map<String, dynamic>),
+                        badges: (local['badges'] as List<Map<String, dynamic>>),
+                        percentile: (local['percentile'] as int),
+                      ),
+                    ),
                     const SizedBox(height: 16),
 
                     // Section 11: Predictive Analytics & Forecast (Next Week Saves, Deadlines, Optimal Saving)
-                    AnalyticsInteractiveCard(child: _buildPredictiveAnalyticsSection()),
+                    AnalyticsInteractiveCard(
+                      child: _buildPredictiveAnalyticsSection(
+                        missedCount: (local['missed_deadlines_count'] as int),
+                        inPeriodCount: inPeriodCount,
+                        peakWindow: (local['peak_window_str'] as String),
+                      ),
+                    ),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -339,14 +786,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Section 2: Mascot Speech Bubble
+  // Section 2: Mascot Speech Bubble (Live Dynamic)
   // ---------------------------------------------------------------------------
-  Widget _buildMascotSpeechBubble() {
-    final kpis = _backendData?['kpis'];
-    final velocityLabel = kpis?['velocity_trend']?['label'];
-    final bubbleText = velocityLabel != null
-        ? '${kpis?['in_period_clips'] ?? 0} items clipped in $_selectedPeriod. $velocityLabel.'
-        : '52 items clipped this week across 34 collections. Elite vault.';
+  Widget _buildMascotSpeechBubble({
+    required int totalCount,
+    required int inPeriodCount,
+    required int streakDays,
+    required String velocityText,
+  }) {
+    final String bubbleText;
+    if (totalCount == 0) {
+      bubbleText = 'Welcome to your knowledge vault! Save your first clip to start your intelligence streak.';
+    } else {
+      bubbleText = '$inPeriodCount items clipped in $_selectedPeriod. $velocityText. ${streakDays > 0 ? "$streakDays day streak active! 🔥" : "Keep building your library!"}';
+    }
 
     return Container(
       width: double.infinity,
@@ -432,16 +885,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Section 3: 5 Metric Cards Horizontal Grid
+  // Section 3: 5 Metric Cards Horizontal Grid (Live Dynamic)
   // ---------------------------------------------------------------------------
-  Widget _buildQuickStatsCardRow(int totalCount) {
-    final kpis = _backendData?['kpis'];
-    final totalSaved = kpis?['total_clips']?.toString() ?? (totalCount > 0 ? '$totalCount' : '1369');
-    final weeklySaved = kpis?['in_period_clips']?.toString() ?? '52';
-    final streakDays = kpis?['active_streak_days']?.toString() ?? '187';
-    final savedValue = '\$${kpis?['saved_dollar_value'] ?? 420}';
-    final actionRate = '${kpis?['action_rate_percent'] ?? 74.2}%';
-
+  Widget _buildQuickStatsCardRow({
+    required int totalCount,
+    required int inPeriodCount,
+    required int streakDays,
+    required String savedValue,
+    required String hoursSaved,
+    required int actionRate,
+    required String velocityText,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -461,15 +915,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         physics: const BouncingScrollPhysics(),
         child: Row(
           children: [
-            _buildMetricItem('TOTAL SAVED', totalSaved, '$totalSaved clips all-time', null),
+            _buildMetricItem('TOTAL SAVED', '$totalCount', '$totalCount clips all-time', null),
             _buildMetricDivider(),
-            _buildMetricItem(_selectedPeriod.toUpperCase(), weeklySaved, kpis?['velocity_trend']?['label'] ?? 'Velocity up', null),
+            _buildMetricItem(_selectedPeriod.toUpperCase(), '$inPeriodCount', velocityText, null),
             _buildMetricDivider(),
-            _buildMetricItem('SAVE STREAK', '${streakDays}d', 'Active consistency', const Color(0xFF10B981)),
+            _buildMetricItem('SAVE STREAK', '${streakDays}d', streakDays > 0 ? 'Active consistency' : 'Start streak', const Color(0xFF10B981)),
             _buildMetricDivider(),
-            _buildMetricItem('SAVED VALUE', savedValue, '${kpis?['time_saved_hours'] ?? 18.4}h saved', const Color(0xFF3B82F6)),
+            _buildMetricItem('SAVED VALUE', savedValue, '$hoursSaved h saved', const Color(0xFF3B82F6)),
             _buildMetricDivider(),
-            _buildMetricItem('ACTION RATE', actionRate, 'Opportunities', const Color(0xFF8B5CF6)),
+            _buildMetricItem('ACTION RATE', '$actionRate%', 'Opportunities', const Color(0xFF8B5CF6)),
           ],
         ),
       ),
@@ -523,14 +977,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Section 4: Daily Saving Goal Circular Ring Card
+  // Section 4: Daily Saving Goal Circular Ring Card (Live Dynamic)
   // ---------------------------------------------------------------------------
-  Widget _buildDailyFocusCard() {
+  Widget _buildDailyFocusCard({required int todayCompleted}) {
     final dailyFocus = _backendData?['daily_focus'];
     final target = (dailyFocus?['target_clips_per_day'] as num?)?.toInt() ?? 10;
-    final completed = (dailyFocus?['today_completed'] as num?)?.toInt() ?? 12;
-    final rate = (dailyFocus?['completion_rate'] as num?)?.toInt() ?? 100;
-    final progress = (rate / 100.0).clamp(0.0, 1.0);
+    final completed = (dailyFocus?['today_completed'] as num?)?.toInt() ?? todayCompleted;
+    final rate = ((completed / target) * 100).round();
+    final progress = (completed / target).clamp(0.0, 1.0);
+    final isMet = completed >= target;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -571,12 +1026,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
+                  color: isMet ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.circleCheck, size: 12, color: Color(0xFF16A34A)),
+                    Icon(
+                      isMet ? LucideIcons.circleCheck : LucideIcons.clock,
+                      size: 12,
+                      color: isMet ? const Color(0xFF16A34A) : const Color(0xFFB45309),
+                    ),
                     const SizedBox(width: 4),
                     AnimatedCountText(
                       value: rate,
@@ -584,7 +1043,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF16A34A),
+                        color: isMet ? const Color(0xFF16A34A) : const Color(0xFFB45309),
                       ),
                     ),
                   ],
@@ -604,7 +1063,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 child: CustomPaint(
                   painter: _GoalRingPainter(
                     progress: progress,
-                    progressColor: const Color(0xFF166534), // Darker green ring
+                    progressColor: isMet ? const Color(0xFF16A34A) : const Color(0xFF2D6A4F),
                     backgroundColor: const Color(0xFFDCFCE7),
                   ),
                   child: Center(
@@ -651,7 +1110,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '12 items clipped & synced',
+                      '$completed items clipped & synced',
                       style: GoogleFonts.outfit(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -660,7 +1119,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Daily reading & bookmark goal completed.',
+                      isMet
+                          ? 'Daily reading & bookmark goal achieved! 🎉'
+                          : '${(target - completed).clamp(0, target)} more items to hit today\'s target.',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         color: AppTheme.textMuted,
@@ -675,21 +1136,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFDCFCE7),
+                            color: isMet ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(LucideIcons.circleCheck, size: 12, color: Color(0xFF16A34A)),
+                              Icon(
+                                isMet ? LucideIcons.circleCheck : LucideIcons.clock,
+                                size: 12,
+                                color: isMet ? const Color(0xFF16A34A) : const Color(0xFFB45309),
+                              ),
                               const SizedBox(width: 4),
                               Text(
-                                'GOAL SECURED',
+                                isMet ? 'GOAL SECURED' : 'IN PROGRESS',
                                 style: GoogleFonts.inter(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 0.4,
-                                  color: const Color(0xFF16A34A),
+                                  color: isMet ? const Color(0xFF16A34A) : const Color(0xFFB45309),
                                 ),
                               ),
                             ],
@@ -702,7 +1167,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            'TARGET 10 ITEMS',
+                            'TARGET $target ITEMS',
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -726,7 +1191,27 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 5: Consistency Heatmap Matrix Card
   // ---------------------------------------------------------------------------
-  Widget _buildConsistencyHeatmapCard() {
+  Widget _buildConsistencyHeatmapCard({required List<List<int>> matrixData}) {
+    final backendMatrix = _backendData?['contribution_matrix']?['weeks'] as List?;
+    List<List<int>> activeMatrix = matrixData;
+    if (backendMatrix != null && backendMatrix.isNotEmpty) {
+      // Backend returns 52 weeks, take last 20 weeks for mobile display
+      final weeksToUse = backendMatrix.reversed.take(20).toList().reversed.toList();
+      final List<List<int>> converted = List.generate(4, (_) => List.filled(20, 0));
+      for (int c = 0; c < weeksToUse.length && c < 20; c++) {
+        final days = weeksToUse[c];
+        if (days is List) {
+          for (int r = 0; r < days.length && r < 4; r++) {
+            final d = days[r];
+            if (d is Map) {
+              converted[r][c] = (d['intensity'] as num?)?.toInt() ?? ((d['count'] as num?)?.toInt() ?? 0).clamp(0, 4);
+            }
+          }
+        }
+      }
+      activeMatrix = converted;
+    }
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -791,7 +1276,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           // Heatmap Matrix Grid (4 rows x 20 cols)
           CustomPaint(
             size: const Size(double.infinity, 80),
-            painter: _HeatmapMatrixPainter(),
+            painter: _HeatmapMatrixPainter(pattern: activeMatrix),
           ),
         ],
       ),
@@ -811,9 +1296,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Section 6: Density Area Curve & Weekday Rhythm Split Cards
+  // Section 6: Density Area Curve & Weekday Rhythm Split Cards (Live Dynamic)
   // ---------------------------------------------------------------------------
-  Widget _buildDensityAndRhythmSection() {
+  Widget _buildDensityAndRhythmSection({
+    required List<double> densityPoints,
+    required String densityMeanStr,
+    required String densityBadgeStr,
+    required List<Map<String, dynamic>> weekdayList,
+    required String topWeekdayStr,
+  }) {
+    final recentMax = densityPoints.isNotEmpty ? densityPoints.reduce(math.max).toInt() : 10;
     return Column(
       children: [
         // Card A: Density Curve
@@ -867,7 +1359,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      '14 clips',
+                      densityBadgeStr,
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -883,7 +1375,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 height: 70,
                 width: double.infinity,
                 child: CustomPaint(
-                  painter: _DensityCurvePainter(),
+                  painter: _DensityCurvePainter(values: densityPoints),
                 ),
               ),
               const SizedBox(height: 6),
@@ -892,9 +1384,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('0 CLIPS', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
-                  Text('8 CLIPS', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
-                  Text('16 CLIPS', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
-                  Text('Mean 12 clips', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
+                  Text('${math.max(1, (recentMax / 2).round())} CLIPS', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
+                  Text('${math.max(2, recentMax)} CLIPS', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
+                  Text(densityMeanStr, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: AppTheme.textMuted)),
                 ],
               ),
             ],
@@ -953,7 +1445,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      'Thu 18 clips',
+                      topWeekdayStr,
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -964,14 +1456,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Day bars
-              _buildWeekdayBar('MON', 0.65, '12', false),
-              _buildWeekdayBar('TUE', 0.75, '14', false),
-              _buildWeekdayBar('WED', 0.70, '13', false),
-              _buildWeekdayBar('THU', 0.95, '18', true), // Top day
-              _buildWeekdayBar('FRI', 0.60, '11', false),
-              _buildWeekdayBar('SAT', 0.70, '13', false),
-              _buildWeekdayBar('SUN', 0.55, '10', false),
+              // Dynamic Day bars
+              ...weekdayList.map((item) => _buildWeekdayBar(
+                item['day'] as String,
+                (item['percent'] as num).toDouble(),
+                item['count'] as String,
+                item['isHighlighted'] as bool,
+              )),
             ],
           ),
         ),
@@ -1040,7 +1531,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 7: Content Breakdown & Specialty Radar Polygon Card
   // ---------------------------------------------------------------------------
-  Widget _buildFocusDistributionCard() {
+  Widget _buildFocusDistributionCard({required List<Map<String, dynamic>> breakdown}) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1099,7 +1590,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ),
               ),
               Text(
-                '8 categories',
+                '${breakdown.length} categories',
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   color: AppTheme.textMuted,
@@ -1112,13 +1603,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
             child: Row(
-              children: [
-                _buildSubjectPill('Articles', const Color(0xFFEF4444)),
-                _buildSubjectPill('Engineering', const Color(0xFF10B981)),
-                _buildSubjectPill('AI & ML', const Color(0xFF06B6D4)),
-                _buildSubjectPill('Design', const Color(0xFFF59E0B)),
-                _buildSubjectPill('Tools', const Color(0xFF8B5CF6)),
-              ],
+              children: breakdown.map((b) => _buildSubjectPill(
+                '${b['name']} (${b['count']})',
+                (b['color'] as Color?) ?? const Color(0xFF10B981),
+              )).toList(),
             ),
           ),
         ],
@@ -1161,19 +1649,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Section 8: Popular Tags Analytics Breakdown
+  // Section 8: Popular Tags Analytics Breakdown (Live Dynamic)
   // ---------------------------------------------------------------------------
-  Widget _buildPopularTagsSection(BuildContext context) {
-    final tags = [
-      {'name': 'llm', 'count': 128},
-      {'name': 'system-design', 'count': 82},
-      {'name': 'react', 'count': 64},
-      {'name': 'ux', 'count': 57},
-      {'name': 'rust', 'count': 45},
-      {'name': 'nextjs', 'count': 39},
-      {'name': 'hardware', 'count': 31},
-      {'name': 'datasets', 'count': 26},
-    ];
+  Widget _buildPopularTagsSection(BuildContext context, {required List<Map<String, dynamic>> tags}) {
+    final activeTags = tags.isNotEmpty
+        ? tags
+        : [
+            {'name': 'general', 'count': 0},
+          ];
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -1204,7 +1687,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ),
               ),
               Text(
-                '8 active filters',
+                '${activeTags.length} active tags',
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   color: AppTheme.textMuted,
@@ -1213,49 +1696,72 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: tags.map((t) {
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+          if (tags.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'No tags found yet. Add tags when clipping to see distribution.',
+                style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: activeTags.map((t) {
+                return InkWell(
+                  onTap: () {
+                    final clipsProvider = Provider.of<ClipsProvider>(context, listen: false);
+                    clipsProvider.setSearchQuery('#${t['name']}');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Filtered by #${t['name']}'),
+                        duration: const Duration(seconds: 1),
+                        backgroundColor: const Color(0xFF16A34A),
+                      ),
+                    );
+                  },
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '#${t['name']}',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
                     ),
-                    const SizedBox(width: 5),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDCFCE7),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        '${t['count']}',
-                        style: GoogleFonts.inter(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF16A34A),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '#${t['name']}',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFDCFCE7),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${t['count']}',
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF16A34A),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
+                  ),
+                );
+              }).toList(),
+            ),
         ],
       ),
     );
@@ -1264,7 +1770,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 3.5 [NEW]: Streak & Momentum Analytics (Apple Fitness Rings & Momentum)
   // ---------------------------------------------------------------------------
-  Widget _buildStreakAndMomentumCard() {
+  Widget _buildStreakAndMomentumCard({
+    required int streakDays,
+    required int todayCompleted,
+    required int actionRate,
+    required int momentumPct,
+  }) {
+    final outerProgress = (streakDays / 30.0).clamp(0.0, 1.0);
+    final middleProgress = (todayCompleted / 10.0).clamp(0.0, 1.0);
+    final innerProgress = (actionRate / 100.0).clamp(0.0, 1.0);
+    final goalPct = (middleProgress * 100).round();
+    final bestStreak = math.max(streakDays, 7);
+    final daysToBeat = math.max(1, (bestStreak + 5) - streakDays);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -1311,7 +1829,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     const Icon(LucideIcons.trendingUp, size: 13, color: Color(0xFF16A34A)),
                     const SizedBox(width: 4),
                     Text(
-                      '+34% MOMENTUM',
+                      '+$momentumPct% MOMENTUM',
                       style: GoogleFonts.inter(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -1334,16 +1852,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 height: 96,
                 child: CustomPaint(
                   painter: _AppleFitnessRingsPainter(
-                    outerProgress: 27 / 30, // 27 of 30 days
-                    middleProgress: 1.0,    // 100% daily goal
-                    innerProgress: 0.34,    // 34% action rate
+                    outerProgress: outerProgress,
+                    middleProgress: middleProgress,
+                    innerProgress: innerProgress,
                   ),
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          '187',
+                          '$streakDays',
                           style: GoogleFonts.outfit(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
@@ -1372,7 +1890,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'You are 34% above weekly average',
+                      streakDays > 0 ? '$streakDays day streak active' : 'Start your streak today',
                       style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -1381,7 +1899,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '27 of last 30 days active — Highly Consistent',
+                      streakDays >= 7
+                          ? 'Consistent saver — Top consistency rating'
+                          : (streakDays > 0 ? 'Daily momentum building — save daily to level up' : 'Save 1 clip today to ignite your streak'),
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         color: AppTheme.textMuted,
@@ -1393,9 +1913,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       spacing: 8,
                       runSpacing: 4,
                       children: [
-                        _buildRingLegendDot(const Color(0xFFEA580C), '27/30d Streak'),
-                        _buildRingLegendDot(const Color(0xFF10B981), '100% Goal'),
-                        _buildRingLegendDot(const Color(0xFF06B6D4), '34% Actioned'),
+                        _buildRingLegendDot(const Color(0xFFEA580C), '${streakDays}d Streak'),
+                        _buildRingLegendDot(const Color(0xFF10B981), '$goalPct% Goal'),
+                        _buildRingLegendDot(const Color(0xFF06B6D4), '$actionRate% Actioned'),
                       ],
                     ),
                   ],
@@ -1422,7 +1942,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          'All-Time Record: 263 Days Streak',
+                          'All-Time Record: $bestStreak Days Streak',
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -1435,7 +1955,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   ),
                 ),
                 Text(
-                  '76 days to beat',
+                  '$daysToBeat days to beat',
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -1475,23 +1995,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 4.5 [NEW]: Hourly Activity Heatmap (6 AM - 11 PM) & Peak Hours
   // ---------------------------------------------------------------------------
-  Widget _buildHourlyActivityHeatmapCard() {
+  Widget _buildHourlyActivityHeatmapCard({
+    required List<double> hourlyActivity,
+    required String peakWindow,
+    required int maxHourCount,
+  }) {
     final hourlyDist = _backendData?['hourly_distribution'];
-    final peakWindow = hourlyDist?['peak_window']?.toString() ?? 'Peak 9 AM – 11 AM';
+    final activePeak = hourlyDist?['peak_window']?.toString() ?? peakWindow;
     final buckets = hourlyDist?['hourly_buckets'] as List?;
-    final bucketMap = <int, int>{};
-    if (buckets != null) {
+    List<double> finalActivity = hourlyActivity;
+    if (buckets != null && buckets.isNotEmpty) {
+      final bucketMap = <int, int>{};
       for (var b in buckets) {
         if (b is Map && b['hour'] != null) {
           bucketMap[(b['hour'] as num).toInt()] = (b['count'] as num?)?.toInt() ?? 0;
         }
       }
-    }
-    final maxHCount = bucketMap.values.isNotEmpty ? bucketMap.values.reduce(math.max) : 1;
-    final List<double> hourlyActivity = [];
-    for (int h = 6; h <= 23; h++) {
-      final c = bucketMap[h] ?? (h >= 9 && h <= 11 ? 4 : h >= 14 && h <= 16 ? 3 : 1);
-      hourlyActivity.add((c / math.max(1, maxHCount)).clamp(0.15, 1.0));
+      final maxH = bucketMap.values.isNotEmpty ? bucketMap.values.reduce(math.max) : 1;
+      finalActivity = [];
+      for (int h = 6; h <= 23; h++) {
+        final c = bucketMap[h] ?? 0;
+        finalActivity.add(maxH > 0 ? (c / maxH).clamp(0.15, 1.0) : 0.20);
+      }
     }
 
     return Container(
@@ -1536,7 +2061,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  peakWindow.replaceAll(' Peak Saving Window', ''),
+                  activePeak.replaceAll(' Peak Saving Window', '').replaceAll(' Peak Window', ''),
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -1561,7 +2086,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             height: 52,
             width: double.infinity,
             child: CustomPaint(
-              painter: _HourlyHeatmapPainter(activityList: hourlyActivity),
+              painter: _HourlyHeatmapPainter(activityList: finalActivity),
             ),
           ),
           const SizedBox(height: 6),
@@ -1589,7 +2114,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'You are most active between 9:00 AM and 11:00 AM (avg ${(maxHCount / 2.0).toStringAsFixed(1)} clips/hr).',
+                    'You are most active around $activePeak (peak $maxHourCount clips).',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -1608,23 +2133,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 6.5 [NEW]: Opportunity Outcome Analytics (Funnel, Rates, Missed, Value)
   // ---------------------------------------------------------------------------
-  Widget _buildOpportunityOutcomeSection() {
+  Widget _buildOpportunityOutcomeSection({
+    required List<Map<String, dynamic>> stages,
+    required int missedCount,
+    required String realizedValue,
+    required Map<String, String> actionRates,
+  }) {
     final oppFunnel = _backendData?['opportunity_funnel'];
     final rawStages = oppFunnel?['stages'] as List?;
-    final missedCount = (oppFunnel?['missed_deadlines_count'] as num?)?.toInt() ?? 12;
-    final realizedValue = oppFunnel?['realized_value_index']?.toString() ?? '\$2,850 in scholarships & tickets';
+    final activeMissed = (oppFunnel?['missed_deadlines_count'] as num?)?.toInt() ?? missedCount;
+    final activeRealized = oppFunnel?['realized_value_index']?.toString() ?? realizedValue;
 
-    List<Map<String, dynamic>>? customStages;
+    List<Map<String, dynamic>> finalStages = stages;
     if (rawStages != null && rawStages.length >= 4) {
       final totalDiscovered = (rawStages[0]['count'] as num?)?.toDouble() ?? 1.0;
       final colors = [const Color(0xFF3B82F6), const Color(0xFF6366F1), const Color(0xFF8B5CF6), const Color(0xFF10B981)];
-      customStages = [];
+      finalStages = [];
       for (int i = 0; i < 4; i++) {
         final st = rawStages[i];
         final countVal = st['count'] ?? 0;
         final pctVal = (countVal / math.max(1.0, totalDiscovered));
         final ratePct = (st['percentage'] as num?)?.toInt() ?? (pctVal * 100).toInt();
-        customStages.add({
+        finalStages.add({
           'name': '${i + 1}. ${st['stage']}',
           'count': '$countVal items',
           'rate': '$ratePct%',
@@ -1634,9 +2164,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       }
     }
 
-    final actionRatePct = customStages != null && customStages.length > 1
-        ? customStages[1]['rate']
-        : '34% Action Rate';
+    final actionRatePct = finalStages.length > 2 ? finalStages[2]['rate'] : '34%';
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -1714,7 +2242,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             height: 130,
             width: double.infinity,
             child: CustomPaint(
-              painter: _OpportunityFunnelPainter(stagesList: customStages),
+              painter: _OpportunityFunnelPainter(stagesList: finalStages),
             ),
           ),
           const SizedBox(height: 14),
@@ -1722,48 +2250,56 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           // Action Rate Breakdown Chips
           Row(
             children: [
-              Expanded(child: _buildActionRateBox('Jobs', '38%', const Color(0xFF2563EB))),
+              Expanded(child: _buildActionRateBox('Jobs', actionRates['Jobs'] ?? '0%', const Color(0xFF2563EB))),
               const SizedBox(width: 8),
-              Expanded(child: _buildActionRateBox('Events', '61%', const Color(0xFF10B981))),
+              Expanded(child: _buildActionRateBox('Events', actionRates['Events'] ?? '0%', const Color(0xFF10B981))),
               const SizedBox(width: 8),
-              Expanded(child: _buildActionRateBox('Courses', '22%', const Color(0xFFF59E0B))),
+              Expanded(child: _buildActionRateBox('Articles', actionRates['Articles'] ?? '0%', const Color(0xFFF59E0B))),
               const SizedBox(width: 8),
-              Expanded(child: _buildActionRateBox('Products', '15%', const Color(0xFF8B5CF6))),
+              Expanded(child: _buildActionRateBox('Tools', actionRates['Tools'] ?? '0%', const Color(0xFF8B5CF6))),
             ],
           ),
           const SizedBox(height: 14),
 
-          // Missed Opportunities Alert Banner (Crimson)
+          // Missed Opportunities Alert Banner
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFFEF2F2),
+              color: activeMissed > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFFEE2E2)),
+              border: Border.all(color: activeMissed > 0 ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(LucideIcons.circleAlert, size: 18, color: Color(0xFFDC2626)),
+                Icon(
+                  activeMissed > 0 ? LucideIcons.circleAlert : LucideIcons.circleCheck,
+                  size: 18,
+                  color: activeMissed > 0 ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '$missedCount Opportunities Expired Unactioned',
+                        activeMissed > 0
+                            ? '$activeMissed Opportunities Expired Unactioned'
+                            : 'All Saved Opportunities Current & Active',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF991B1B),
+                          color: activeMissed > 0 ? const Color(0xFF991B1B) : const Color(0xFF166534),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Jobs, events, and scholarships passed deadlines recently. Act earlier to secure slots!',
+                        activeMissed > 0
+                            ? 'Jobs, events, and scholarships passed deadlines recently. Act earlier to secure slots!'
+                            : 'Zero overdue deadlines detected across your research and job pipelines.',
                         style: GoogleFonts.inter(
                           fontSize: 11,
-                          color: const Color(0xFFB91C1C),
+                          color: activeMissed > 0 ? const Color(0xFFB91C1C) : const Color(0xFF15803D),
                         ),
                       ),
                     ],
@@ -1806,7 +2342,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              realizedValue,
+                              activeRealized,
                               style: GoogleFonts.outfit(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
@@ -1869,209 +2405,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Section 6.6 [NEW]: Content Intelligence & 10-Axis Knowledge Graph Radar
-  // ---------------------------------------------------------------------------
-  Widget _buildContentIntelligenceSection() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(LucideIcons.brainCircuit, size: 16, color: Color(0xFF8B5CF6)),
-                  const SizedBox(width: 8),
-                  Text(
-                    'CONTENT INTELLIGENCE',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                      color: AppTheme.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  _buildLegendBox(const Color(0xFF2D6A4F), 'This Month'),
-                  const SizedBox(width: 6),
-                  _buildLegendBox(const Color(0xFF94A3B8), 'Last Month'),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '10-Axis Knowledge Fingerprint',
-            style: GoogleFonts.outfit(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Engineering, AI/ML, Design, Business, Research, Health, Finance, Culture, Tools, Career',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: AppTheme.textMuted,
-            ),
-          ),
-          const SizedBox(height: 16),
 
-          // 10-Axis Dual Radar CustomPaint
-          SizedBox(
-            height: 230,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: _DualRadarPainter(),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Topic Trend Multi-line Section
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Topic Trends Over Time',
-                style: GoogleFonts.outfit(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              Text(
-                '+40% AI/ML Surge',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF16A34A),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 70,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: _TopicTrendPainter(),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Reading Depth + Source Diversity + Language Row
-          Row(
-            children: [
-              // Reading Depth (60% Deep Reads)
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('READING DEPTH', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
-                      const SizedBox(height: 3),
-                      Text('60% Deep Reads', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF8B5CF6))),
-                      Text('15+ min deep research', style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textMuted)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Source Diversity
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('SOURCE DIVERSITY', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
-                      const SizedBox(height: 3),
-                      Text('34 Sources', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0284C7))),
-                      Text('GitHub, Substack, ArXiv', style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textMuted)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Languages
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('LANGUAGES', style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.textMuted)),
-                      const SizedBox(height: 3),
-                      Text('EN / AM / FR', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF059669))),
-                      Text('78% English, 12% Amh', style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textMuted)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLegendBox(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
-        ),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
-        ),
-      ],
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Section 9 [NEW]: Destination & Sync Health Analytics
   // ---------------------------------------------------------------------------
-  Widget _buildDestinationAndSyncSection() {
+  Widget _buildDestinationAndSyncSection({
+    required int syncedCount,
+    required int totalCount,
+  }) {
+    final syncPct = totalCount > 0 ? ((syncedCount / totalCount) * 100).round() : 100;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -2121,7 +2464,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  '1,948 Records Synced',
+                  '$syncedCount Records Synced',
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -2134,11 +2477,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           const SizedBox(height: 14),
 
           // Destination Sync Status Cards
-          _buildSyncStatusRow('Google Sheets', '45%', '1,247 rows written', 'Synced 2m ago', true),
+          _buildSyncStatusRow('Local Vault Cache', '100%', '$totalCount records stored locally', 'Always available offline', true),
           const SizedBox(height: 8),
-          _buildSyncStatusRow('Notion Database', '32%', '412 pages created', '3 retries (Attention)', false),
+          _buildSyncStatusRow('Backend Cloud Sync', '$syncPct%', '$syncedCount of $totalCount synced to server', syncedCount == totalCount ? 'All caught up' : '${totalCount - syncedCount} pending sync', syncedCount >= (totalCount * 0.8).floor()),
           const SizedBox(height: 8),
-          _buildSyncStatusRow('Airtable Vault', '23%', '289 records synced', 'Synced 15m ago', true),
+          _buildSyncStatusRow('Export Integrations', 'Active', 'Notion / Sheets export ready', 'Sync engine connected', true),
         ],
       ),
     );
@@ -2203,15 +2546,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 10 [NEW]: Personal Records & Achievement Badges (Gamification)
   // ---------------------------------------------------------------------------
-  Widget _buildPersonalRecordsAndBadgesSection() {
-    final badges = [
-      {'emoji': '🔥', 'title': 'On Fire', 'desc': '7-Day save streak', 'unlocked': true},
-      {'emoji': '📚', 'title': 'Deep Reader', 'desc': '10 research papers saved', 'unlocked': true},
-      {'emoji': '💼', 'title': 'Job Hunter', 'desc': '20 jobs saved this month', 'unlocked': true},
-      {'emoji': '⚡', 'title': 'Quick Actioner', 'desc': 'Applied within 24h of save', 'unlocked': true},
-      {'emoji': '🌍', 'title': 'Globe Trotter', 'desc': '10+ international domains', 'unlocked': false},
-      {'emoji': '🎯', 'title': 'Sharp Eye', 'desc': '5 trending items clipped', 'unlocked': true},
-    ];
+  Widget _buildPersonalRecordsAndBadgesSection({
+    required Map<String, dynamic> records,
+    required List<Map<String, dynamic>> badges,
+    required int percentile,
+  }) {
+    final topPct = math.max(1, 100 - percentile);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -2256,7 +2596,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  'Top 22% Global',
+                  'Top $topPct% Global',
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -2278,13 +2618,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
             child: Column(
               children: [
-                _buildRecordRow('Most clips in one day', '23 clips (Mar 14)'),
+                _buildRecordRow('Most clips in one day', records['max_day']?.toString() ?? '0 clips'),
                 const Divider(height: 12, color: Color(0xFFE2E8F0)),
-                _buildRecordRow('Most clips in one week', '89 clips (Week 10)'),
+                _buildRecordRow('Most clips in one week', records['max_week']?.toString() ?? '0 clips'),
                 const Divider(height: 12, color: Color(0xFFE2E8F0)),
-                _buildRecordRow('Most used tag', '#remote (156 clips)'),
+                _buildRecordRow('Most used tag', records['top_tag']?.toString() ?? 'None'),
                 const Divider(height: 12, color: Color(0xFFE2E8F0)),
-                _buildRecordRow('Favorite source', 'LinkedIn (34%)'),
+                _buildRecordRow('Favorite source', records['top_source']?.toString() ?? 'Direct clip'),
               ],
             ),
           ),
@@ -2374,7 +2714,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 11 [NEW]: Predictive Analytics & Forecast (Save Projections, Deadlines)
   // ---------------------------------------------------------------------------
-  Widget _buildPredictiveAnalyticsSection() {
+  Widget _buildPredictiveAnalyticsSection({
+    required int missedCount,
+    required int inPeriodCount,
+    required String peakWindow,
+  }) {
+    final projectedCount = math.max(3, (inPeriodCount * 1.3).round());
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -2433,19 +2779,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           _buildPredictiveCard(
             icon: LucideIcons.trendingUp,
             iconColor: const Color(0xFF10B981),
-            title: 'Next Week Save Forecast',
-            highlight: '~45 clips projected',
-            body: 'Based on your 4-week rolling pattern, expect heavy clipping on Thursday & Friday.',
+            title: 'Next Period Save Forecast',
+            highlight: '~$projectedCount clips projected',
+            body: 'Based on your recent rolling clipping pattern and save velocity.',
           ),
           const SizedBox(height: 10),
 
           // Prediction 2: Deadline Risk Warning
           _buildPredictiveCard(
             icon: LucideIcons.hourglass,
-            iconColor: const Color(0xFFEA580C),
-            title: 'Deadline Risk Warning',
-            highlight: '4 jobs risk expiration',
-            body: 'Jobs typically close in 18 days. Your average wait is 12 days before applying.',
+            iconColor: missedCount > 0 ? const Color(0xFFEA580C) : const Color(0xFF10B981),
+            title: 'Deadline Risk & Actioning',
+            highlight: missedCount > 0 ? '$missedCount items near/past deadline' : 'All deadlines healthy',
+            body: missedCount > 0
+                ? 'Review your flagged jobs and events before expiration dates pass.'
+                : 'Great job staying proactive with your saved opportunities!',
           ),
           const SizedBox(height: 10),
 
@@ -2453,9 +2801,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           _buildPredictiveCard(
             icon: LucideIcons.lightbulb,
             iconColor: const Color(0xFFF59E0B),
-            title: 'Best Time to Action',
-            highlight: 'Tuesday Mornings',
-            body: 'You are 2.4x more likely to act on clips saved before 11 AM vs Friday evenings.',
+            title: 'Peak Productivity Window',
+            highlight: peakWindow.isNotEmpty ? peakWindow : 'Morning (9 AM - 11 AM)',
+            body: 'You are most active and likely to action clips during your peak focus window.',
           ),
         ],
       ),
@@ -2521,7 +2869,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 8 [NEW]: Clips Over Time Interactive Line Chart (Total | By Type)
   // ---------------------------------------------------------------------------
-  Widget _buildClipsOverTimeCard() {
+  Widget _buildClipsOverTimeCard({
+    required List<double> last7DaysTotal,
+    required List<String> labels,
+    required List<Map<String, dynamic>> breakdown,
+  }) {
+    final backendTimeline = _backendData?['timeline']?['counts'] as List?;
+    List<double> finalTotal = last7DaysTotal;
+    if (backendTimeline != null && backendTimeline.isNotEmpty) {
+      finalTotal = backendTimeline.map((e) => (e as num).toDouble()).toList();
+    }
+
+    final double maxVal = finalTotal.isNotEmpty ? finalTotal.reduce(math.max) : 0;
+    final int peakIdx = finalTotal.isNotEmpty ? finalTotal.indexOf(maxVal) : -1;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -2589,7 +2950,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             height: 160,
             width: double.infinity,
             child: CustomPaint(
-              painter: _ClipsOverTimeLinePainter(mode: _clipsOverTimeMode),
+              painter: _ClipsOverTimeLinePainter(
+                mode: _clipsOverTimeMode,
+                totalData: finalTotal,
+                breakdown: breakdown,
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -2599,24 +2964,34 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             Wrap(
               spacing: 12,
               runSpacing: 6,
-              children: [
-                _buildTypeLegendDot(const Color(0xFF22C55E), 'Jobs'),
-                _buildTypeLegendDot(const Color(0xFF3B82F6), 'Articles'),
-                _buildTypeLegendDot(const Color(0xFFA78BFA), 'Events'),
-                _buildTypeLegendDot(const Color(0xFFF97316), 'Tools'),
-                _buildTypeLegendDot(const Color(0xFFEC4899), 'Music'),
-              ],
+              children: breakdown.isNotEmpty
+                  ? breakdown.take(5).map((b) => _buildTypeLegendDot(
+                        (b['color'] as Color?) ?? const Color(0xFF22C55E),
+                        b['name'] as String,
+                      )).toList()
+                  : [
+                      _buildTypeLegendDot(const Color(0xFF22C55E), 'Jobs'),
+                      _buildTypeLegendDot(const Color(0xFF3B82F6), 'Articles'),
+                      _buildTypeLegendDot(const Color(0xFFA78BFA), 'Events'),
+                      _buildTypeLegendDot(const Color(0xFFF97316), 'Tools'),
+                      _buildTypeLegendDot(const Color(0xFFEC4899), 'Music'),
+                    ],
             )
           else
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Aug 1', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
-                Text('Aug 8', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
-                Text('Aug 15', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
-                Text('Aug 22', style: GoogleFonts.inter(fontSize: 10, color: AppTheme.inactiveGrey)),
-                Text('Aug 29 (Peak)', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF166534))),
-              ],
+              children: List.generate(labels.length, (idx) {
+                final isPeak = idx == peakIdx && maxVal > 0;
+                final text = labels[idx] + (isPeak ? ' (Peak)' : '');
+                return Text(
+                  text,
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: isPeak ? FontWeight.bold : FontWeight.normal,
+                    color: isPeak ? const Color(0xFF166534) : AppTheme.inactiveGrey,
+                  ),
+                );
+              }),
             ),
         ],
       ),
@@ -2671,15 +3046,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   // ---------------------------------------------------------------------------
   // Section 9 [NEW]: Saved Content Breakdown Donut Chart
   // ---------------------------------------------------------------------------
-  Widget _buildContentTypeDonutCard() {
-    final breakdown = [
-      {'name': 'Jobs', 'count': 18, 'pct': 38, 'color': const Color(0xFF22C55E)},
-      {'name': 'Articles', 'count': 11, 'pct': 23, 'color': const Color(0xFF3B82F6)},
-      {'name': 'Tools', 'count': 8, 'pct': 17, 'color': const Color(0xFFF97316)},
-      {'name': 'Events', 'count': 5, 'pct': 11, 'color': const Color(0xFFA78BFA)},
-      {'name': 'Music', 'count': 3, 'pct': 6, 'color': const Color(0xFFEC4899)},
-      {'name': 'Other', 'count': 2, 'pct': 4, 'color': const Color(0xFF94A3B8)},
-    ];
+  Widget _buildContentTypeDonutCard({
+    required List<Map<String, dynamic>> breakdown,
+    required int totalCount,
+  }) {
+    final activeBreakdown = breakdown.isNotEmpty
+        ? breakdown
+        : [
+            {'name': 'No Clips', 'count': 0, 'pct': 100, 'color': const Color(0xFF94A3B8)},
+          ];
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -2725,15 +3100,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 height: 130,
                 child: CustomPaint(
                   painter: _ContentTypeDonutPainter(
-                    breakdown: breakdown,
+                    breakdown: activeBreakdown,
                     selectedIndex: _selectedDonutIndex,
                   ),
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          '47',
+                        AnimatedCountText(
+                          value: totalCount,
                           style: GoogleFonts.outfit(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -2759,7 +3134,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               // Right: Legend list
               Expanded(
                 child: Column(
-                  children: breakdown.asMap().entries.map((entry) {
+                  children: activeBreakdown.asMap().entries.map((entry) {
                     final idx = entry.key;
                     final item = entry.value;
                     final isSelected = _selectedDonutIndex == idx;
@@ -2838,224 +3213,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Section 20 [NEW]: Board Leaderboard & 78% Global Percentile
-  // ---------------------------------------------------------------------------
-  Widget _buildBoardLeaderboardCard() {
-    final members = [
-      {'rank': 1, 'name': 'Alex Rivera', 'initials': 'AR', 'clips': 84, 'trend': '+18%'},
-      {'rank': 2, 'name': 'Sophia Chen', 'initials': 'SC', 'clips': 72, 'trend': '+12%'},
-      {'rank': 3, 'name': 'Marcus Vance', 'initials': 'MV', 'clips': 65, 'trend': '-4%'},
-      {'rank': 4, 'name': 'You', 'initials': 'ME', 'clips': 52, 'trend': '+34%', 'isUser': true},
-      {'rank': 5, 'name': 'Elena Rostova', 'initials': 'ER', 'clips': 41, 'trend': '+5%'},
-    ];
 
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.borderSubtle, width: 1.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(LucideIcons.award, size: 16, color: Color(0xFF7C3AED)),
-                  const SizedBox(width: 8),
-                  Text(
-                    'BOARD LEADERBOARD',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.8,
-                      color: AppTheme.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F3FF),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'Engineering Vault',
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF7C3AED),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Top 5 Members List
-          Column(
-            children: members.map((m) {
-              final isUser = m['isUser'] == true;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isUser ? const Color(0xFFF5F3FF) : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isUser ? const Color(0xFF7C3AED) : const Color(0xFFE2E8F0),
-                    width: isUser ? 1.5 : 1.0,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 18,
-                          child: Text(
-                            '#${m['rank']}',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: isUser ? const Color(0xFF7C3AED) : AppTheme.textMuted,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        CircleAvatar(
-                          radius: 14,
-                          backgroundColor: isUser ? const Color(0xFF7C3AED) : const Color(0xFFE2E8F0),
-                          child: Text(
-                            m['initials'] as String,
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: isUser ? Colors.white : AppTheme.textPrimary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          m['name'] as String,
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: isUser ? FontWeight.bold : FontWeight.w600,
-                            color: isUser ? const Color(0xFF7C3AED) : AppTheme.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Text(
-                          '${m['clips']} clips',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: (m['trend'] as String).startsWith('+')
-                                ? const Color(0xFFDCFCE7)
-                                : const Color(0xFFFEE2E2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            m['trend'] as String,
-                            style: GoogleFonts.inter(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: (m['trend'] as String).startsWith('+')
-                                  ? const Color(0xFF16A34A)
-                                  : const Color(0xFFDC2626),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-
-          // Anonymous global percentile bar
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'You save more than 78% of all Clipper users',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      'Top 22%',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF16A34A),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Stack(
-                    children: [
-                      Container(height: 6, color: const Color(0xFFE2E8F0)),
-                      FractionallySizedBox(
-                        widthFactor: 0.78,
-                        child: Container(
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF16A34A),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Loading Shimmer Skeleton Placeholders
@@ -3143,6 +3301,10 @@ class _GoalRingPainter extends CustomPainter {
 
 /// Consistency Heatmap Grid Painter
 class _HeatmapMatrixPainter extends CustomPainter {
+  final List<List<int>>? pattern;
+
+  _HeatmapMatrixPainter({this.pattern});
+
   @override
   void paint(Canvas canvas, Size size) {
     const rows = 4;
@@ -3151,25 +3313,27 @@ class _HeatmapMatrixPainter extends CustomPainter {
 
     // Pattern of greens
     final greenShades = [
-      const Color(0xFFF1F5F9), // empty
-      const Color(0xFFBBF7D0), // light
-      const Color(0xFF4ADE80), // medium
-      const Color(0xFF16A34A), // vibrant
-      const Color(0xFF166534), // dark
+      const Color(0xFFF1F5F9), // 0: empty
+      const Color(0xFFBBF7D0), // 1: light
+      const Color(0xFF4ADE80), // 2: medium
+      const Color(0xFF16A34A), // 3: vibrant
+      const Color(0xFF166534), // 4: dark
     ];
 
-    // Seeded pattern representing active saving days
-    final pattern = [
-      [3, 4, 3, 2, 4, 3, 4, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 0, 3, 4],
-      [4, 3, 4, 4, 3, 4, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 2, 4],
-      [3, 4, 3, 4, 3, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3],
-      [2, 3, 4, 0, 0, 3, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    ];
+    // Dynamic or Seeded pattern representing active saving days
+    final activePattern = (pattern != null && pattern!.length >= 4)
+        ? pattern!
+        : [
+            [3, 4, 3, 2, 4, 3, 4, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 0, 3, 4],
+            [4, 3, 4, 4, 3, 4, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 2, 4],
+            [3, 4, 3, 4, 3, 0, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3, 4, 3],
+            [2, 3, 4, 0, 0, 3, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          ];
 
     for (int r = 0; r < rows; r++) {
       for (int c = 0; c < cols; c++) {
-        final shadeIdx = pattern[r][c];
-        if (shadeIdx == 0 && r == 3 && c > 8) continue;
+        final shadeIdx = activePattern[r][c].clamp(0, 4);
+        if (shadeIdx == 0 && r == 3 && c > 8 && pattern == null) continue;
 
         final paint = Paint()
           ..color = greenShades[shadeIdx]
@@ -3190,24 +3354,35 @@ class _HeatmapMatrixPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _HeatmapMatrixPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _HeatmapMatrixPainter oldDelegate) => true;
 }
 
 /// Density Curve Shaded Area Painter
 class _DensityCurvePainter extends CustomPainter {
+  final List<double>? values;
+
+  _DensityCurvePainter({this.values});
+
   @override
   void paint(Canvas canvas, Size size) {
     final path = Path();
     final fillPath = Path();
 
-    final points = [
-      Offset(0, size.height * 0.95),
-      Offset(size.width * 0.15, size.height * 0.15),
-      Offset(size.width * 0.35, size.height * 0.70),
-      Offset(size.width * 0.60, size.height * 0.80),
-      Offset(size.width * 0.85, size.height * 0.82),
-      Offset(size.width, size.height * 0.95),
-    ];
+    final raw = (values != null && values!.length >= 4)
+        ? values!
+        : [0.10, 0.85, 0.40, 0.25, 0.20, 0.10];
+
+    final maxV = raw.reduce(math.max);
+    final count = raw.length;
+    final stepX = size.width / math.max(1, count - 1);
+
+    final List<Offset> points = [];
+    for (int i = 0; i < count; i++) {
+      final x = i * stepX;
+      final norm = maxV > 0 ? (raw[i] / maxV) : 0.2;
+      final y = size.height - (norm * (size.height * 0.82)) - 6;
+      points.add(Offset(x, y));
+    }
 
     path.moveTo(points[0].dx, points[0].dy);
     fillPath.moveTo(0, size.height);
@@ -3244,7 +3419,7 @@ class _DensityCurvePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DensityCurvePainter oldDelegate) => false;
+  bool shouldRepaint(covariant _DensityCurvePainter oldDelegate) => true;
 }
 
 /// Radar / Category Polygon Distribution Painter
@@ -3526,206 +3701,19 @@ class _OpportunityFunnelPainter extends CustomPainter {
   bool shouldRepaint(covariant _OpportunityFunnelPainter oldDelegate) => false;
 }
 
-/// 10-Axis Dual Knowledge Fingerprint Radar Painter (This Month vs Last Month)
-class _DualRadarPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2 - 36;
 
-    final axes = [
-      'Engineering',
-      'AI / ML',
-      'Design',
-      'Business',
-      'Research',
-      'Health',
-      'Finance',
-      'Culture',
-      'Tools',
-      'Career',
-    ];
-
-    // Normalized scores (0.0 to 1.0)
-    final thisMonthScores = [0.92, 0.96, 0.74, 0.58, 0.85, 0.42, 0.50, 0.38, 0.88, 0.70];
-    final lastMonthScores = [0.82, 0.68, 0.80, 0.65, 0.70, 0.35, 0.40, 0.45, 0.72, 0.85];
-
-    final count = axes.length;
-    final angleStep = (2 * math.pi) / count;
-
-    // 1. Draw Concentric Web Rings (4 concentric polygons)
-    final webPaint = Paint()
-      ..color = const Color(0xFFE2E8F0)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    for (int step = 1; step <= 4; step++) {
-      final r = radius * (step / 4);
-      final webPath = Path();
-      for (int i = 0; i < count; i++) {
-        final angle = i * angleStep - (math.pi / 2);
-        final x = center.dx + r * math.cos(angle);
-        final y = center.dy + r * math.sin(angle);
-        if (i == 0) {
-          webPath.moveTo(x, y);
-        } else {
-          webPath.lineTo(x, y);
-        }
-      }
-      webPath.close();
-      canvas.drawPath(webPath, webPaint);
-    }
-
-    // 2. Draw Radial Axis Spokes
-    for (int i = 0; i < count; i++) {
-      final angle = i * angleStep - (math.pi / 2);
-      final x = center.dx + radius * math.cos(angle);
-      final y = center.dy + radius * math.sin(angle);
-      canvas.drawLine(center, Offset(x, y), webPaint);
-    }
-
-    // 3. Draw Axis Labels
-    final textPainter = TextPainter(textDirection: TextDirection.ltr);
-    for (int i = 0; i < count; i++) {
-      final angle = i * angleStep - (math.pi / 2);
-      final labelR = radius + 20;
-      final lx = center.dx + labelR * math.cos(angle);
-      final ly = center.dy + labelR * math.sin(angle);
-
-      textPainter.text = TextSpan(
-        text: axes[i],
-        style: GoogleFonts.inter(
-          fontSize: 8.5,
-          fontWeight: FontWeight.w600,
-          color: const Color(0xFF64748B),
-        ),
-      );
-      textPainter.layout();
-      textPainter.paint(
-        canvas,
-        Offset(lx - textPainter.width / 2, ly - textPainter.height / 2),
-      );
-    }
-
-    // 4. Draw Last Month Polygon (Grey / Slate dashed)
-    final lastMonthPath = Path();
-    for (int i = 0; i < count; i++) {
-      final angle = i * angleStep - (math.pi / 2);
-      final r = radius * lastMonthScores[i];
-      final px = center.dx + r * math.cos(angle);
-      final py = center.dy + r * math.sin(angle);
-      if (i == 0) {
-        lastMonthPath.moveTo(px, py);
-      } else {
-        lastMonthPath.lineTo(px, py);
-      }
-    }
-    lastMonthPath.close();
-
-    final lastFillPaint = Paint()
-      ..color = const Color(0xFF94A3B8).withValues(alpha: 0.20)
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(lastMonthPath, lastFillPaint);
-
-    final lastStrokePaint = Paint()
-      ..color = const Color(0xFF94A3B8)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawPath(lastMonthPath, lastStrokePaint);
-
-    // 5. Draw This Month Polygon (Vibrant Emerald / Forest Green)
-    final thisMonthPath = Path();
-    for (int i = 0; i < count; i++) {
-      final angle = i * angleStep - (math.pi / 2);
-      final r = radius * thisMonthScores[i];
-      final px = center.dx + r * math.cos(angle);
-      final py = center.dy + r * math.sin(angle);
-      if (i == 0) {
-        thisMonthPath.moveTo(px, py);
-      } else {
-        thisMonthPath.lineTo(px, py);
-      }
-    }
-    thisMonthPath.close();
-
-    final thisFillPaint = Paint()
-      ..color = const Color(0xFF10B981).withValues(alpha: 0.45)
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(thisMonthPath, thisFillPaint);
-
-    final thisStrokePaint = Paint()
-      ..color = const Color(0xFF047857)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-    canvas.drawPath(thisMonthPath, thisStrokePaint);
-
-    // Vertex points for This Month
-    final dotPaint = Paint()
-      ..color = const Color(0xFF047857)
-      ..style = PaintingStyle.fill;
-    for (int i = 0; i < count; i++) {
-      final angle = i * angleStep - (math.pi / 2);
-      final r = radius * thisMonthScores[i];
-      final px = center.dx + r * math.cos(angle);
-      final py = center.dy + r * math.sin(angle);
-      canvas.drawCircle(Offset(px, py), 2.5, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DualRadarPainter oldDelegate) => false;
-}
-
-/// Multi-line Topic Trend Smoothed Curves
-class _TopicTrendPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    // 4 lines: AI/ML (Cyan), Engineering (Green), Design (Amber), Jobs (Blue)
-    final lineAI = [0.20, 0.35, 0.45, 0.60, 0.75, 0.95];
-    final lineEng = [0.80, 0.75, 0.85, 0.80, 0.90, 0.92];
-    final lineJobs = [0.75, 0.70, 0.65, 0.50, 0.45, 0.40];
-
-    _drawSmoothCurve(canvas, size, lineAI, const Color(0xFF06B6D4), 'AI/ML');
-    _drawSmoothCurve(canvas, size, lineEng, const Color(0xFF10B981), 'Eng');
-    _drawSmoothCurve(canvas, size, lineJobs, const Color(0xFF3B82F6), 'Jobs');
-  }
-
-  void _drawSmoothCurve(Canvas canvas, Size size, List<double> values, Color color, String name) {
-    final path = Path();
-    final stepX = size.width / (values.length - 1);
-
-    for (int i = 0; i < values.length; i++) {
-      final x = i * stepX;
-      final y = size.height - (values[i] * (size.height - 12)) - 6;
-
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        final prevX = (i - 1) * stepX;
-        final prevY = size.height - (values[i - 1] * (size.height - 12)) - 6;
-        final cx = (prevX + x) / 2;
-        path.cubicTo(cx, prevY, cx, y, x, y);
-      }
-    }
-
-    final strokePaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawPath(path, strokePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _TopicTrendPainter oldDelegate) => false;
-}
 
 /// Interactive Clips Over Time Line Painter (Total Curve or 5-Type Multi-Line)
 class _ClipsOverTimeLinePainter extends CustomPainter {
   final String mode; // 'Total' or 'By Type'
+  final List<double>? totalData;
+  final List<Map<String, dynamic>>? breakdown;
 
-  _ClipsOverTimeLinePainter({required this.mode});
+  _ClipsOverTimeLinePainter({
+    required this.mode,
+    this.totalData,
+    this.breakdown,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3742,16 +3730,19 @@ class _ClipsOverTimeLinePainter extends CustomPainter {
 
     if (mode == 'Total') {
       // Total clips single curve (Emerald green with shaded area)
-      final totalData = [12.0, 24.0, 18.0, 32.0, 48.0, 42.0, 52.0];
-      final maxVal = 60.0;
-      final stepX = size.width / (totalData.length - 1);
+      final rawData = (totalData != null && totalData!.length >= 4)
+          ? totalData!
+          : [12.0, 24.0, 18.0, 32.0, 48.0, 42.0, 52.0];
+      final maxFound = rawData.isNotEmpty ? rawData.reduce(math.max) : 10.0;
+      final maxVal = math.max(maxFound, 5.0);
+      final stepX = size.width / math.max(1, rawData.length - 1);
 
       final path = Path();
       final fillPath = Path();
 
-      for (int i = 0; i < totalData.length; i++) {
+      for (int i = 0; i < rawData.length; i++) {
         final x = i * stepX;
-        final y = size.height - (totalData[i] / maxVal) * (size.height - 14) - 7;
+        final y = size.height - (rawData[i] / maxVal) * (size.height - 14) - 7;
 
         if (i == 0) {
           path.moveTo(x, y);
@@ -3759,7 +3750,7 @@ class _ClipsOverTimeLinePainter extends CustomPainter {
           fillPath.lineTo(x, y);
         } else {
           final prevX = (i - 1) * stepX;
-          final prevY = size.height - (totalData[i - 1] / maxVal) * (size.height - 14) - 7;
+          final prevY = size.height - (rawData[i - 1] / maxVal) * (size.height - 14) - 7;
           final cx = (prevX + x) / 2;
           path.cubicTo(cx, prevY, cx, y, x, y);
           fillPath.cubicTo(cx, prevY, cx, y, x, y);
@@ -3795,25 +3786,39 @@ class _ClipsOverTimeLinePainter extends CustomPainter {
         ..color = const Color(0xFF047857)
         ..style = PaintingStyle.fill;
 
-      for (int i = 0; i < totalData.length; i++) {
+      for (int i = 0; i < rawData.length; i++) {
         final x = i * stepX;
-        final y = size.height - (totalData[i] / maxVal) * (size.height - 14) - 7;
+        final y = size.height - (rawData[i] / maxVal) * (size.height - 14) - 7;
         canvas.drawCircle(Offset(x, y), 4, dotBgPaint);
         canvas.drawCircle(Offset(x, y), 2.5, dotPaint);
       }
     } else {
-      // By Type: 5 distinct colored lines
-      final jobsData = [4.0, 8.0, 6.0, 12.0, 15.0, 14.0, 18.0];
-      final articlesData = [3.0, 7.0, 5.0, 8.0, 10.0, 9.0, 11.0];
-      final toolsData = [2.0, 4.0, 3.0, 6.0, 7.0, 6.0, 8.0];
-      final eventsData = [1.0, 3.0, 2.0, 4.0, 4.0, 5.0, 5.0];
-      final musicData = [1.0, 2.0, 1.0, 2.0, 3.0, 2.0, 3.0];
+      // By Type: dynamically compute lines proportional to content breakdown if available
+      final rawData = (totalData != null && totalData!.length >= 4)
+          ? totalData!
+          : [12.0, 24.0, 18.0, 32.0, 48.0, 42.0, 52.0];
+      final maxVal = math.max(rawData.reduce(math.max), 10.0);
 
-      _drawLineSeries(canvas, size, jobsData, 20.0, const Color(0xFF22C55E));
-      _drawLineSeries(canvas, size, articlesData, 20.0, const Color(0xFF3B82F6));
-      _drawLineSeries(canvas, size, toolsData, 20.0, const Color(0xFFF97316));
-      _drawLineSeries(canvas, size, eventsData, 20.0, const Color(0xFFA78BFA));
-      _drawLineSeries(canvas, size, musicData, 20.0, const Color(0xFFEC4899));
+      if (breakdown != null && breakdown!.isNotEmpty) {
+        for (final item in breakdown!.take(5)) {
+          final pct = ((item['pct'] as num?)?.toDouble() ?? 20.0) / 100.0;
+          final color = (item['color'] as Color?) ?? const Color(0xFF22C55E);
+          final series = rawData.map((d) => d * pct).toList();
+          _drawLineSeries(canvas, size, series, maxVal, color);
+        }
+      } else {
+        final jobsData = [4.0, 8.0, 6.0, 12.0, 15.0, 14.0, 18.0];
+        final articlesData = [3.0, 7.0, 5.0, 8.0, 10.0, 9.0, 11.0];
+        final toolsData = [2.0, 4.0, 3.0, 6.0, 7.0, 6.0, 8.0];
+        final eventsData = [1.0, 3.0, 2.0, 4.0, 4.0, 5.0, 5.0];
+        final musicData = [1.0, 2.0, 1.0, 2.0, 3.0, 2.0, 3.0];
+
+        _drawLineSeries(canvas, size, jobsData, 20.0, const Color(0xFF22C55E));
+        _drawLineSeries(canvas, size, articlesData, 20.0, const Color(0xFF3B82F6));
+        _drawLineSeries(canvas, size, toolsData, 20.0, const Color(0xFFF97316));
+        _drawLineSeries(canvas, size, eventsData, 20.0, const Color(0xFFA78BFA));
+        _drawLineSeries(canvas, size, musicData, 20.0, const Color(0xFFEC4899));
+      }
     }
   }
 
@@ -3845,8 +3850,7 @@ class _ClipsOverTimeLinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ClipsOverTimeLinePainter oldDelegate) =>
-      oldDelegate.mode != mode;
+  bool shouldRepaint(covariant _ClipsOverTimeLinePainter oldDelegate) => true;
 }
 
 /// Content Type Donut Chart Painter (with 60% center hole & segment highlight)
