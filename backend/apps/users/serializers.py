@@ -23,6 +23,16 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ('name', 'avatar_url')
+        extra_kwargs = {
+            'name': {'required': False, 'allow_blank': False},
+            'avatar_url': {'required': False, 'allow_blank': True},
+        }
+
+
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, min_length=8)
@@ -234,6 +244,12 @@ class GoogleAuthSerializer(serializers.Serializer):
 
 
 class UserSettingsSerializer(serializers.ModelSerializer):
+    enable_share_sheet = serializers.BooleanField(required=False)
+    enable_quick_settings_tile = serializers.BooleanField(required=False)
+    enable_floating_bubble = serializers.BooleanField(required=False)
+    default_destination = serializers.CharField(required=False, allow_blank=True)
+    category_rules = serializers.DictField(required=False)
+
     class Meta:
         model = UserSettings
         fields = (
@@ -248,7 +264,37 @@ class UserSettingsSerializer(serializers.ModelSerializer):
             'ai_extraction_prompt',
             'theme',
             'extra_preferences',
+            'enable_share_sheet',
+            'enable_quick_settings_tile',
+            'enable_floating_bubble',
+            'default_destination',
+            'category_rules',
             'created_at',
             'updated_at',
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        extra = instance.extra_preferences or {}
+        ret['enable_share_sheet'] = extra.get('enable_share_sheet', True)
+        ret['enable_quick_settings_tile'] = extra.get('enable_quick_settings_tile', False)
+        ret['enable_floating_bubble'] = extra.get('enable_floating_bubble', False)
+        ret['default_destination'] = extra.get('default_destination', 'vault')
+        ret['category_rules'] = extra.get('category_rules', {})
+        return ret
+
+    def update(self, instance, validated_data):
+        extra = dict(instance.extra_preferences or {})
+        for key in [
+            'enable_share_sheet',
+            'enable_quick_settings_tile',
+            'enable_floating_bubble',
+            'default_destination',
+            'category_rules',
+        ]:
+            if key in validated_data:
+                extra[key] = validated_data.pop(key)
+        validated_data['extra_preferences'] = extra
+        return super().update(instance, validated_data)
+
