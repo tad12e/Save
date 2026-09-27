@@ -64,11 +64,13 @@ class ClipSerializer(serializers.ModelSerializer):
     child_clips_count = serializers.SerializerMethodField()
     custom_page_id = serializers.UUIDField(source='custom_page.id', read_only=True, allow_null=True)
     custom_page_name = serializers.CharField(source='custom_page.name', read_only=True, allow_null=True)
+    is_favorite = serializers.SerializerMethodField()
 
     class Meta:
         model = Clip
         fields = (
             'id',
+            'is_favorite',
             'url',
             'selected_text',
             'status',
@@ -113,6 +115,10 @@ class ClipSerializer(serializers.ModelSerializer):
         if hasattr(obj, 'child_clips'):
             return obj.child_clips.count()
         return 0
+
+    def get_is_favorite(self, obj) -> bool:
+        meta = obj.extra_metadata or {}
+        return bool(meta.get('is_favorite') or meta.get('is_starred') or meta.get('is_liked'))
 
 
 class ClipCreateSerializer(serializers.Serializer):

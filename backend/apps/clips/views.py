@@ -284,12 +284,52 @@ class ClipCreateView(APIView):
             data['warnings'] = warnings
         return Response(data, status=status.HTTP_201_CREATED)
 
+    def delete(self, request):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required. Please sign in to delete clips.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        raw_ids = request.data.get('ids') or request.query_params.get('ids')
+        ids = []
+        if isinstance(raw_ids, list):
+            ids = [str(i) for i in raw_ids if str(i).strip()]
+        elif isinstance(raw_ids, str):
+            ids = [i.strip() for i in raw_ids.split(',') if i.strip()]
+
+        if not ids:
+            return Response({'error': 'No clip IDs provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        import uuid as uuid_pkg
+        valid_uuids = []
+        for i in ids:
+            try:
+                valid_uuids.append(uuid_pkg.UUID(str(i).strip()))
+            except (ValueError, TypeError, AttributeError):
+                continue
+
+        if not valid_uuids:
+            return Response({'deleted': 0, 'message': 'No matching database clips found to delete.'}, status=status.HTTP_200_OK)
+
+        deleted_count, _ = Clip.objects.filter(user=request.user, id__in=valid_uuids).delete()
+        try:
+            invalidate_user_clusters_cache(request.user.id)
+        except Exception:
+            pass
+        return Response({'deleted': deleted_count, 'message': f'{deleted_count} clips deleted.'}, status=status.HTTP_200_OK)
+
 
 class ClipDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, clip_id):
-        clip = Clip.objects.select_related('destination').filter(pk=clip_id).first()
+        import uuid as uuid_pkg
+        try:
+            c_uuid = uuid_pkg.UUID(str(clip_id).strip())
+        except (ValueError, TypeError, AttributeError):
+            return Response({'error': 'Clip not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        clip = Clip.objects.select_related('destination').filter(pk=c_uuid).first()
         if not clip:
             return Response({'error': 'Clip not found'}, status=status.HTTP_404_NOT_FOUND)
         return Response(ClipSerializer(clip).data)
@@ -297,7 +337,14 @@ class ClipDetailView(APIView):
     def patch(self, request, clip_id):
         if not request.user or not request.user.is_authenticated:
             return Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
-        clip = Clip.objects.filter(pk=clip_id, user=request.user).first()
+
+        import uuid as uuid_pkg
+        try:
+            c_uuid = uuid_pkg.UUID(str(clip_id).strip())
+        except (ValueError, TypeError, AttributeError):
+            return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        clip = Clip.objects.filter(pk=c_uuid, user=request.user).first()
         if not clip:
             return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -355,13 +402,34 @@ class ClipDetailView(APIView):
                 clip.custom_page = cpage
             update_fields.append('custom_page')
 
-        if 'content_type' in request.data:
-            clip.content_type = str(request.data['content_type']).strip().lower()
-            update_fields.append('content_type')
-
         if 'source_platform' in request.data:
             clip.source_platform = str(request.data['source_platform']).strip().lower()
             update_fields.append('source_platform')
+
+        if 'deadline' in request.data:
+            import datetime
+            d_val = request.data['deadline']
+            if not d_val:
+                clip.deadline_date = None
+            else:
+                try:
+                    clip.deadline_date = datetime.date.fromisoformat(str(d_val)[:10])
+                except Exception:
+                    pass
+            update_fields.append('deadline_date')
+
+        if 'status' in request.data:
+            clip.status = str(request.data['status']).strip().lower()
+            update_fields.append('status')
+
+        if 'is_favorite' in request.data or 'is_starred' in request.data:
+            fav_val = bool(request.data.get('is_favorite') if 'is_favorite' in request.data else request.data.get('is_starred'))
+            extra = clip.extra_metadata or {}
+            extra['is_favorite'] = fav_val
+            extra['is_starred'] = fav_val
+            clip.extra_metadata = extra
+            if 'extra_metadata' not in update_fields:
+                update_fields.append('extra_metadata')
 
         if update_fields:
             clip.save(update_fields=update_fields)
@@ -371,7 +439,14 @@ class ClipDetailView(APIView):
     def delete(self, request, clip_id):
         if not request.user or not request.user.is_authenticated:
             return Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
-        clip = Clip.objects.filter(pk=clip_id, user=request.user).first()
+
+        import uuid as uuid_pkg
+        try:
+            c_uuid = uuid_pkg.UUID(str(clip_id).strip())
+        except (ValueError, TypeError, AttributeError):
+            return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        clip = Clip.objects.filter(pk=c_uuid, user=request.user).first()
         if not clip:
             return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
         clip.delete()
