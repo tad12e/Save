@@ -118,6 +118,8 @@ class ClipModel {
     return null;
   }
 
+  DateTime? get deadline => deadlineDate;
+
   String get intent {
     final raw = extraMetadata['intent'];
     if (raw != null && raw.toString().isNotEmpty) {

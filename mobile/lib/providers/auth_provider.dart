@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 
@@ -149,6 +149,25 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
     return result['success'] == true;
+  }
+
+  Future<bool> updateProfile({String? name, String? avatarUrl}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await ApiService.updateUserProfile(name: name, avatarUrl: avatarUrl);
+    _isLoading = false;
+
+    if (result['success'] == true) {
+      _user = result['user'] as UserModel?;
+      notifyListeners();
+      return true;
+    } else {
+      _errorMessage = result['message']?.toString() ?? 'Failed to update profile.';
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> signOut() async {

@@ -188,10 +188,13 @@ class ClipsProvider extends ChangeNotifier {
         _clips = _getDefaultSampleClips();
       }
       for (final clip in _clips) {
-        if (_favoriteIds.contains(clip.id)) {
+        if (clip.isFavorite) {
+          _favoriteIds.add(clip.id);
+        } else if (_favoriteIds.contains(clip.id)) {
           clip.isFavorite = true;
         }
       }
+      _saveLocalFavorites();
     } catch (e) {
       _error = e.toString();
       if (_clips.isEmpty) {
@@ -431,19 +434,39 @@ class ClipsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleFavorite(String clipId) {
-    if (_favoriteIds.contains(clipId)) {
-      _favoriteIds.remove(clipId);
-    } else {
+  Future<bool> toggleFavorite(String clipId) async {
+    final willBeFav = !_favoriteIds.contains(clipId);
+    if (willBeFav) {
       _favoriteIds.add(clipId);
+    } else {
+      _favoriteIds.remove(clipId);
     }
     for (final c in _clips) {
       if (c.id == clipId) {
-        c.isFavorite = _favoriteIds.contains(clipId);
+        c.isFavorite = willBeFav;
       }
     }
     _saveLocalFavorites();
     notifyListeners();
+
+    final ok = await ApiService.setClipFavorite(clipId, willBeFav);
+    if (!ok) {
+      // Revert if API call failed
+      if (willBeFav) {
+        _favoriteIds.remove(clipId);
+      } else {
+        _favoriteIds.add(clipId);
+      }
+      for (final c in _clips) {
+        if (c.id == clipId) {
+          c.isFavorite = !willBeFav;
+        }
+      }
+      _saveLocalFavorites();
+      notifyListeners();
+      return false;
+    }
+    return true;
   }
 
   // --- Batch Operations ---
@@ -486,26 +509,33 @@ class ClipsProvider extends ChangeNotifier {
     return _selectedIds.every((id) => _favoriteIds.contains(id));
   }
 
-  void toggleStarSelectedClips() {
-    if (_selectedIds.isEmpty) return;
+  Future<bool> toggleStarSelectedClips() async {
+    if (_selectedIds.isEmpty) return false;
     final allStarred = areAllSelectedStarred;
-    if (allStarred) {
-      for (final id in _selectedIds) {
-        _favoriteIds.remove(id);
-        for (final c in _clips) {
-          if (c.id == id) c.isFavorite = false;
-        }
-      }
-    } else {
-      for (final id in _selectedIds) {
+    final targetFavState = !allStarred;
+    final targetIds = List<String>.from(_selectedIds);
+
+    for (final id in targetIds) {
+      if (targetFavState) {
         _favoriteIds.add(id);
-        for (final c in _clips) {
-          if (c.id == id) c.isFavorite = true;
-        }
+      } else {
+        _favoriteIds.remove(id);
+      }
+      for (final c in _clips) {
+        if (c.id == id) c.isFavorite = targetFavState;
       }
     }
     _saveLocalFavorites();
     notifyListeners();
+
+    try {
+      final results = await Future.wait(
+        targetIds.map((id) => ApiService.setClipFavorite(id, targetFavState)),
+      );
+      return !results.contains(false);
+    } catch (_) {
+      return false;
+    }
   }
 
   void deselectAll() {
@@ -563,19 +593,129 @@ class ClipsProvider extends ChangeNotifier {
     return jsonEncode(jsonList);
   }
 
-  void deleteClip(String clipId) {
-    _clips.removeWhere((c) => c.id == clipId);
+  Future<bool> deleteClip(String clipId) async {
+    final index = _clips.indexWhere((c) => c.id == clipId);
+    if (index == -1) return false;
+
+    final removedClip = _clips[index];
+    final wasFavorite = _favoriteIds.contains(clipId);
+    final wasSelected = _selectedIds.contains(clipId);
+
+    // Optimistic removal
+    _clips.removeAt(index);
     _favoriteIds.remove(clipId);
     _selectedIds.remove(clipId);
+    _saveLocalFavorites();
     notifyListeners();
+
+    final ok = await ApiService.deleteClip(clipId);
+    if (!ok) {
+      // Revert if API failed
+      if (index <= _clips.length) {
+        _clips.insert(index, removedClip);
+      } else {
+        _clips.add(removedClip);
+      }
+      if (wasFavorite) _favoriteIds.add(clipId);
+      if (wasSelected) _selectedIds.add(clipId);
+      _saveLocalFavorites();
+      notifyListeners();
+      return false;
+    }
+    return true;
   }
 
-  void deleteSelectedClips() {
-    _clips.removeWhere((c) => _selectedIds.contains(c.id));
-    for (final id in _selectedIds) {
+  Future<bool> deleteSelectedClips() async {
+    if (_selectedIds.isEmpty) return false;
+    final toDelete = List<String>.from(_selectedIds);
+    final removedClipsWithIndex = <MapEntry<int, ClipModel>>[];
+    for (int i = 0; i < _clips.length; i++) {
+      if (toDelete.contains(_clips[i].id)) {
+        removedClipsWithIndex.add(MapEntry(i, _clips[i]));
+      }
+    }
+
+    // Optimistic removal
+    _clips.removeWhere((c) => toDelete.contains(c.id));
+    for (final id in toDelete) {
       _favoriteIds.remove(id);
     }
+    _saveLocalFavorites();
     exitBatchMode();
+
+    final ok = await ApiService.deleteClips(toDelete);
+    if (!ok) {
+      // Rollback
+      for (final entry in removedClipsWithIndex) {
+        if (entry.key <= _clips.length) {
+          _clips.insert(entry.key, entry.value);
+        } else {
+          _clips.add(entry.value);
+        }
+        if (entry.value.isFavorite) {
+          _favoriteIds.add(entry.value.id);
+        }
+      }
+      _saveLocalFavorites();
+      notifyListeners();
+      return false;
+    }
+    return true;
+  }
+
+  Future<bool> updateClip(
+    String clipId, {
+    String? title,
+    String? status,
+    String? deadline,
+    String? intent,
+    List<String>? tags,
+    bool? isFavorite,
+  }) async {
+    // Optimistic local update
+    final index = _clips.indexWhere((c) => c.id == clipId);
+    if (index != -1) {
+      final old = _clips[index];
+      final updatedMeta = Map<String, dynamic>.from(old.extraMetadata);
+      if (deadline != null) {
+        updatedMeta['deadline'] = deadline;
+        updatedMeta['deadline_date'] = deadline;
+      }
+      if (intent != null) {
+        updatedMeta['intent'] = intent;
+      }
+      if (isFavorite != null) {
+        if (isFavorite) {
+          _favoriteIds.add(clipId);
+        } else {
+          _favoriteIds.remove(clipId);
+        }
+        _saveLocalFavorites();
+      }
+      _clips[index] = old.copyWith(
+        title: title ?? old.title,
+        status: status ?? old.status,
+        tags: tags ?? old.tags,
+        isFavorite: isFavorite ?? old.isFavorite,
+        extraMetadata: updatedMeta,
+      );
+      notifyListeners();
+    }
+
+    final ok = await ApiService.updateClip(
+      clipId,
+      title: title,
+      status: status,
+      deadline: deadline,
+      intent: intent,
+      tags: tags,
+      isFavorite: isFavorite,
+    );
+    if (!ok) {
+      // Revert from backend if API call fails
+      await loadClips();
+    }
+    return ok;
   }
 
   Future<bool> createClip(String url, {String? selectedText, String? destinationId}) async {

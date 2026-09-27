@@ -100,7 +100,8 @@ class _FeedScreenState extends State<FeedScreen> {
     } else {
       return;
     }
-    final isFavorited = _favoritedClipIds.contains(clip.id);
+    final clipsProvider = Provider.of<ClipsProvider>(context, listen: false);
+    final isFavorited = clipsProvider.isFavorite(clip.id) || _favoritedClipIds.contains(clip.id);
     XStyleInAppBrowserModal.show(
       context,
       clip,
@@ -113,6 +114,7 @@ class _FeedScreenState extends State<FeedScreen> {
             _favoritedClipIds.add(clip.id);
           }
         });
+        clipsProvider.toggleFavorite(clip.id);
       },
     );
   }

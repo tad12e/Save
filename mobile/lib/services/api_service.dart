@@ -95,11 +95,9 @@ class ApiService {
       'Accept': 'application/json',
     };
 
-    if (requireAuth) {
-      final token = await getAccessToken();
-      if (token != null && token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
-      }
+    final token = await getAccessToken();
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
     }
 
     if (extraHeaders != null) {
@@ -355,6 +353,53 @@ class ApiService {
     return null;
   }
 
+  /// Updates user profile on the backend (e.g. name, avatarUrl)
+  static Future<Map<String, dynamic>> updateUserProfile({
+    String? name,
+    String? avatarUrl,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    final token = await getAccessToken();
+    if (token == null || token.isEmpty) {
+      return {'success': false, 'message': 'You must be signed in to update your profile.'};
+    }
+
+    try {
+      final payload = <String, dynamic>{};
+      if (name != null) payload['name'] = name.trim();
+      if (avatarUrl != null) payload['avatar_url'] = avatarUrl.trim();
+
+      final response = await http
+          .patch(
+            Uri.parse('$baseUrl/api/auth/me/'),
+            headers: await _getHeaders(),
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 8));
+
+      final Map<String, dynamic> body = response.body.isNotEmpty
+          ? jsonDecode(utf8.decode(response.bodyBytes))
+          : {};
+
+      if (response.statusCode == 200) {
+        final updatedUser = UserModel.fromJson(body);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_keyUserJson, jsonEncode(updatedUser.toJson()));
+        return {'success': true, 'user': updatedUser};
+      } else {
+        return {
+          'success': false,
+          'message': _extractErrorMessage(body, response.statusCode),
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Failed to connect to backend: $e',
+      };
+    }
+  }
+
   // --- Clips API Endpoints ---
 
   static Future<List<ClipModel>> fetchClips() async {
@@ -530,6 +575,92 @@ class ApiService {
           .post(Uri.parse('$baseUrl/api/destinations/$id/set_default/'), headers: await _getHeaders())
           .timeout(const Duration(seconds: 8));
       return response.statusCode == 200 || response.statusCode == 201;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> updateClip(
+    String clipId, {
+    String? title,
+    String? status,
+    String? deadline,
+    String? intent,
+    List<String>? tags,
+    bool? isFavorite,
+  }) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final payload = <String, dynamic>{};
+      if (title != null) payload['title'] = title;
+      if (status != null) payload['status'] = status;
+      if (deadline != null) payload['deadline'] = deadline;
+      if (intent != null) payload['intent'] = intent;
+      if (tags != null) payload['tags'] = tags;
+      if (isFavorite != null) {
+        payload['is_favorite'] = isFavorite;
+        payload['is_starred'] = isFavorite;
+      }
+
+      final response = await http
+          .patch(
+            Uri.parse('$baseUrl/api/clips/$clipId/'),
+            headers: await _getHeaders(),
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 8));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Deletes a clip from backend permanently
+  static Future<bool> deleteClip(String clipId) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final response = await http
+          .delete(
+            Uri.parse('$baseUrl/api/clips/$clipId/'),
+            headers: await _getHeaders(),
+          )
+          .timeout(const Duration(seconds: 8));
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Batch deletes multiple clips from backend permanently
+  static Future<bool> deleteClips(List<String> clipIds) async {
+    if (clipIds.isEmpty) return true;
+    final baseUrl = await getBaseUrl();
+    try {
+      final response = await http
+          .delete(
+            Uri.parse('$baseUrl/api/clips/'),
+            headers: await _getHeaders(),
+            body: jsonEncode({'ids': clipIds}),
+          )
+          .timeout(const Duration(seconds: 10));
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Toggles favorite status of a clip on backend
+  static Future<bool> setClipFavorite(String clipId, bool isFavorite) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final response = await http
+          .patch(
+            Uri.parse('$baseUrl/api/clips/$clipId/'),
+            headers: await _getHeaders(),
+            body: jsonEncode({'is_favorite': isFavorite, 'is_starred': isFavorite}),
+          )
+          .timeout(const Duration(seconds: 6));
+      return response.statusCode == 200;
     } catch (_) {
       return false;
     }
@@ -740,10 +871,11 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     try {
       final headers = await _getHeaders(requireAuth: false);
-      final queryParamPeriod = switch (period) {
-        'This Month' => 'this_month',
-        'Last 30 Days' => 'last_30_days',
-        'All Time' => 'all_time',
+      final normalized = period.toLowerCase().replaceAll(' ', '_');
+      final queryParamPeriod = switch (normalized) {
+        'this_month' => 'this_month',
+        'last_30_days' => 'last_30_days',
+        'all_time' => 'all_time',
         _ => 'this_week',
       };
 
@@ -763,6 +895,46 @@ class ApiService {
       }
     } catch (e) {
       if (kDebugMode) print('ApiService.fetchFullAnalytics error: $e');
+    }
+    return null;
+  }
+
+  /// Fetches User Settings & Preferences from backend
+  static Future<Map<String, dynamic>?> getUserSettings() async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final headers = await _getHeaders(requireAuth: false);
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/users/settings/'), headers: headers)
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      if (kDebugMode) print('ApiService.getUserSettings error: $e');
+    }
+    return null;
+  }
+
+  /// Updates User Settings & Preferences on backend
+  static Future<Map<String, dynamic>?> updateUserSettings(Map<String, dynamic> data) async {
+    final baseUrl = await getBaseUrl();
+    try {
+      final headers = await _getHeaders(requireAuth: false);
+      final response = await http
+          .patch(
+            Uri.parse('$baseUrl/api/users/settings/'),
+            headers: headers,
+            body: jsonEncode(data),
+          )
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      if (kDebugMode) print('ApiService.updateUserSettings error: $e');
     }
     return null;
   }
