@@ -8,6 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme.dart';
 import '../../services/api_service.dart';
+import '../../widgets/audio_recognition_dialog.dart';
+import '../../widgets/floating_music_bubble.dart';
+import '../../widgets/save_clip_bottom_sheet.dart';
 
 enum ConfirmationMode { auto, confirm, alwaysAsk }
 
@@ -178,7 +181,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     setState(() => _isLoading = true);
     final prefs = await SharedPreferences.getInstance();
 
-    // Confirmation Mode
+    // 1. Local cache load first for instant UI responsiveness
     final modeStr = prefs.getString('clipper_confirmation_mode') ?? 'confirm';
     if (modeStr == 'auto') {
       _confirmationMode = ConfirmationMode.auto;
@@ -188,23 +191,18 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       _confirmationMode = ConfirmationMode.confirm;
     }
 
-    // Privacy Mode
     _isPrivacyMode = prefs.getBool('clipper_privacy_mode') ?? false;
-
-    // Music Settings
     _musicProvider = prefs.getString('clipper_music_provider') ?? 'spotify';
     _musicPlaylist = prefs.getString('clipper_music_playlist') ?? 'default';
     _musicAutoAdd = prefs.getBool('clipper_music_auto_add') ?? true;
     _spotifyClientIdController.text = prefs.getString('clipper_spotify_client_id') ?? '';
     _spotifyClientSecretController.text = prefs.getString('clipper_spotify_client_secret') ?? '';
 
-    // AI Prompt
     final savedPrompt = prefs.getString('clipper_ai_extraction_prompt');
     if (savedPrompt != null && savedPrompt.isNotEmpty) {
       _aiPromptController.text = savedPrompt;
     }
 
-    // Load Category Rules
     final rawRules = prefs.getString('clipper_category_rules');
     if (rawRules != null && rawRules.isNotEmpty) {
       try {
@@ -213,21 +211,78 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       } catch (_) {}
     }
 
-    // Fetch destinations from backend (or fallback defaults)
-    await _fetchDestinationsFromBackend();
-
-    // Fetch category rules from backend
-    await _fetchCategoryRulesFromBackend();
-
-    // Fetch Spotify playlists if provider is Spotify
-    if (_musicProvider == 'spotify') {
-      _loadSpotifyPlaylists();
-    }
-
-    // Capture & Music Detection Modes
     _enableShareSheet = prefs.getBool('clipper_enable_sharesheet') ?? true;
     _enableQuickSettingsTile = prefs.getBool('clipper_enable_qstile') ?? false;
     _enableFloatingBubble = prefs.getBool('clipper_enable_bubble') ?? false;
+    if (_enableFloatingBubble) {
+      FloatingBubbleManager.show();
+    }
+
+    // 2. Fetch synced settings from backend (/api/users/settings/)
+    try {
+      final backendSettings = await ApiService.getUserSettings();
+      if (backendSettings != null) {
+        if (backendSettings['confirmation_mode'] != null) {
+          final m = backendSettings['confirmation_mode'].toString();
+          _confirmationMode = m == 'auto'
+              ? ConfirmationMode.auto
+              : (m == 'always_ask' ? ConfirmationMode.alwaysAsk : ConfirmationMode.confirm);
+        }
+        if (backendSettings['privacy_mode'] != null) {
+          _isPrivacyMode = backendSettings['privacy_mode'] == true;
+        }
+        if (backendSettings['music_provider'] != null && backendSettings['music_provider'].toString().isNotEmpty) {
+          _musicProvider = backendSettings['music_provider'].toString();
+        }
+        if (backendSettings['music_target_playlist_id'] != null && backendSettings['music_target_playlist_id'].toString().isNotEmpty) {
+          _musicPlaylist = backendSettings['music_target_playlist_id'].toString();
+        }
+        if (backendSettings['music_auto_add'] != null) {
+          _musicAutoAdd = backendSettings['music_auto_add'] == true;
+        }
+        if (backendSettings['spotify_client_id'] != null) {
+          _spotifyClientIdController.text = backendSettings['spotify_client_id'].toString();
+        }
+        if (backendSettings['spotify_client_secret'] != null) {
+          _spotifyClientSecretController.text = backendSettings['spotify_client_secret'].toString();
+        }
+        if (backendSettings['ai_extraction_prompt'] != null && backendSettings['ai_extraction_prompt'].toString().isNotEmpty) {
+          _aiPromptController.text = backendSettings['ai_extraction_prompt'].toString();
+        }
+        if (backendSettings['enable_share_sheet'] != null) {
+          _enableShareSheet = backendSettings['enable_share_sheet'] == true;
+        }
+        if (backendSettings['enable_quick_settings_tile'] != null) {
+          _enableQuickSettingsTile = backendSettings['enable_quick_settings_tile'] == true;
+        }
+        if (backendSettings['enable_floating_bubble'] != null) {
+          _enableFloatingBubble = backendSettings['enable_floating_bubble'] == true;
+          if (_enableFloatingBubble) {
+            FloatingBubbleManager.show();
+          } else {
+            FloatingBubbleManager.hide();
+          }
+        }
+        if (backendSettings['default_destination'] != null && backendSettings['default_destination'].toString().isNotEmpty) {
+          _defaultDestId = backendSettings['default_destination'].toString();
+        }
+        if (backendSettings['category_rules'] is Map) {
+          final loadedRules = (backendSettings['category_rules'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()));
+          _categoryRules.addAll(loadedRules);
+        }
+      }
+    } catch (_) {}
+
+    // 3. Fetch destinations from backend (or fallback defaults)
+    await _fetchDestinationsFromBackend();
+
+    // 4. Fetch category rules from backend
+    await _fetchCategoryRulesFromBackend();
+
+    // 5. Fetch Spotify playlists if provider is Spotify
+    if (_musicProvider == 'spotify') {
+      _loadSpotifyPlaylists();
+    }
 
     if (mounted) {
       setState(() => _isLoading = false);
@@ -859,7 +914,33 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     await prefs.setBool('clipper_enable_qstile', _enableQuickSettingsTile);
     await prefs.setBool('clipper_enable_bubble', _enableFloatingBubble);
 
-    // Sync to backend APIs in background
+    // Sync floating bubble overlay state
+    if (_enableFloatingBubble) {
+      FloatingBubbleManager.show();
+    } else {
+      FloatingBubbleManager.hide();
+    }
+
+    // 8. Comprehensive Backend Sync via UserSettings API
+    final payload = <String, dynamic>{
+      'confirmation_mode': modeStr,
+      'privacy_mode': _isPrivacyMode,
+      'music_provider': _musicProvider,
+      'music_target_playlist_id': _musicPlaylist,
+      'music_auto_add': _musicAutoAdd,
+      'spotify_client_id': _spotifyClientIdController.text.trim(),
+      'spotify_client_secret': _spotifyClientSecretController.text.trim(),
+      'ai_extraction_prompt': _aiPromptController.text.trim(),
+      'enable_share_sheet': _enableShareSheet,
+      'enable_quick_settings_tile': _enableQuickSettingsTile,
+      'enable_floating_bubble': _enableFloatingBubble,
+      'default_destination': _defaultDestId,
+      'category_rules': _categoryRules,
+    };
+
+    final updateResult = await ApiService.updateUserSettings(payload);
+
+    // Also sync destination endpoints for multi-client compatibility
     final baseUrl = await ApiService.getBaseUrl();
     final token = await ApiService.getAccessToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
@@ -868,20 +949,17 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     }
 
     try {
-      // Sync default destination
       if (_defaultDestId.isNotEmpty && _defaultDestId != 'vault') {
         http.post(
           Uri.parse('$baseUrl/api/destinations/$_defaultDestId/set-default/'),
           headers: headers,
         );
       }
-      // Sync category rules
       http.post(
         Uri.parse('$baseUrl/api/destinations/category-rules/'),
         headers: headers,
         body: jsonEncode({'rules': _categoryRules}),
       );
-      // Sync music provider
       http.post(
         Uri.parse('$baseUrl/api/destinations/set-music-provider/'),
         headers: headers,
@@ -892,7 +970,9 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     if (mounted) {
       setState(() {
         _isSaving = false;
-        _feedbackMessage = 'Settings & Preferences Saved Successfully!';
+        _feedbackMessage = updateResult != null
+            ? 'Settings synced with cloud & saved across all devices!'
+            : 'Settings saved locally & queued for sync!';
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -901,9 +981,13 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
             children: [
               const Icon(LucideIcons.circleCheck, color: Colors.white, size: 16),
               const SizedBox(width: 8),
-              Text(
-                'Settings & preferences saved ✓',
-                style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12),
+              Expanded(
+                child: Text(
+                  updateResult != null
+                      ? 'Settings synced across all devices ✓'
+                      : 'Settings saved locally ✓',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -1121,6 +1205,41 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
             description: 'Appears in Spotify, TikTok, LinkedIn, and Instagram share menus with instant [Music Sync / Full Clip] mode switch.',
             value: _enableShareSheet,
             onChanged: (val) => setState(() => _enableShareSheet = val),
+            actionButton: InkWell(
+              onTap: () {
+                SaveClipBottomSheet.show(
+                  context,
+                  initialUrl: 'https://www.tiktok.com/@creator/video/7391823901923?sound=MidnightVibes',
+                  initialNote: 'Viral Soundtrack / Dance Reel',
+                  platform: 'tiktok',
+                  isExternalShare: true,
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(LucideIcons.play, size: 13, color: Color(0xFF7C3AED)),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Simulate TikTok / Spotify Share',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF7C3AED),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
 
@@ -1134,6 +1253,38 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
             description: 'Swipe down your phone\'s notification shade anywhere to identify music without switching apps.',
             value: _enableQuickSettingsTile,
             onChanged: (val) => setState(() => _enableQuickSettingsTile = val),
+            actionButton: InkWell(
+              onTap: () {
+                AudioRecognitionDialog.show(
+                  context,
+                  titleHint: 'Android QS Tile Listening Demo',
+                );
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(LucideIcons.radio, size: 13, color: Color(0xFF2563EB)),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Test QS Tile Audio Trigger',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF2563EB),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
 
@@ -1146,7 +1297,82 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
             badgeColor: const Color(0xFF059669),
             description: 'A draggable floating purple bubble over TikTok & Instagram videos for 1-tap music fingerprinting.',
             value: _enableFloatingBubble,
-            onChanged: (val) => setState(() => _enableFloatingBubble = val),
+            onChanged: (val) {
+              setState(() => _enableFloatingBubble = val);
+              if (val) {
+                FloatingBubbleManager.show();
+              } else {
+                FloatingBubbleManager.hide();
+              }
+            },
+            actionButton: Row(
+              children: [
+                InkWell(
+                  onTap: () {
+                    if (!_enableFloatingBubble) {
+                      setState(() => _enableFloatingBubble = true);
+                    }
+                    FloatingBubbleManager.show();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(LucideIcons.sparkles, color: Colors.white, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Floating Music Bubble active on screen! Drag it anywhere or tap it to fingerprint.',
+                                style: GoogleFonts.inter(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                        backgroundColor: const Color(0xFF7C3AED),
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF059669).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(LucideIcons.disc, size: 13, color: Color(0xFF059669)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Spawn Floating Bubble',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF059669),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_enableFloatingBubble) ...[
+                  const SizedBox(width: 10),
+                  InkWell(
+                    onTap: () {
+                      FloatingBubbleManager.hide();
+                      setState(() => _enableFloatingBubble = false);
+                    },
+                    child: Text(
+                      'Dismiss Bubble',
+                      style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted, decoration: TextDecoration.underline),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -1162,72 +1388,97 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     required String description,
     required bool value,
     required ValueChanged<bool> onChanged,
+    Widget? actionButton,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderSubtle),
+        border: Border.all(
+          color: value ? iconColor.withValues(alpha: 0.35) : AppTheme.borderSubtle,
+          width: value ? 1.2 : 1.0,
+        ),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 16, color: iconColor),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 17, color: iconColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.outfit(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: badgeColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        badgeText,
-                        style: GoogleFonts.inter(
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                          color: badgeColor,
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          title,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
-                      ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: GoogleFonts.inter(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: badgeColor,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  description,
-                  style: GoogleFonts.inter(fontSize: 10.5, color: AppTheme.textMuted, height: 1.3),
+              ),
+              Transform.scale(
+                scale: 0.85,
+                child: Switch(
+                  value: value,
+                  activeColor: iconColor,
+                  activeTrackColor: iconColor.withValues(alpha: 0.35),
+                  onChanged: onChanged,
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 44.0),
+            child: Text(
+              description,
+              style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted, height: 1.35),
             ),
           ),
-          Switch(
-            value: value,
-            activeColor: iconColor,
-            onChanged: onChanged,
-          ),
+          if (actionButton != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 44.0),
+              child: actionButton,
+            ),
+          ],
         ],
       ),
     );
@@ -1317,14 +1568,18 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        title,
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
@@ -1404,7 +1659,10 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 2,
+                            crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Text(
                                 dest.name,
@@ -1414,8 +1672,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                                   color: AppTheme.textPrimary,
                                 ),
                               ),
-                              if (dest.id == _defaultDestId) ...[
-                                const SizedBox(width: 6),
+                              if (dest.id == _defaultDestId)
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                   decoration: BoxDecoration(
@@ -1431,7 +1688,6 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                                     ),
                                   ),
                                 ),
-                              ],
                             ],
                           ),
                           Text(
@@ -1962,20 +2218,27 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        const Icon(LucideIcons.search, size: 14, color: Color(0xFF059669)),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Test Search & Add Song to Spotify',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimary,
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.search, size: 14, color: Color(0xFF059669)),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Test Search & Add Song to Spotify',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 6),
                     Text(
                       'Live catalog search',
                       style: GoogleFonts.inter(fontSize: 9, color: AppTheme.textMuted),
@@ -2301,7 +2564,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textPrimary,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),

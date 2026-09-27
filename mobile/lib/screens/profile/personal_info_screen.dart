@@ -19,6 +19,7 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
   late TextEditingController _nameController;
   late TextEditingController _emailController;
   bool _isEditing = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -26,6 +27,9 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     _nameController = TextEditingController(text: auth.user?.name ?? 'Alex Miller');
     _emailController = TextEditingController(text: auth.user?.email ?? 'guest@save.pro');
+    _nameController.addListener(() {
+      if (_isEditing) setState(() {});
+    });
   }
 
   @override
@@ -33,6 +37,53 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
     _nameController.dispose();
     _emailController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleSave(AuthProvider auth) async {
+    final newName = _nameController.text.trim();
+    if (newName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Name cannot be empty.'),
+          backgroundColor: AppTheme.urgencyRed,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+      return;
+    }
+
+    if (newName == auth.user?.name) {
+      setState(() => _isEditing = false);
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    final ok = await auth.updateProfile(name: newName);
+    if (!mounted) return;
+
+    setState(() => _isSaving = false);
+
+    if (ok) {
+      setState(() => _isEditing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Profile details updated ✓'),
+          backgroundColor: const Color(0xFF2D6A4F),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(auth.errorMessage ?? 'Failed to update profile. Please try again.'),
+          backgroundColor: AppTheme.urgencyRed,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   @override
@@ -61,28 +112,36 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
         ),
         actions: [
           if (!isGuest)
-            TextButton(
-              onPressed: () {
-                setState(() => _isEditing = !_isEditing);
-                if (!_isEditing) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Profile details updated ✓'),
-                      backgroundColor: const Color(0xFF2D6A4F),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _isSaving
+                  ? const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF2D6A4F),
+                        ),
+                      ),
+                    )
+                  : TextButton(
+                      onPressed: () {
+                        if (_isEditing) {
+                          _handleSave(auth);
+                        } else {
+                          setState(() => _isEditing = true);
+                        }
+                      },
+                      child: Text(
+                        _isEditing ? 'Save' : 'Edit',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2D6A4F),
+                        ),
+                      ),
                     ),
-                  );
-                }
-              },
-              child: Text(
-                _isEditing ? 'Save' : 'Edit',
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF2D6A4F),
-                ),
-              ),
             ),
         ],
       ),
@@ -175,7 +234,13 @@ class _PersonalInfoScreenState extends State<PersonalInfoScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        isGuest ? 'G' : (_nameController.text.isNotEmpty ? _nameController.text[0].toUpperCase() : 'T'),
+                        isGuest
+                            ? 'G'
+                            : (_nameController.text.trim().isNotEmpty
+                                ? _nameController.text.trim()[0].toUpperCase()
+                                : (auth.user != null && auth.user!.name.trim().isNotEmpty
+                                    ? auth.user!.name.trim()[0].toUpperCase()
+                                    : 'U')),
                         style: GoogleFonts.outfit(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
