@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/theme.dart';
 import 'providers/auth_provider.dart';
@@ -11,6 +12,7 @@ import 'screens/auth/onboarding_screen.dart';
 import 'screens/main_navigation_shell.dart';
 import 'services/sharing_service.dart';
 import 'widgets/audio_recognition_dialog.dart';
+import 'widgets/floating_music_bubble.dart';
 import 'widgets/save_clip_bottom_sheet.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -18,6 +20,12 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SharingService.initialize();
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final bubbleEnabled = prefs.getBool('clipper_enable_bubble') ?? false;
+    FloatingBubbleManager.isVisible.value = bubbleEnabled;
+  } catch (_) {}
 
   runApp(
     MultiProvider(
@@ -96,10 +104,11 @@ class _SaveMobileAppState extends State<SaveMobileApp> {
       title: 'Clipper',
       debugShowCheckedModeBanner: false,
       builder: (context, child) {
+        Widget content = child ?? const SizedBox.shrink();
         if (kIsWeb) {
           final mediaQuery = MediaQuery.of(context);
           if (mediaQuery.size.width > 500) {
-            return Scaffold(
+            content = Scaffold(
               backgroundColor: const Color(0xFF0B0F19),
               body: Center(
                 child: Container(
@@ -122,13 +131,13 @@ class _SaveMobileAppState extends State<SaveMobileApp> {
                     ],
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: child ?? const SizedBox.shrink(),
+                  child: content,
                 ),
               ),
             );
           }
         }
-        return child ?? const SizedBox.shrink();
+        return FloatingMusicBubbleOverlay(child: content);
       },
       theme: isDirectShare
           // Transparent canvas so Instagram stays visible behind the sheet.

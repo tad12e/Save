@@ -65,6 +65,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
   bool _showTagsField = false;
   bool _showDestPicker = false;
   bool _showDeadlinePicker = false;
+  bool _isMusicSyncMode = false;
   bool _rememberDefault = true;
   DateTime? _selectedDeadline;
   final List<String> _tags = [];
@@ -75,6 +76,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
   @override
   void initState() {
     super.initState();
+    _isMusicSyncMode = (widget.platform?.toLowerCase() == 'spotify') ||
+        (widget.initialUrl?.toLowerCase().contains('/sound/') ?? false) ||
+        (widget.initialUrl?.toLowerCase().contains('/audio/') ?? false);
+
     _noteController = TextEditingController(text: widget.initialNote ?? '');
     _tagController = TextEditingController();
     _tableController = TextEditingController();
@@ -382,7 +387,112 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
+
+                  // ─── 1-Tap Mode Switcher: [Music Sync / Full Clip] ───
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(3.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF191D2C),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF282D42)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => _isMusicSyncMode = false);
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 7.5),
+                              decoration: BoxDecoration(
+                                color: !_isMusicSyncMode ? const Color(0xFF2D6A4F) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(9),
+                                boxShadow: !_isMusicSyncMode
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFF2D6A4F).withValues(alpha: 0.4),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              alignment: Alignment.center,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    LucideIcons.bookmarkCheck,
+                                    size: 13,
+                                    color: !_isMusicSyncMode ? Colors.white : const Color(0xFF94A3B8),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Full Clip Save',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: !_isMusicSyncMode ? Colors.white : const Color(0xFF94A3B8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => _isMusicSyncMode = true);
+                              _handleMusicRadar();
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 7.5),
+                              decoration: BoxDecoration(
+                                color: _isMusicSyncMode ? const Color(0xFF7C3AED) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(9),
+                                boxShadow: _isMusicSyncMode
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFF7C3AED).withValues(alpha: 0.4),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              alignment: Alignment.center,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    LucideIcons.music2,
+                                    size: 13,
+                                    color: _isMusicSyncMode ? Colors.white : const Color(0xFF94A3B8),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Music Sync',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: _isMusicSyncMode ? Colors.white : const Color(0xFF94A3B8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                   // ─── Center Hero: Glowing Clipper Badge ───
                   AnimatedBuilder(
