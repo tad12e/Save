@@ -224,6 +224,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
     theme = 'dark',
     currentUser,
     dashboardData,
+    setActiveTab,
   } = props;
   const isDark = theme === 'dark' || theme === 'terminal';
   const cardClass = isDark
@@ -285,8 +286,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
     }
     if (!clips || clips.length === 0) return 0;
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return clips.filter(c => c.createdAt && new Date(c.createdAt).getTime() >= sevenDaysAgo).length;
+    return clips.filter(c => {
+      const dateVal = c.createdAt || (c as any).created_at;
+      if (!dateVal) return false;
+      try {
+        return new Date(dateVal).getTime() >= sevenDaysAgo;
+      } catch {
+        return false;
+      }
+    }).length;
   }, [clips, dashboardData?.stats?.saved_this_week]);
+
+  // Live weekly digest summary from backend AI highlight or synthesized from latest clips
+  const weekDigestSummary = useMemo(() => {
+    if (dashboardData?.ai_digest_highlight?.summary) {
+      return dashboardData.ai_digest_highlight.summary;
+    }
+    if (dynamicClips.length === 0) {
+      return 'No saves recorded this week yet. Clip opportunities or articles to generate an automated weekly digest.';
+    }
+    return `Top story: ${topStoryTitle}. ${intentCounts.Apply} opportunities tracked across your vault.`;
+  }, [dashboardData?.ai_digest_highlight?.summary, dynamicClips.length, topStoryTitle, intentCounts.Apply]);
 
   // 2. Apply Deadlines Card: EXACTLY matches intentCounts.Apply
   const liveExpiringCount = intentCounts.Apply;
@@ -1362,9 +1382,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   {digestCount} <span className={`text-[14px] font-medium ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>saves</span>
                 </div>
                 <p className={`text-[12px] leading-[18px] mt-1 line-clamp-3 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                  Top story: {topStoryTitle}. {intentCounts.Apply} opportunities tracked.
+                  {weekDigestSummary}
                 </p>
-                <button className={`mt-2 inline-flex items-center gap-1 text-[12px] font-medium hover:underline cursor-pointer ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`}>
+                <button
+                  onClick={() => setActiveTab?.('digest')}
+                  className={`mt-2 inline-flex items-center gap-1 text-[12px] font-medium hover:underline cursor-pointer ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`}
+                >
                   View digest
                   <ArrowUpRight className="w-3 h-3" />
                 </button>
