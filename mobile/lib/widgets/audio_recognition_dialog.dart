@@ -47,8 +47,8 @@ class _AudioRecognitionDialogState extends State<AudioRecognitionDialog>
 
   MusicRecognitionResult? _track;
   String _recognizeError = '';
-  List<SpotifyPlaylistRef> _playlists = const [SpotifyPlaylistRef(id: 'default', name: 'Clipper Tracks (Default)')];
-  String _selectedPlaylist = 'default';
+  List<SpotifyPlaylistRef> _playlists = const [];
+  String _selectedPlaylist = '';
 
   @override
   void initState() {
@@ -80,36 +80,63 @@ class _AudioRecognitionDialogState extends State<AudioRecognitionDialog>
       _countdown = 5;
     });
 
-    String audioPayload = 'SIMULATED_AUDIO_SNIPPET';
+    String? audioPayload;
     String format = 'm4a';
-    bool recorded = false;
 
     try {
       final status = await Permission.microphone.request();
-      if (status.isGranted) {
-        final started = await SharingService.startMusicCapture();
-        if (started) {
-          _countdownTimer?.cancel();
-          _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-            if (!mounted) {
-              t.cancel();
-              return;
-            }
-            setState(() => _countdown = (_countdown - 1).clamp(0, 5));
-          });
-          await Future.delayed(const Duration(seconds: 5));
-          _countdownTimer?.cancel();
-          final dataUrl = await SharingService.stopMusicCapture();
-          if (dataUrl != null && dataUrl.isNotEmpty) {
-            audioPayload = dataUrl;
-            recorded = true;
-          }
-        }
+      if (!status.isGranted) {
+        if (!mounted) return;
+        setState(() {
+          _state = RecognitionState.noMatch;
+          _recognizeError = 'Microphone permission denied. Cannot capture audio.';
+        });
+        return;
       }
-    } catch (_) {
+
+      final started = await SharingService.startMusicCapture();
+      if (!started) {
+        if (!mounted) return;
+        setState(() {
+          _state = RecognitionState.noMatch;
+          _recognizeError = 'Could not access microphone to capture audio.';
+        });
+        return;
+      }
+
+      _countdownTimer?.cancel();
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+        setState(() => _countdown = (_countdown - 1).clamp(0, 5));
+      });
+      await Future.delayed(const Duration(seconds: 5));
+      _countdownTimer?.cancel();
+      final dataUrl = await SharingService.stopMusicCapture();
+      if (dataUrl != null && dataUrl.isNotEmpty) {
+        audioPayload = dataUrl;
+      }
+    } catch (e) {
       try {
         await SharingService.stopMusicCapture();
       } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _state = RecognitionState.noMatch;
+        _recognizeError = 'Audio capture failed: $e';
+      });
+      return;
+    }
+
+    if (audioPayload == null || audioPayload.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _state = RecognitionState.noMatch;
+        _recognizeError = 'No audio captured. Please try again.';
+      });
+      return;
     }
 
     if (!mounted) return;
@@ -117,12 +144,12 @@ class _AudioRecognitionDialogState extends State<AudioRecognitionDialog>
 
     final res = await ApiService.recognizeAudio(
       audioBase64: audioPayload,
-      format: recorded ? format : 'webm',
+      format: format,
       titleHint: _buildTitleHint(),
     );
 
     if (!mounted) return;
-    if (res.success) {
+    if (res.success && !res.isSimulated) {
       _playlists = await ApiService.fetchSpotifyPlaylists();
       setState(() {
         _track = res;
@@ -134,7 +161,9 @@ class _AudioRecognitionDialogState extends State<AudioRecognitionDialog>
     } else {
       setState(() {
         _state = RecognitionState.noMatch;
-        _recognizeError = res.error.isNotEmpty ? res.error : 'No song recognized. Try again closer to the speaker.';
+        _recognizeError = res.error.isNotEmpty
+            ? res.error
+            : 'No song recognized. Please try again closer to the speaker.';
       });
     }
   }
@@ -363,55 +392,66 @@ class _AudioRecognitionDialogState extends State<AudioRecognitionDialog>
                 ),
               ),
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _playlists.any((p) => p.id == _selectedPlaylist) ? _selectedPlaylist : _playlists.first.id,
-                    isExpanded: true,
-                    dropdownColor: const Color(0xFF1E293B),
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                    icon: const Icon(LucideIcons.chevronDown, size: 16, color: Color(0xFF94A3B8)),
-                    items: _playlists
-                        .map((p) => DropdownMenuItem<String>(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)))
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) setState(() => _selectedPlaylist = v);
-                    },
+              if (_playlists.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _playlists.any((p) => p.id == _selectedPlaylist) ? _selectedPlaylist : _playlists.first.id,
+                      isExpanded: true,
+                      dropdownColor: const Color(0xFF1E293B),
+                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
+                      icon: const Icon(LucideIcons.chevronDown, size: 16, color: Color(0xFF94A3B8)),
+                      items: _playlists
+                          .map((p) => DropdownMenuItem<String>(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _selectedPlaylist = v);
+                      },
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _addedSuccess ? const Color(0xFF065F46) : const Color(0xFF7C3AED),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _addedSuccess ? const Color(0xFF065F46) : const Color(0xFF7C3AED),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    onPressed: _isSavingToSpotify ? null : _handleSaveToSpotify,
+                    child: _isSavingToSpotify
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(_addedSuccess ? LucideIcons.check : LucideIcons.plus, size: 18, color: Colors.white),
+                              const SizedBox(width: 8),
+                              Text(
+                                _addedSuccess ? 'Added to Playlist ✓' : 'Add to Spotify Playlist',
+                                style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
+                              ),
+                            ],
+                          ),
                   ),
-                  onPressed: _isSavingToSpotify ? null : _handleSaveToSpotify,
-                  child: _isSavingToSpotify
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(_addedSuccess ? LucideIcons.check : LucideIcons.plus, size: 18, color: Colors.white),
-                            const SizedBox(width: 8),
-                            Text(
-                              _addedSuccess ? 'Added to Playlist ✓' : 'Add to Spotify Playlist',
-                              style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
-                            ),
-                          ],
-                        ),
                 ),
-              ),
+              ] else ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    'No Spotify playlists found. Connect Spotify in settings to sync.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                  ),
+                ),
+              ],
               const SizedBox(height: 6),
               TextButton(
                 onPressed: _startRecognitionFlow,
