@@ -539,20 +539,15 @@ class ApiService {
   }
 
   static Future<List<SaveDestination>> getDestinations() async {
-    const fallback = [
-      SaveDestination(id: 'vault', name: 'Save Vault', provider: 'vault', isDefault: false),
-      SaveDestination(id: 'google_sheets', name: 'Google Sheets', provider: 'google_sheets', isDefault: true),
-      SaveDestination(id: 'notion', name: 'Notion Workspace', provider: 'notion', isDefault: false),
-    ];
     final baseUrl = await getBaseUrl();
     try {
       final response = await http
           .get(Uri.parse('$baseUrl/api/destinations/'), headers: await _getHeaders())
           .timeout(const Duration(seconds: 8));
-      if (response.statusCode != 200) return fallback;
+      if (response.statusCode != 200) return [];
       final dynamic data = jsonDecode(utf8.decode(response.bodyBytes));
       final List<dynamic> list = data is List ? data : (data is Map ? (data['results'] as List? ?? []) : []);
-      if (list.isEmpty) return fallback;
+      if (list.isEmpty) return [];
       return list.map((d) {
         final m = d as Map<String, dynamic>;
         return SaveDestination(
@@ -564,7 +559,7 @@ class ApiService {
         );
       }).where((d) => d.id.isNotEmpty).toList();
     } catch (_) {
-      return fallback;
+      return [];
     }
   }
 
@@ -714,7 +709,6 @@ class ApiService {
   }
 
   static Future<List<SpotifyPlaylistRef>> fetchSpotifyPlaylists() async {
-    const fallback = [SpotifyPlaylistRef(id: 'default', name: 'Clipper Tracks (Default)')];
     final baseUrl = await getBaseUrl();
     try {
       final token = await getAccessToken();
@@ -723,10 +717,10 @@ class ApiService {
       final response = await http
           .get(Uri.parse('$baseUrl/api/destinations/spotify/playlists/'), headers: headers)
           .timeout(const Duration(seconds: 8));
-      if (response.statusCode != 200) return fallback;
+      if (response.statusCode != 200) return [];
       final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final List<dynamic> list = data['playlists'] ?? [];
-      if (list.isEmpty) return fallback;
+      if (list.isEmpty) return [];
       return list.map((p) {
         final m = p as Map<String, dynamic>;
         return SpotifyPlaylistRef(
@@ -735,7 +729,7 @@ class ApiService {
         );
       }).where((p) => p.id.isNotEmpty).toList();
     } catch (_) {
-      return fallback;
+      return [];
     }
   }
 

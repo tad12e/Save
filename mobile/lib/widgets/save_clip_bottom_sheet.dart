@@ -245,8 +245,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
         return 'Saved to Vault • Moved to Inbox';
       case 'spotify':
         return 'Synced to Spotify Playlist';
-      default:
+      case 'google_sheets':
         return 'Synced to Google Sheets • AI Tagging';
+      default:
+        return 'Saved to Vault';
     }
   }
 
@@ -819,13 +821,30 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
   Widget _buildDestinationDropdown() {
     return Consumer<ClipsProvider>(
       builder: (context, clips, _) {
-        final items = clips.destinations.isNotEmpty
-            ? clips.destinations
-            : const [
-                SaveDestination(id: 'google_sheets', name: 'Google Sheets', provider: 'google_sheets', isDefault: true),
-                SaveDestination(id: 'notion', name: 'Notion Workspace', provider: 'notion'),
-                SaveDestination(id: 'vault', name: 'Save Vault', provider: 'vault'),
-              ];
+        if (clips.destinations.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF181B28),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF2D3249)),
+            ),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.hardDrive, size: 16, color: Color(0xFF8B5CF6)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Save to Vault (No external destination connected)',
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final items = clips.destinations;
         String value = _selectedDestination;
         if (items.every((d) => d.id != value)) {
           value = items.first.id;
@@ -1059,6 +1078,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
         ];
       case SaveState.idle:
       case SaveState.deleted:
+        final quickDests = Provider.of<ClipsProvider>(context, listen: false)
+            .destinations
+            .where((d) => d.provider != 'vault')
+            .toList();
         return [
           SizedBox(
             width: double.infinity,
@@ -1087,28 +1110,25 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
               ),
             ),
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildQuickProviderButton(
-                  label: 'Sheets',
-                  emoji: '📊',
-                  color: const Color(0xFF10B981),
-                  onTap: () => _handleQuickSaveToProvider('google_sheets'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildQuickProviderButton(
-                  label: 'Notion',
-                  emoji: '📝',
-                  color: const Color(0xFFF59E0B),
-                  onTap: () => _handleQuickSaveToProvider('notion'),
-                ),
-              ),
-            ],
-          ),
+          if (quickDests.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: quickDests.take(2).map((d) {
+                final isSheets = d.provider == 'google_sheets';
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                    child: _buildQuickProviderButton(
+                      label: d.name,
+                      emoji: isSheets ? '📊' : '📝',
+                      color: isSheets ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                      onTap: () => _handleQuickSaveToProvider(d.provider),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
           if (isMusicHint) ...[
             const SizedBox(height: 10),
             SizedBox(
@@ -1325,13 +1345,16 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
         children: [
           Consumer<ClipsProvider>(
             builder: (context, clips, _) {
-              final items = clips.destinations.isNotEmpty
-                  ? clips.destinations
-                  : const [
-                      SaveDestination(id: 'google_sheets', name: 'Sheets', provider: 'google_sheets'),
-                      SaveDestination(id: 'notion', name: 'Notion', provider: 'notion'),
-                      SaveDestination(id: 'vault', name: 'Vault', provider: 'vault'),
-                    ];
+              if (clips.destinations.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'No connected destinations. Clips will save directly to your Vault.',
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                  ),
+                );
+              }
+              final items = clips.destinations;
               return Wrap(
                 spacing: 8,
                 runSpacing: 8,
