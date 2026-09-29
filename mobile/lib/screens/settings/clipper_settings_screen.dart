@@ -303,7 +303,8 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
           .timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
+        final dynamic raw = jsonDecode(utf8.decode(response.bodyBytes));
+        final List<dynamic> data = raw is List ? raw : (raw is Map ? (raw['results'] as List? ?? []) : []);
         if (data.isNotEmpty) {
           final loaded = data
               .map((d) => DestinationItem.fromJson(d as Map<String, dynamic>))
@@ -320,53 +321,8 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       }
     } catch (_) {}
 
-    // Fallback default destinations
-    _destinations = [
-      DestinationItem(
-        id: 'vault',
-        name: 'Save Vault (Internal Database)',
-        type: 'custom_db',
-        targetResource: 'Save Clips Vault (Local & Cloud)',
-        isConnected: true,
-        isDefault: true,
-      ),
-      DestinationItem(
-        id: 'google_sheets',
-        name: 'Google Sheets',
-        type: 'google_sheets',
-        targetResource: '2026 Clipped Vault.xlsx',
-        isConnected: true,
-      ),
-      DestinationItem(
-        id: 'notion',
-        name: 'Notion Workspace',
-        type: 'notion',
-        targetResource: 'Knowledge Base DB',
-        isConnected: true,
-      ),
-      DestinationItem(
-        id: 'airtable',
-        name: 'Airtable Base',
-        type: 'airtable',
-        targetResource: 'Content Pipeline',
-        isConnected: false,
-      ),
-      DestinationItem(
-        id: 'obsidian',
-        name: 'Obsidian Local Markdown Vault',
-        type: 'custom_db',
-        targetResource: 'Vault/Inbox',
-        isConnected: false,
-      ),
-      DestinationItem(
-        id: 'webhook',
-        name: 'Custom Webhook API',
-        type: 'webhook',
-        targetResource: 'https://api.myapp.com/hooks/save',
-        isConnected: false,
-      ),
-    ];
-    _defaultDestId = 'vault';
+    _destinations = [];
+    _defaultDestId = '';
   }
 
   Future<void> _fetchCategoryRulesFromBackend() async {
@@ -427,29 +383,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
 
     if (mounted) {
       setState(() {
-        _spotifyPlaylists = [
-          SpotifyPlaylistItem(
-            id: 'default',
-            name: 'Clipper Tracks (Default)',
-            description: 'Auto-saved songs from web clipper',
-            totalTracks: 24,
-            imageUrl: '',
-          ),
-          SpotifyPlaylistItem(
-            id: 'coding_synth',
-            name: 'Midnight Synthwave & Focus',
-            description: 'Instrumental flow beats',
-            totalTracks: 68,
-            imageUrl: '',
-          ),
-          SpotifyPlaylistItem(
-            id: 'lofi_study',
-            name: 'Lo-Fi Chill & Study Session',
-            description: 'Relaxing background melodies',
-            totalTracks: 42,
-            imageUrl: '',
-          ),
-        ];
+        _spotifyPlaylists = [];
         _loadingPlaylists = false;
       });
     }
@@ -493,29 +427,9 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       }
     } catch (_) {}
 
-    // Offline / Demo search fallback if backend is unreachable
     if (mounted) {
       setState(() {
-        _searchResults = [
-          SpotifyTrackItem(
-            id: 'sp_1',
-            name: '$clean (Live Edit)',
-            artists: 'The Weeknd, Daft Punk',
-            album: 'Starboy Deluxe Edition',
-            albumArt: 'https://i.scdn.co/image/ab67616d0000b2734718e2b124f79258be7bc452',
-            uri: 'spotify:track:7MXVkk9YM5IZxh0v4eFk0I',
-            externalUrl: 'https://open.spotify.com/search/${Uri.encodeComponent(clean)}',
-          ),
-          SpotifyTrackItem(
-            id: 'sp_2',
-            name: 'Interstellar Main Theme',
-            artists: 'Hans Zimmer',
-            album: 'Interstellar Soundtrack',
-            albumArt: 'https://i.scdn.co/image/ab67616d0000b27339ac0c55a40b90e668c67c5e',
-            uri: 'spotify:track:6ovhG6Y4sXbVj3f3N6oM4W',
-            externalUrl: 'https://open.spotify.com',
-          ),
-        ];
+        _searchResults = [];
         _isSearching = false;
       });
     }
@@ -678,26 +592,23 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                             _spotifyPlaylists.insert(0, created);
                             _musicPlaylist = created.id;
                           });
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            setState(() {
+                              _feedbackMessage = 'Created playlist "$name" on Spotify!';
+                            });
+                            Future.delayed(const Duration(seconds: 4), () {
+                              if (mounted) setState(() => _feedbackMessage = null);
+                            });
+                          }
+                          return;
                         }
-                      } catch (_) {
-                        // Demo fallback add
-                        final dummy = SpotifyPlaylistItem(
-                          id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
-                          name: name,
-                          description: descCtrl.text.trim(),
-                          totalTracks: 0,
-                          imageUrl: '',
-                        );
-                        setState(() {
-                          _spotifyPlaylists.insert(0, dummy);
-                          _musicPlaylist = dummy.id;
-                        });
-                      }
+                      } catch (_) {}
 
                       if (ctx.mounted) {
                         Navigator.pop(ctx);
                         setState(() {
-                          _feedbackMessage = 'Created playlist "$name" on Spotify!';
+                          _feedbackMessage = 'Failed to create playlist on Spotify. Check backend connection.';
                         });
                         Future.delayed(const Duration(seconds: 4), () {
                           if (mounted) setState(() => _feedbackMessage = null);
@@ -872,9 +783,8 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     } catch (_) {}
 
     setState(() {
-      _feedbackMessage = 'Spotify connected in Local Development / Demo Mode!';
+      _feedbackMessage = 'Failed to connect Spotify. Check backend configuration.';
     });
-    _loadSpotifyPlaylists();
     Future.delayed(const Duration(seconds: 4), () {
       if (mounted) setState(() => _feedbackMessage = null);
     });
@@ -1619,12 +1529,48 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
         .where((d) => d.type != 'spotify' && d.type != 'youtube_music')
         .toList();
 
+    if (validDests.isEmpty) {
+      return _buildCardWrapper(
+        icon: LucideIcons.radio,
+        iconColor: const Color(0xFF2D6A4F),
+        iconBg: const Color(0xFFDCFCE7),
+        title: 'Universal Global Default Destination',
+        tag: 'DESTINATIONS',
+        description: 'The overarching destination for any web clip, blog post, article, or bookmark.',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0),
+          child: Center(
+            child: Column(
+              children: [
+                const Icon(LucideIcons.unlink, size: 28, color: AppTheme.inactiveGrey),
+                const SizedBox(height: 8),
+                Text(
+                  'No connected destinations found',
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Connect Google Sheets, Notion, or Vault from the web dashboard.',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return _buildCardWrapper(
       icon: LucideIcons.radio,
       iconColor: const Color(0xFF2D6A4F),
       iconBg: const Color(0xFFDCFCE7),
       title: 'Universal Global Default Destination',
-      tag: 'UNIVERSAL FALLBACK',
+      tag: 'DEFAULT DESTINATION',
       description: 'The overarching fallback destination for any web clip, blog post, article, or bookmark that does not have a specialized category rule.',
       child: Column(
         children: validDests.map((dest) {
@@ -1771,6 +1717,46 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
         .where((d) => d.type != 'spotify' && d.type != 'youtube_music')
         .toList();
 
+    if (validDests.isEmpty) {
+      return _buildCardWrapper(
+        icon: LucideIcons.slidersHorizontal,
+        iconColor: const Color(0xFF2563EB),
+        iconBg: const Color(0xFFDBEAFE),
+        title: 'Smart Per-Category Destination Routing',
+        tag: 'AUTO-DISPATCH',
+        description: 'Route specific types of content to different tools automatically.',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0),
+          child: Center(
+            child: Column(
+              children: [
+                const Icon(LucideIcons.unlink, size: 28, color: AppTheme.inactiveGrey),
+                const SizedBox(height: 8),
+                Text(
+                  'No connected destinations available',
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Connect Google Sheets, Notion, or Vault to configure category routing.',
+                  style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final defaultDestName = _destinations.isNotEmpty
+        ? _destinations.firstWhere((d) => d.id == _defaultDestId, orElse: () => _destinations.first).name
+        : 'None';
+
     return _buildCardWrapper(
       icon: LucideIcons.slidersHorizontal,
       iconColor: const Color(0xFF2563EB),
@@ -1838,7 +1824,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                         DropdownMenuItem<String>(
                           value: '',
                           child: Text(
-                            '🌐 Universal Global Default (${_destinations.firstWhere((d) => d.id == _defaultDestId, orElse: () => _destinations.first).name})',
+                            '🌐 Universal Global Default ($defaultDestName)',
                             style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis,
                           ),

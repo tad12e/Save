@@ -61,15 +61,7 @@ class _BatchDestinationSheetState extends State<BatchDestinationSheet> {
   Widget build(BuildContext context) {
     final provider = Provider.of<ClipsProvider>(context);
     final selectedCount = provider.selectedIds.length;
-    final destinations = provider.destinations.isNotEmpty
-        ? provider.destinations
-        : const [
-            SaveDestination(id: 'google_sheets', name: 'Google Sheets', provider: 'google_sheets', isDefault: true),
-            SaveDestination(id: 'notion', name: 'Notion Workspace', provider: 'notion', isDefault: false),
-            SaveDestination(id: 'obsidian', name: 'Obsidian Vault', provider: 'obsidian', isDefault: false),
-            SaveDestination(id: 'airtable', name: 'Airtable Base', provider: 'airtable', isDefault: false),
-            SaveDestination(id: 'vault', name: 'Save Vault (Cloud)', provider: 'vault', isDefault: false),
-          ];
+    final destinations = provider.destinations;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -132,15 +124,42 @@ class _BatchDestinationSheetState extends State<BatchDestinationSheet> {
             const SizedBox(height: 16),
 
             // Destination List
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.40,
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: destinations.length,
-                separatorBuilder: (_, index) => const SizedBox(height: 8),
-                itemBuilder: (ctx, idx) {
+            if (destinations.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Column(
+                    children: [
+                      const Icon(LucideIcons.unlink, size: 32, color: AppTheme.inactiveGrey),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No connected destinations found',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Connect Google Sheets, Notion, or Vault to sync clips.',
+                        style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.40,
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: destinations.length,
+                  separatorBuilder: (_, index) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, idx) {
                   final dest = destinations[idx];
                   final isSelected = _selectedDestinationId == dest.id ||
                       (_selectedDestinationId == null && dest.isDefault);
@@ -235,17 +254,19 @@ class _BatchDestinationSheetState extends State<BatchDestinationSheet> {
                   _isSyncing ? 'Syncing...' : 'Sync $selectedCount Clips Now',
                   style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold),
                 ),
-                onPressed: _isSyncing
+                onPressed: (_isSyncing || destinations.isEmpty)
                     ? null
                     : () async {
                         final nav = Navigator.of(context);
                         final messenger = ScaffoldMessenger.of(context);
                         setState(() => _isSyncing = true);
                         final targetDestId = _selectedDestinationId ??
-                            (destinations.isNotEmpty ? destinations.first.id : 'vault');
+                            (destinations.isNotEmpty ? destinations.first.id : '');
                         final destObj = destinations.firstWhere(
                           (d) => d.id == targetDestId,
-                          orElse: () => destinations.first,
+                          orElse: () => destinations.isNotEmpty
+                              ? destinations.first
+                              : const SaveDestination(id: '', name: 'Destination', provider: ''),
                         );
 
                         final syncedCount = await provider.pushSelectedClipsToDestination(targetDestId);
