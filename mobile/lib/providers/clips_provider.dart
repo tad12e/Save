@@ -182,11 +182,7 @@ class ClipsProvider extends ChangeNotifier {
 
     try {
       final fetched = await ApiService.fetchClips();
-      if (fetched.isNotEmpty) {
-        _clips = fetched;
-      } else if (_clips.isEmpty) {
-        _clips = _getDefaultSampleClips();
-      }
+      _clips = fetched;
       for (final clip in _clips) {
         if (clip.isFavorite) {
           _favoriteIds.add(clip.id);
@@ -197,180 +193,12 @@ class ClipsProvider extends ChangeNotifier {
       _saveLocalFavorites();
     } catch (e) {
       _error = e.toString();
-      if (_clips.isEmpty) {
-        _clips = _getDefaultSampleClips();
-      }
+      _clips = [];
       if (kDebugMode) print('Error loading clips: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  List<ClipModel> _getDefaultSampleClips() {
-    final now = DateTime.now();
-    return [
-      ClipModel(
-        id: 'clip_1',
-        title: 'Senior Frontend Engineer (React & TypeScript) - Remote',
-        url: 'https://x.com/tech_careers/status/18219482104921',
-        summary: 'High-paying remote Senior Frontend Engineer opportunity focused on modern React 19, TypeScript, and performance.',
-        contentType: 'job',
-        tags: ['Remote', 'React', 'Frontend', 'TypeScript'],
-        sourcePlatform: 'x_twitter',
-        sourceAuthor: 'Vercel Ecosystem Labs',
-        status: 'done',
-        exportStatus: 'done',
-        createdAt: now.subtract(const Duration(hours: 2)),
-        extraMetadata: {
-          'intent': 'apply',
-          'company': 'Vercel Ecosystem Labs',
-          'salary': '\$140,000 - \$175,000',
-          'location': 'Remote (Worldwide)',
-          'deadline': '2026-10-15',
-          'synced_to': ['google_sheets', 'notion'],
-        },
-        isFavorite: true,
-      ),
-      ClipModel(
-        id: 'clip_2',
-        title: 'Global AI Founders Hackathon 2026 (\$50,000 Cash Prizes)',
-        url: 'https://linkedin.com/posts/ai-founders-hub-2026',
-        summary: 'Virtual hackathon with \$50,000 cash prizes and investor fast-track opportunities for Gemini and Claude builders.',
-        contentType: 'event',
-        tags: ['Hackathon', 'AI', 'Prizes', 'YC', 'Virtual'],
-        sourcePlatform: 'linkedin',
-        sourceAuthor: 'AI Founders Hub',
-        status: 'done',
-        exportStatus: 'done',
-        createdAt: now.subtract(const Duration(hours: 5)),
-        extraMetadata: {
-          'intent': 'attend',
-          'price': 'Free Entry (\$50k Prizes)',
-          'event_date': 'Oct 24, 2026',
-          'location': 'San Francisco / Online',
-          'deadline': '2026-10-20',
-          'synced_to': ['google_sheets'],
-        },
-        isFavorite: true,
-      ),
-      ClipModel(
-        id: 'clip_3',
-        title: 'OpenAI Developer Fellowship 2026 - Fully Funded Grant',
-        url: 'https://openai.com/careers/fellowship-2026',
-        summary: '6-month research fellowship with \$10,000/month stipend and compute allocation from OpenAI research engineers.',
-        contentType: 'scholarship',
-        tags: ['Fellowship', 'Stipend', 'Research'],
-        sourcePlatform: 'web',
-        sourceAuthor: 'OpenAI',
-        status: 'done',
-        exportStatus: 'done',
-        createdAt: now.subtract(const Duration(hours: 9)),
-        extraMetadata: {
-          'intent': 'apply',
-          'company': 'OpenAI',
-          'salary': '\$10,000 / mo stipend',
-          'location': 'San Francisco / Remote',
-          'deadline': '2026-10-05',
-          'synced_to': ['notion'],
-        },
-      ),
-      ClipModel(
-        id: 'clip_4',
-        title: 'Attention Is All You Need 2.0: Scaling Transformer Contexts to 10M Tokens',
-        url: 'https://arxiv.org/abs/2608.01928',
-        summary: 'Sub-quadratic attention architecture supporting 10,000,000 token context windows without accuracy degradation.',
-        contentType: 'research',
-        tags: ['AI Research', 'Transformers', 'LLM', 'ArXiv'],
-        sourcePlatform: 'arxiv',
-        sourceAuthor: 'Vaswani et al.',
-        status: 'done',
-        exportStatus: 'done',
-        createdAt: now.subtract(const Duration(hours: 14)),
-        extraMetadata: {
-          'intent': 'learn',
-          'reading_time': '8 min read',
-          'rating': '9.8 Impact Score',
-          'synced_to': ['notion'],
-        },
-        isFavorite: true,
-      ),
-      ClipModel(
-        id: 'clip_5',
-        title: 'Fast-Inference Local Agent Server in Rust & WebGPU',
-        url: 'https://github.com/rust-ai/agent-server',
-        summary: 'Ultra-fast local AI agent runner written in Rust with WebGPU acceleration. Sub-10ms token generation for edge devices.',
-        contentType: 'project',
-        tags: ['Rust', 'WebGPU', 'OpenSource', 'GitHub'],
-        sourcePlatform: 'github',
-        sourceAuthor: 'rust-ai-org',
-        status: 'done',
-        exportStatus: 'done',
-        createdAt: now.subtract(const Duration(days: 1)),
-        extraMetadata: {
-          'intent': 'track',
-          'stars': '14.2k',
-          'version': 'v2.4.0',
-          'language': 'Rust',
-          'synced_to': ['google_sheets'],
-        },
-      ),
-      ClipModel(
-        id: 'clip_6',
-        title: 'Building Production Multi-Agent Workflows from Scratch',
-        url: 'https://youtube.com/watch?v=agent-arch-2026',
-        summary: 'Deep architectural walkthrough explaining planner-executor loops, error recovery strategies, and tool invocation patterns.',
-        contentType: 'video',
-        tags: ['Agents', 'Architecture', 'AI', 'YouTube'],
-        sourcePlatform: 'youtube',
-        sourceAuthor: 'Andrej Karpathy',
-        status: 'done',
-        exportStatus: 'pending',
-        createdAt: now.subtract(const Duration(days: 1, hours: 4)),
-        extraMetadata: {
-          'intent': 'learn',
-          'duration': '18 min video',
-          'reading_time': '18 min',
-        },
-      ),
-      ClipModel(
-        id: 'clip_7',
-        title: 'Notion AI + Database Lifetime Pro Workspace Bundle',
-        url: 'https://notion.so/pricing/pro-bundle-2026',
-        summary: 'Special developer discount providing lifetime database synchronization and automated prompt synthesis.',
-        contentType: 'deal',
-        tags: ['Productivity', 'Notion', 'Software', 'Discount'],
-        sourcePlatform: 'web',
-        sourceAuthor: 'Notion',
-        status: 'done',
-        exportStatus: 'done',
-        createdAt: now.subtract(const Duration(days: 2)),
-        extraMetadata: {
-          'intent': 'buy',
-          'price': '\$49.00',
-          'discount': '30% OFF',
-        },
-      ),
-      ClipModel(
-        id: 'clip_8',
-        title: 'Staff ML Infrastructure Engineer — Candidate Recommendations',
-        url: 'https://linkedin.com/in/marcus-chen-ml-infra',
-        summary: 'Ex-Stripe Staff Platform Lead. Specialized in large-scale model inference, Kubernetes GPU scheduling, and high-throughput vector store architectures.',
-        contentType: 'job',
-        tags: ['Hire', 'Candidate', 'ML Infra', 'Staff Engineer'],
-        sourcePlatform: 'linkedin',
-        sourceAuthor: 'Marcus Chen',
-        status: 'done',
-        exportStatus: 'done',
-        createdAt: now.subtract(const Duration(days: 2, hours: 6)),
-        extraMetadata: {
-          'intent': 'hire',
-          'role': 'Staff Infrastructure',
-          'company': 'Ex-Stripe',
-          'location': 'San Francisco, CA',
-        },
-      ),
-    ];
   }
 
   void setIntent(String intent) {

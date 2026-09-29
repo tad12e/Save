@@ -752,7 +752,9 @@ class _ClipsScreenState extends State<ClipsScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'No clips match your filters',
+                provider.allClips.isEmpty
+                    ? 'No clips in your vault yet'
+                    : 'No clips match your filters',
                 style: GoogleFonts.outfit(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
@@ -761,9 +763,11 @@ class _ClipsScreenState extends State<ClipsScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                provider.hasActiveFilters
-                    ? 'Try resetting your intent, status, or search filters.'
-                    : 'Save articles, links, or notes to build your vault.',
+                provider.allClips.isEmpty
+                    ? 'Save articles, links, or notes to build your vault.'
+                    : (provider.hasActiveFilters
+                        ? 'Try resetting your intent, status, or search filters.'
+                        : 'Save articles, links, or notes to build your vault.'),
                 style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
                 textAlign: TextAlign.center,
               ),
