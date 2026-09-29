@@ -581,6 +581,9 @@ export default function App() {
         isExtensionOpen={isExtensionOpen}
         collapsed={sidebarCollapsed}
         theme={theme}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setShowAuthModal(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
@@ -603,6 +606,8 @@ export default function App() {
           onLogout={handleLogout}
           onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
           sidebarCollapsed={sidebarCollapsed}
+          logs={logs}
+          clips={clips}
         />
 
         <main className={`flex-1 overflow-y-auto w-full pt-[64px] ${

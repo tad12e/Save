@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Search,
   Bell,
@@ -11,8 +11,9 @@ import {
   Sun,
   Moon,
   Upload,
+  AlertCircle,
 } from 'lucide-react';
-import { DestinationConfig } from '../../types';
+import { DestinationConfig, ConnectionSyncLog, ClipItem } from '../../types';
 
 interface HeaderProps {
   searchQuery: string;
@@ -30,6 +31,19 @@ interface HeaderProps {
   onLogout?: () => void;
   onToggleSidebar?: () => void;
   sidebarCollapsed?: boolean;
+  logs?: ConnectionSyncLog[];
+  clips?: ClipItem[];
+}
+
+function formatRelativeTime(dateInput?: string): string {
+  if (!dateInput) return 'Just now';
+  const parsed = Date.parse(dateInput);
+  if (isNaN(parsed)) return dateInput;
+  const diffSec = Math.floor((Date.now() - parsed) / 1000);
+  if (diffSec < 0 || diffSec < 60) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
 }
 
 // Stitch Premium header (64px, glassy / dark).
@@ -47,10 +61,84 @@ export const Header: React.FC<HeaderProps> = (props) => {
     onLogout,
     onToggleSidebar,
     sidebarCollapsed = false,
+    logs = [],
+    clips = [],
   } = props;
   const isDark = theme === 'dark' || theme === 'terminal';
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [clearedAt, setClearedAt] = useState<number>(0);
+
+  const notifications = useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      description: string;
+      timeAgo: string;
+      timestamp: number;
+      type: 'sync_success' | 'sync_failed' | 'sync_pending' | 'clip_saved';
+    }> = [];
+
+    // 1. Live Destination Sync Logs from PostgreSQL backend
+    if (logs && logs.length > 0) {
+      for (const log of logs.slice(0, 10)) {
+        const ts = log.timestamp ? Date.parse(log.timestamp) || Date.now() : Date.now();
+        if (ts <= clearedAt) continue;
+
+        if (log.status === 'failed') {
+          list.push({
+            id: `log-${log.id}`,
+            title: `${log.destinationName || 'Destination'} Sync Failed`,
+            description: log.details || (log.clipTitle ? `Failed to sync "${log.clipTitle}"` : 'Sync pipeline encountered an error'),
+            timeAgo: formatRelativeTime(log.timestamp),
+            timestamp: ts,
+            type: 'sync_failed',
+          });
+        } else if (log.status === 'pending' || log.status === 'retrying') {
+          list.push({
+            id: `log-${log.id}`,
+            title: `${log.destinationName || 'Destination'} Syncing`,
+            description: log.clipTitle ? `Processing "${log.clipTitle}"...` : 'Queued for sync...',
+            timeAgo: formatRelativeTime(log.timestamp),
+            timestamp: ts,
+            type: 'sync_pending',
+          });
+        } else {
+          list.push({
+            id: `log-${log.id}`,
+            title: `${log.destinationName || 'Destination'} Sync Complete`,
+            description: log.clipTitle
+              ? `Synced "${log.clipTitle.slice(0, 36)}${log.clipTitle.length > 36 ? '...' : ''}" (${log.durationMs || 120}ms)`
+              : `Payload updated (${log.payloadSize || '1.2 KB'})`,
+            timeAgo: formatRelativeTime(log.timestamp),
+            timestamp: ts,
+            type: 'sync_success',
+          });
+        }
+      }
+    }
+
+    // 2. Real Captured Clips
+    if (clips && clips.length > 0) {
+      for (const clip of clips.slice(0, 3)) {
+        const ts = clip.createdAt ? Date.parse(clip.createdAt) || Date.now() : Date.now();
+        if (ts <= clearedAt) continue;
+
+        list.push({
+          id: `clip-${clip.id}`,
+          title: 'Clip Captured',
+          description: clip.title
+            ? `"${clip.title.slice(0, 38)}${clip.title.length > 38 ? '...' : ''}" saved to ${clip.category || 'Vault'}`
+            : 'New content clipped to Vault',
+          timeAgo: formatRelativeTime(clip.createdAt),
+          timestamp: ts,
+          type: 'clip_saved',
+        });
+      }
+    }
+
+    return list.sort((a, b) => b.timestamp - a.timestamp);
+  }, [logs, clips, clearedAt]);
 
   return (
     <header
@@ -152,6 +240,12 @@ export const Header: React.FC<HeaderProps> = (props) => {
         </button>
 
         <div className="relative">
+          {showNotifications && (
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setShowNotifications(false)}
+            />
+          )}
           <button
             aria-label="Notifications"
             onClick={() => setShowNotifications(!showNotifications)}
@@ -162,16 +256,18 @@ export const Header: React.FC<HeaderProps> = (props) => {
             }`}
           >
             <Bell className="w-4 h-4" />
-            <span
-              className={`absolute top-2 right-2 w-2 h-2 rounded-full bg-red-600 ring-2 ${
-                isDark ? 'ring-black' : 'ring-white'
-              }`}
-            ></span>
+            {notifications.length > 0 && (
+              <span
+                className={`absolute top-2 right-2 w-2 h-2 rounded-full bg-red-600 ring-2 ${
+                  isDark ? 'ring-black' : 'ring-white'
+                }`}
+              ></span>
+            )}
           </button>
 
           {showNotifications && (
             <div
-              className={`absolute right-0 mt-2 w-80 rounded-2xl shadow-xl z-50 p-4 space-y-3 border ${
+              className={`absolute right-0 mt-2 w-84 rounded-2xl shadow-xl z-50 p-4 space-y-3 border ${
                 isDark
                   ? 'bg-[#0E0E0E] border-[#262626] text-white'
                   : 'bg-white border-slate-200 text-slate-900'
@@ -185,60 +281,95 @@ export const Header: React.FC<HeaderProps> = (props) => {
                 <span className="font-semibold text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>
                   System Activity
                 </span>
-                <span
-                  className={`text-[9px] font-mono px-2 py-0.5 rounded-full uppercase tracking-wider font-bold ${
-                    isDark
-                      ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
-                      : 'bg-emerald-100 text-emerald-800'
-                  }`}
-                >
-                  2 New
-                </span>
-              </div>
-              <div
-                className={`p-3 rounded-xl border flex gap-2.5 ${
-                  isDark
-                    ? 'bg-[#141414] border-[#222222]'
-                    : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <CheckCircle className={`w-4 h-4 text-[#3FE769] shrink-0 mt-0.5`} />
-                <div>
-                  <p className="text-xs font-sans font-semibold">Google Sheets Sync Complete</p>
-                  <p
-                    className={`text-[11px] font-mono mt-0.5 ${
-                      isDark ? 'text-[#878787]' : 'text-slate-500'
-                    }`}
-                  >
-                    Row #143 appended to Vault 2026
-                  </p>
-                  <p className="text-[9px] font-mono text-[#3FE769] mt-1 uppercase tracking-wider">
-                    2 mins ago
-                  </p>
+                <div className="flex items-center gap-2">
+                  {notifications.length > 0 ? (
+                    <>
+                      <button
+                        onClick={() => setClearedAt(Date.now())}
+                        className={`text-[10px] font-mono hover:underline cursor-pointer transition-colors ${
+                          isDark ? 'text-[#878787] hover:text-white' : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Clear
+                      </button>
+                      <span
+                        className={`text-[9px] font-mono px-2 py-0.5 rounded-full uppercase tracking-wider font-bold ${
+                          isDark
+                            ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        {notifications.length} New
+                      </span>
+                    </>
+                  ) : (
+                    <span
+                      className={`text-[9px] font-mono px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        isDark ? 'bg-[#141414] text-[#666666]' : 'bg-slate-100 text-slate-400'
+                      }`}
+                    >
+                      Quiet
+                    </span>
+                  )}
                 </div>
               </div>
-              <div
-                className={`p-3 rounded-xl border flex gap-2.5 ${
-                  isDark
-                    ? 'bg-[#141414] border-[#222222]'
-                    : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs font-sans font-semibold">AI Weekly Digest Ready</p>
-                  <p
-                    className={`text-[11px] font-mono mt-0.5 ${
-                      isDark ? 'text-[#878787]' : 'text-slate-500'
-                    }`}
-                  >
-                    12 opportunities scored &amp; grouped
+
+              {notifications.length > 0 ? (
+                <div className="space-y-2 max-h-[340px] overflow-y-auto pr-0.5 custom-scrollbar">
+                  {notifications.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`p-3 rounded-xl border flex gap-2.5 transition-colors ${
+                        isDark
+                          ? 'bg-[#141414] border-[#222222]'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      {item.type === 'sync_success' && (
+                        <CheckCircle className="w-4 h-4 text-[#3FE769] shrink-0 mt-0.5" />
+                      )}
+                      {item.type === 'sync_failed' && (
+                        <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                      )}
+                      {item.type === 'sync_pending' && (
+                        <RefreshCw className="w-4 h-4 text-amber-500 shrink-0 mt-0.5 animate-spin" />
+                      )}
+                      {item.type === 'clip_saved' && (
+                        <Sparkles className="w-4 h-4 text-[#3FE769] shrink-0 mt-0.5" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-sans font-semibold truncate">{item.title}</p>
+                        <p
+                          className={`text-[11px] font-mono mt-0.5 break-words line-clamp-2 ${
+                            isDark ? 'text-[#878787]' : 'text-slate-500'
+                          }`}
+                        >
+                          {item.description}
+                        </p>
+                        <p className={`text-[9px] font-mono mt-1 uppercase tracking-wider ${
+                          item.type === 'sync_failed' ? 'text-red-400' : 'text-[#3FE769]'
+                        }`}>
+                          {item.timeAgo}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-6 px-4 text-center flex flex-col items-center justify-center">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center mb-2 ${
+                    isDark ? 'bg-[#141414] text-[#666666]' : 'bg-slate-100 text-slate-400'
+                  }`}>
+                    <Bell className="w-4 h-4 opacity-60" />
+                  </div>
+                  <p className={`text-xs font-medium ${isDark ? 'text-[#A0A0A0]' : 'text-slate-700'}`}>
+                    All caught up
                   </p>
-                  <p className="text-[9px] font-mono text-[#3FE769] mt-1 uppercase tracking-wider">
-                    1 hour ago
+                  <p className={`text-[11px] mt-1 max-w-[200px] leading-relaxed ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>
+                    Destination sync logs and new clip events will appear here in real time.
                   </p>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -263,6 +394,12 @@ export const Header: React.FC<HeaderProps> = (props) => {
 
         {currentUser ? (
           <div className="relative">
+            {showAccount && (
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowAccount(false)}
+              />
+            )}
             <button onClick={() => setShowAccount(!showAccount)} title={currentUser.name}>
               <div
                 className={`w-9 h-9 rounded-full text-[11px] font-sans font-bold flex items-center justify-center ring-1 cursor-pointer shadow-sm hover:shadow-md transition-shadow ${
