@@ -795,41 +795,108 @@ function generateClientSynthesizedAnalytics(
     },
     weekday_rhythm: {
       days: weekdayData,
-      weekday_vs_weekend_pct: { weekday: 81, weekend: 19 },
+      weekday_vs_weekend_pct: {
+        weekday: weekdayData.slice(0, 5).reduce((acc, d) => acc + d.total, 0) > 0 || weekdayData.slice(5).reduce((acc, d) => acc + d.total, 0) > 0
+          ? Math.round((weekdayData.slice(0, 5).reduce((acc, d) => acc + d.total, 0) / Math.max(1, totalClips)) * 100)
+          : 80,
+        weekend: weekdayData.slice(0, 5).reduce((acc, d) => acc + d.total, 0) > 0 || weekdayData.slice(5).reduce((acc, d) => acc + d.total, 0) > 0
+          ? Math.round((weekdayData.slice(5).reduce((acc, d) => acc + d.total, 0) / Math.max(1, totalClips)) * 100)
+          : 20,
+      },
     },
-    opportunity_funnel: [
-      { stage: '1. Discovered & Clipped', count: 48, conversion_pct: 100, dropoff_pct: 0 },
-      { stage: '2. Bookmarked / Priority', count: 32, conversion_pct: 66.7, dropoff_pct: 33.3 },
-      { stage: '3. Applied / In Review', count: 18, conversion_pct: 37.5, dropoff_pct: 29.2 },
-      { stage: '4. Interview / Final Offer', count: 8, conversion_pct: 16.7, dropoff_pct: 20.8 },
-    ],
+    opportunity_funnel: (() => {
+      const stage1 = totalClips;
+      const stage2 = clips.filter((c) => c.is_favorite || (c.status && c.status !== 'pending') || (c.tags && c.tags.includes('priority'))).length;
+      const stage3 = clips.filter((c) => {
+        const ct = (c.content_type || c.category || '').toLowerCase();
+        return ct.includes('job') || ct.includes('scholarship') || ct.includes('event') || Boolean(c.deadline_date) || c.status === 'in_progress';
+      }).length;
+      const stage4 = clips.filter((c) => c.status === 'done' || c.status === 'completed' || (c.tags && (c.tags.includes('interview') || c.tags.includes('offer')))).length;
+
+      const conv1 = 100;
+      const conv2 = stage1 > 0 ? Math.round((stage2 / stage1) * 1000) / 10 : 0;
+      const conv3 = stage1 > 0 ? Math.round((stage3 / stage1) * 1000) / 10 : 0;
+      const conv4 = stage1 > 0 ? Math.round((stage4 / stage1) * 1000) / 10 : 0;
+
+      return [
+        { stage: '1. Discovered & Clipped', count: stage1, conversion_pct: conv1, dropoff_pct: 0 },
+        { stage: '2. Bookmarked / Priority', count: stage2, conversion_pct: conv2, dropoff_pct: Math.max(0, Math.round((100 - conv2) * 10) / 10) },
+        { stage: '3. Applied / In Review', count: stage3, conversion_pct: conv3, dropoff_pct: stage2 > 0 ? Math.max(0, Math.round(((stage2 - stage3) / stage2) * 1000) / 10) : 0 },
+        { stage: '4. Interview / Final Offer', count: stage4, conversion_pct: conv4, dropoff_pct: stage3 > 0 ? Math.max(0, Math.round(((stage3 - stage4) / stage3) * 1000) / 10) : 0 },
+      ];
+    })(),
     content_breakdown: contentBreakdown,
-    popular_tags: [
-      { tag: 'react', count: 24, trend: 'up' },
-      { tag: 'engineering', count: 19, trend: 'up' },
-      { tag: 'ai-tools', count: 15, trend: 'up' },
-      { tag: 'remote-work', count: 12, trend: 'stable' },
-      { tag: 'design-system', count: 9, trend: 'down' },
-      { tag: 'startups', count: 8, trend: 'stable' },
-    ],
-    knowledge_radar: [
-      { subject: 'Web Architecture', currentPeriod: 88, previousPeriod: 70, fullMark: 100 },
-      { subject: 'AI & LLMs', currentPeriod: 92, previousPeriod: 64, fullMark: 100 },
-      { subject: 'Job Ops', currentPeriod: 78, previousPeriod: 82, fullMark: 100 },
-      { subject: 'Design Systems', currentPeriod: 65, previousPeriod: 55, fullMark: 100 },
-      { subject: 'Cloud & DevOps', currentPeriod: 74, previousPeriod: 60, fullMark: 100 },
-      { subject: 'Data & Analytics', currentPeriod: 85, previousPeriod: 50, fullMark: 100 },
-    ],
+    popular_tags: (() => {
+      const tagMap: Record<string, number> = {};
+      clips.forEach((c) => {
+        if (Array.isArray(c.tags)) {
+          c.tags.forEach((t) => {
+            const clean = t.trim().toLowerCase().replace(/^#/, '');
+            if (clean) tagMap[clean] = (tagMap[clean] || 0) + 1;
+          });
+        }
+      });
+      const entries = Object.entries(tagMap).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      if (entries.length > 0) {
+        return entries.map(([tag, count], idx) => ({
+          tag,
+          count,
+          trend: (idx % 3 === 0 ? 'up' : idx % 3 === 1 ? 'stable' : 'up') as 'up' | 'stable' | 'down',
+        }));
+      }
+      return [
+        { tag: 'knowledge', count: totalClips, trend: 'stable' as const },
+        { tag: 'vault', count: totalClips, trend: 'up' as const },
+      ];
+    })(),
+    knowledge_radar: (() => {
+      const radarDefinitions = [
+        { subject: 'Web Architecture', kws: ['web', 'react', 'frontend', 'backend', 'fullstack', 'api', 'js', 'ts', 'node'] },
+        { subject: 'AI & LLMs', kws: ['ai', 'llm', 'ml', 'gpt', 'model', 'prompt', 'deep learning', 'openai', 'agent'] },
+        { subject: 'Job Ops', kws: ['job', 'career', 'interview', 'salary', 'hiring', 'resume', 'apply'] },
+        { subject: 'Design Systems', kws: ['design', 'ui', 'ux', 'css', 'tailwind', 'figma', 'layout', 'style'] },
+        { subject: 'Cloud & DevOps', kws: ['cloud', 'aws', 'docker', 'k8s', 'devops', 'infra', 'deploy', 'linux'] },
+        { subject: 'Data & Analytics', kws: ['data', 'analytics', 'sql', 'database', 'postgres', 'python', 'metrics'] },
+      ];
+
+      return radarDefinitions.map((def) => {
+        let count = 0;
+        clips.forEach((c) => {
+          const text = `${c.title || ''} ${c.summary || ''} ${(c.tags || []).join(' ')} ${c.content_type || ''} ${c.category || ''}`.toLowerCase();
+          if (def.kws.some((kw) => text.includes(kw))) {
+            count++;
+          }
+        });
+        const currentPeriod = totalClips > 0 ? Math.min(100, Math.round((count / totalClips) * 100 * 2.5) + (count > 0 ? 30 : 0)) : 0;
+        const previousPeriod = Math.max(0, Math.round(currentPeriod * 0.75));
+        return {
+          subject: def.subject,
+          currentPeriod,
+          previousPeriod,
+          fullMark: 100,
+          count,
+        };
+      });
+    })(),
     destinations_health: {
       active_count: activeDestCount,
       total_available: 8,
       overall_uptime: '99.9%',
-      destinations: [
-        { id: '1', name: 'Google Sheets Vault', provider: 'google_sheets', is_active: true, is_default: true, target_resource: 'Clipper_Knowledge_Base_2026', uptime: '99.9%', latency_ms: 110 },
-        { id: '2', name: 'Notion Database', provider: 'notion', is_active: true, is_default: false, target_resource: 'Personal Reading Vault', uptime: '99.8%', latency_ms: 85 },
-        { id: '3', name: 'Spotify Music Radar', provider: 'spotify', is_active: true, is_default: false, target_resource: 'Clipper Auto-Sync Radar', uptime: '100%', latency_ms: 60 },
-        { id: '4', name: 'GitHub Gist Archive', provider: 'github', is_active: false, is_default: false, target_resource: 'Code Snippets Vault', uptime: '99.9%', latency_ms: 95 },
-      ],
+      destinations: destinations.length > 0
+        ? destinations.map((d) => ({
+            id: d.id,
+            name: d.name,
+            provider: d.type || 'webhook',
+            is_active: d.is_active,
+            is_default: Boolean((d as any).is_default),
+            target_resource: (d.config as any)?.target_resource_name || d.name,
+            uptime: '99.9%',
+            latency_ms: d.type === 'google_sheets' ? 110 : 85,
+          }))
+        : [
+            { id: '1', name: 'Google Sheets Vault', provider: 'google_sheets', is_active: true, is_default: true, target_resource: 'Clipper_Knowledge_Base', uptime: '99.9%', latency_ms: 110 },
+            { id: '2', name: 'Notion Database', provider: 'notion', is_active: true, is_default: false, target_resource: 'Personal Reading Vault', uptime: '99.8%', latency_ms: 85 },
+          ],
     },
     gamification: {
       badges: [
@@ -849,45 +916,131 @@ function generateClientSynthesizedAnalytics(
         total_reads_completed: totalClips,
       },
     },
-    predictive_forecast: {
-      historical_trend,
-      forecast_days,
-      projected_total_month: 85,
-      insights: [
-        {
-          id: 'ins_1',
-          type: 'trend',
-          title: 'Surging Web Architecture & AI Research',
-          description: 'Your saving pace for AI & full-stack development clips increased by +42% this week.',
-          action_text: 'Generate AI Topic Summary',
-          confidence: 0.94,
-          risk_level: 'low',
-        },
-        {
-          id: 'ins_2',
+    predictive_forecast: (() => {
+      const upcomingDeadlines = clips.filter((c) => {
+        if (!c.deadline_date) return false;
+        const dTime = new Date(c.deadline_date).getTime();
+        const diffDays = Math.ceil((dTime - now.getTime()) / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 && diffDays <= 7;
+      });
+
+      const nearestDeadline = upcomingDeadlines[0];
+      const urgentDeadlines = upcomingDeadlines.filter((c) => {
+        const dTime = new Date(c.deadline_date!).getTime();
+        return Math.ceil((dTime - now.getTime()) / (1000 * 60 * 60 * 24)) <= 2;
+      });
+
+      const generatedInsights: Array<{
+        id: string;
+        type: 'trend' | 'deadline' | 'streak' | 'opportunity';
+        title: string;
+        description: string;
+        action_text: string;
+        confidence: number;
+        risk_level: 'low' | 'medium' | 'high';
+      }> = [];
+
+      // 1. Deadline Insight
+      if (upcomingDeadlines.length > 0) {
+        const titleSnippet = nearestDeadline?.title ? `"${nearestDeadline.title.slice(0, 32)}..."` : 'Saved opportunity';
+        generatedInsights.push({
+          id: 'ins_deadlines_active',
           type: 'deadline',
-          title: '3 Job Opportunities Expire Within 48 Hours',
-          description: 'Frontend Engineer roles at Stripe and Vercel have application deadlines approaching.',
+          title: `${upcomingDeadlines.length} Opportunity Deadline${upcomingDeadlines.length > 1 ? 's' : ''} Expiring Soon`,
+          description: `${titleSnippet} and ${upcomingDeadlines.length - 1} other item(s) have application deadlines approaching within 7 days.`,
           action_text: 'Review Opportunities Funnel',
           confidence: 0.98,
-          risk_level: 'high',
+          risk_level: urgentDeadlines.length > 0 ? 'high' : 'medium',
+        });
+      } else {
+        generatedInsights.push({
+          id: 'ins_deadlines_ok',
+          type: 'deadline',
+          title: 'All Tracked Deadlines Current',
+          description: 'Zero urgent or overdue deadlines detected across your research and job pipelines.',
+          action_text: 'Review Opportunities Funnel',
+          confidence: 0.95,
+          risk_level: 'low',
+        });
+      }
+
+      // 2. Growth / Topic Velocity Insight
+      const topCategory = contentBreakdown[0];
+      if (topCategory && topCategory.count > 0) {
+        generatedInsights.push({
+          id: 'ins_topic_trend',
+          type: 'trend',
+          title: `Active Research Ingestion: ${topCategory.name}`,
+          description: `${topCategory.name} represents ${topCategory.percentage}% of your vault with ${topCategory.count} items clipped.`,
+          action_text: 'Inspect Topic Analytics',
+          confidence: 0.94,
+          risk_level: 'low',
+        });
+      } else {
+        generatedInsights.push({
+          id: 'ins_topic_steady',
+          type: 'trend',
+          title: 'Knowledge Base Ready',
+          description: `${totalClips} items curated across your research pipelines. Ingestion velocity steady.`,
+          action_text: 'View Knowledge Matrix',
+          confidence: 0.91,
+          risk_level: 'low',
+        });
+      }
+
+      // 3. Streak Pace Insight
+      const streakMilestone = currentStreak < 7 ? 7 : (currentStreak < 14 ? 14 : (currentStreak < 30 ? 30 : currentStreak + 10));
+      const daysToMilestone = streakMilestone - currentStreak;
+      generatedInsights.push({
+        id: 'ins_streak_pace',
+        type: 'streak',
+        title: currentStreak > 0
+          ? `${currentStreak}-Day Active Streak: ${daysToMilestone} Day${daysToMilestone > 1 ? 's' : ''} to Next Milestone`
+          : 'Start Your Consecutive Saving Streak',
+        description: currentStreak > 0
+          ? `Consistently ingesting knowledge. Save today's articles to maintain your ${currentStreak}-day momentum.`
+          : 'Save your first clip today to initiate a daily learning streak and unlock gamification achievements.',
+        action_text: 'View Gamification Badges',
+        confidence: 0.90,
+        risk_level: currentStreak > 0 ? 'low' : 'medium',
+      });
+
+      // Dynamic Leaderboard
+      const points = Math.max(150, totalClips * 50 + currentStreak * 100 + activeDestCount * 150);
+      let rank_title = 'Novice Archivist';
+      let next_tier_points = 500;
+      let user_percentile = 55;
+
+      if (points >= 3000) {
+        rank_title = 'Diamond Researcher Tier';
+        next_tier_points = 5000;
+        user_percentile = 96;
+      } else if (points >= 1500) {
+        rank_title = 'Platinum Curator Tier';
+        next_tier_points = 3000;
+        user_percentile = 88;
+      } else if (points >= 750) {
+        rank_title = 'Gold Scholar Tier';
+        next_tier_points = 1500;
+        user_percentile = 75;
+      } else if (points >= 300) {
+        rank_title = 'Silver Collector Tier';
+        next_tier_points = 750;
+        user_percentile = 65;
+      }
+
+      return {
+        historical_trend,
+        forecast_days,
+        projected_total_month: Math.max(totalClips, Math.round(recentSavesCount * 4.2)),
+        insights: generatedInsights,
+        leaderboard: {
+          user_percentile,
+          rank_title,
+          points,
+          next_tier_points,
         },
-        {
-          id: 'ins_3',
-          type: 'streak',
-          title: '9-Day Streak: 5 Days to Next Tier Milestone',
-          description: 'Keep clipping daily to unlock the "Fortnight Scholar" silver badge.',
-          action_text: 'View Gamification Badges',
-          confidence: 0.89,
-          risk_level: 'medium',
-        },
-      ],
-      leaderboard: {
-        user_percentile: 94,
-        rank_title: 'Diamond Researcher Tier',
-        points: 2450,
-        next_tier_points: 3000,
-      },
-    },
+      };
+    })(),
   };
 }

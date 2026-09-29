@@ -67,7 +67,14 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
     if (sources && sources.length > 0) {
       sourceList = sources;
     } else if (clips && clips.length > 0) {
+      const now = Date.now();
+      const sevenDaysAgo = now - 7 * 86400000;
+      const fourteenDaysAgo = now - 14 * 86400000;
+
       const domainMap: Record<string, number> = {};
+      const domainRecentMap: Record<string, number> = {};
+      const domainPrevMap: Record<string, number> = {};
+
       clips.forEach((c: any) => {
         const url = c.url || '';
         if (url) {
@@ -76,6 +83,12 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
             if (host.startsWith('www.')) host = host.slice(4);
             if (host) {
               domainMap[host] = (domainMap[host] || 0) + 1;
+              const dt = c.created_at ? new Date(c.created_at).getTime() : 0;
+              if (dt >= sevenDaysAgo) {
+                domainRecentMap[host] = (domainRecentMap[host] || 0) + 1;
+              } else if (dt >= fourteenDaysAgo) {
+                domainPrevMap[host] = (domainPrevMap[host] || 0) + 1;
+              }
             }
           } catch {
             // ignore malformed url
@@ -101,6 +114,24 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
             theme = 'purple';
             intent = 'Media/Learn';
           }
+
+          const recent = domainRecentMap[domain] || 0;
+          const prev = domainPrevMap[domain] || 0;
+          let trend = '0%';
+          let isPositive = true;
+
+          if (prev > 0) {
+            const delta = Math.round(((recent - prev) / prev) * 100);
+            trend = delta >= 0 ? `+${delta}%` : `${delta}%`;
+            isPositive = delta >= 0;
+          } else if (recent > 0) {
+            trend = `+${recent * 100}%`;
+            isPositive = true;
+          } else {
+            trend = count > 1 ? '+0%' : '0%';
+            isPositive = true;
+          }
+
           return {
             id: String(idx + 1),
             domain,
@@ -109,8 +140,8 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
             primaryIntent: intent,
             intentTheme: theme,
             sharePct: Math.round((count / totalSourced) * 1000) / 10,
-            trend: '+12%',
-            isPositive: true,
+            trend,
+            isPositive,
           };
         });
     }
@@ -123,8 +154,8 @@ export const TopKnowledgeSourcesTable: React.FC<TopKnowledgeSourcesTableProps> =
       primaryIntent: s.primaryIntent || 'Knowledge',
       intentTheme: s.intentTheme || 'emerald',
       sharePct: s.sharePct ?? 10.0,
-      trend: s.trend || '+12%',
-      isPositive: s.isPositive ?? true,
+      trend: s.trend ?? (s.clips > 0 ? '+100%' : '0%'),
+      isPositive: s.isPositive ?? (!s.trend || !s.trend.startsWith('-')),
       iconBg: s.iconBg || (s.intentTheme === 'blue' ? (isDark ? '#1E293B' : '#DBEAFE') : (isDark ? '#1C1B1B' : '#F1F5F9')),
       iconColor: s.iconColor || (isDark ? '#3FE769' : '#166534'),
       iconContent: getDomainIcon(s.domain),

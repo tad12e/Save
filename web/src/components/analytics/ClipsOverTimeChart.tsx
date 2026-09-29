@@ -5,20 +5,68 @@ import { TrendingUp, Layers } from 'lucide-react';
 import { useAnalyticsStore } from '../../store/analyticsStore';
 import { TYPE_COLORS } from '../../lib/chartColors';
 
+import { ClipItem } from '../../types';
+
 interface ClipsOverTimeChartProps {
   historicalData: Array<{ date: string; actual: number; predicted?: number }>;
+  clips?: ClipItem[];
 }
 
-export const ClipsOverTimeChart: React.FC<ClipsOverTimeChartProps> = ({ historicalData }) => {
+export const ClipsOverTimeChart: React.FC<ClipsOverTimeChartProps> = ({ historicalData, clips = [] }) => {
   const { clipsOverTimeMode, setClipsOverTimeMode } = useAnalyticsStore();
 
-  // Multi-type mock synthesis for "By Type" mode
+  // Multi-type dynamic classification for "By Type" mode based on live user clips
   const multiTypeData = historicalData.map((d) => {
     const total = d.actual;
-    const article = Math.round(total * 0.38);
-    const job = Math.round(total * 0.28);
-    const tool = Math.round(total * 0.18);
-    const music = Math.max(0, total - (article + job + tool));
+
+    // Filter clips created on this date
+    const matchingClips = clips.filter((c) => {
+      if (!c.created_at) return false;
+      const cd = new Date(c.created_at);
+      const cdStr = `${cd.getMonth() + 1}/${cd.getDate()}`;
+      return cdStr === d.date || c.created_at.includes(d.date);
+    });
+
+    let article = 0;
+    let job = 0;
+    let tool = 0;
+    let music = 0;
+
+    if (matchingClips.length > 0) {
+      matchingClips.forEach((c) => {
+        const ct = (c.content_type || c.category || '').toLowerCase();
+        if (ct.includes('job') || ct.includes('career') || ct.includes('hire')) {
+          job++;
+        } else if (ct.includes('tool') || ct.includes('dev') || ct.includes('code') || ct.includes('ai')) {
+          tool++;
+        } else if (ct.includes('music') || ct.includes('audio') || ct.includes('sound')) {
+          music++;
+        } else {
+          article++;
+        }
+      });
+    } else if (clips.length > 0) {
+      // Derive based on the user's real vault category distribution ratio
+      const totalClips = clips.length;
+      const realJobCount = clips.filter((c) => (c.content_type || c.category || '').toLowerCase().includes('job')).length;
+      const realToolCount = clips.filter((c) => {
+        const ct = (c.content_type || c.category || '').toLowerCase();
+        return ct.includes('tool') || ct.includes('dev') || ct.includes('code') || ct.includes('ai');
+      }).length;
+      const realMusicCount = clips.filter((c) => {
+        const ct = (c.content_type || c.category || '').toLowerCase();
+        return ct.includes('music') || ct.includes('audio') || ct.includes('sound');
+      }).length;
+      const realArticleCount = Math.max(0, totalClips - (realJobCount + realToolCount + realMusicCount));
+
+      article = Math.round(total * (realArticleCount / totalClips));
+      job = Math.round(total * (realJobCount / totalClips));
+      tool = Math.round(total * (realToolCount / totalClips));
+      music = Math.max(0, total - (article + job + tool));
+    } else {
+      article = total;
+    }
+
     return {
       date: d.date,
       Total: total,
