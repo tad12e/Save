@@ -63,6 +63,11 @@ class MainActivity : FlutterActivity() {
                     isAudioRecognitionTriggered = false
                     result.success(pending)
                 }
+                "showToast" -> {
+                    val message = call.argument<String>("message") ?: "Saved to Clipper"
+                    android.widget.Toast.makeText(applicationContext, message, android.widget.Toast.LENGTH_SHORT).show()
+                    result.success(true)
+                }
                 "closeShareOverlay" -> {
                     // Share flow now lives in ShareHandlerActivity, but keep this
                     // for safety: just background instead of killing the main task.

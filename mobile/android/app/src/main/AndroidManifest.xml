@@ -71,6 +71,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
+
+            <!-- Audio Recognition Overlay Intent -->
+            <intent-filter>
+                <action android:name="com.save.app.ACTION_RECOGNIZE_AUDIO" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- Quick Settings Tile Service: Swipe-down audio recognition -->

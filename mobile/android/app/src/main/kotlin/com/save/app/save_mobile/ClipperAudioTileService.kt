@@ -24,8 +24,8 @@ class ClipperAudioTileService : TileService() {
         tile.state = Tile.STATE_ACTIVE
         tile.updateTile()
 
-        // Launch MainActivity with ACTION_RECOGNIZE_AUDIO
-        val intent = Intent(this, MainActivity::class.java).apply {
+        // Launch ShareHandlerActivity with ACTION_RECOGNIZE_AUDIO as a transparent overlay over the source app
+        val intent = Intent(this, ShareHandlerActivity::class.java).apply {
             action = "com.save.app.ACTION_RECOGNIZE_AUDIO"
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
