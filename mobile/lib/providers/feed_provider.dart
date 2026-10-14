@@ -220,29 +220,78 @@ class FeedProvider extends ChangeNotifier {
       ));
     }
 
+    final daySeed = DateTime.now().millisecondsSinceEpoch ~/ 86400000;
+
+    ClipModel? pickRotating(List<ClipModel> pool, int multiplier) {
+      final available = pool.where((c) => !seen.contains(c.id)).toList();
+      if (available.isEmpty) return null;
+
+      final now = DateTime.now();
+      final cutoff = now.subtract(const Duration(days: 7));
+      final unreviewed = available.where((c) {
+        final revStr = c.extraMetadata['feed_reviewed_at'];
+        if (revStr == null || revStr.toString().isEmpty) return true;
+        try {
+          final dt = DateTime.parse(revStr.toString());
+          return dt.isBefore(cutoff);
+        } catch (_) {
+          return true;
+        }
+      }).toList();
+
+      final candidates = unreviewed.isNotEmpty ? unreviewed : available;
+      final idx = (daySeed * multiplier) % candidates.length;
+      return candidates[idx];
+    }
+
     if (reviewPool.isNotEmpty) {
-      pick(reviewPool.first, 'Recent', '#3FE769', 'recent');
-      if (reviewPool.length > 1) {
-        pick(reviewPool.last, 'Blast from Past', '#A855F7', 'spaced_repetition');
+      // 1. Deadline / Urgent
+      final deadlinePool = reviewPool.where((c) => c.deadline != null).toList();
+      final deadlineClip = pickRotating(deadlinePool, 3) ??
+          pickRotating(reviewPool.where((c) => isAction(c)).toList(), 3);
+      if (deadlineClip != null) {
+        pick(deadlineClip, 'Upcoming Deadline', '#EF4444', 'deadline');
       }
-      for (final c in reviewPool) {
-        if (daily.length >= 5) break;
+
+      // 2. Recent Gem
+      final recentClip = pickRotating(reviewPool, 5);
+      if (recentClip != null) {
+        pick(recentClip, 'Recent Gem', '#3FE769', 'recent');
+      }
+
+      // 3. Blast from the Past (spaced repetition)
+      final oldestPool = reviewPool.reversed.toList();
+      final oldClip = pickRotating(oldestPool, 7);
+      if (oldClip != null) {
+        pick(oldClip, 'Blast from Past', '#A855F7', 'spaced_repetition');
+      }
+
+      // 4. Research Deep Dive
+      final articlesPool = reviewPool.where((c) {
         final ct = c.contentType.toLowerCase();
-        if (ct == 'article' || ct == 'research' || ct == 'paper') {
-          pick(c, 'Deep Dive', '#38BDF8', 'deep_dive');
-          break;
-        }
+        return ct == 'article' || ct == 'research' || ct == 'paper';
+      }).toList();
+      final deepClip = pickRotating(articlesPool, 11);
+      if (deepClip != null) {
+        pick(deepClip, 'Deep Dive', '#38BDF8', 'deep_dive');
       }
-      for (final c in reviewPool) {
-        if (daily.length >= 5) break;
-        if (isAction(c)) {
-          pick(c, 'Action Gem', '#F59E0B', 'action_gem');
-          break;
-        }
+
+      // 5. Action / Opportunity
+      final actionPool = reviewPool.where((c) => isAction(c)).toList();
+      final actionClip = pickRotating(actionPool, 13);
+      if (actionClip != null) {
+        pick(actionClip, 'Action Gem', '#F59E0B', 'action_gem');
       }
-      for (final c in reviewPool) {
-        if (daily.length >= 5) break;
-        pick(c, 'Vault Pick', '#64748B', 'vault_pick');
+
+      // Fill remaining up to 5 with rotating vault picks
+      final remaining = reviewPool.where((c) => !seen.contains(c.id)).toList();
+      if (remaining.isNotEmpty && daily.length < 5) {
+        final needed = 5 - daily.length;
+        final startIdx = (daySeed * 17) % remaining.length;
+        for (var i = 0; i < needed && i < remaining.length; i++) {
+          final pickIndex = (startIdx + i) % remaining.length;
+          pick(remaining[pickIndex], 'Vault Pick', '#64748B', 'vault_pick');
+        }
       }
     }
 

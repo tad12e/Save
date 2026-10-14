@@ -23,7 +23,7 @@ class AuthProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _status == AuthStatus.authenticated;
 
-  Future<void> initialize() async {
+  Future<void> initialize({bool skipNetwork = false}) async {
     _isLoading = true;
     notifyListeners();
 
@@ -35,10 +35,12 @@ class AuthProvider extends ChangeNotifier {
         _status = AuthStatus.authenticated;
         notifyListeners();
 
-        // Validate/refresh user profile from backend
-        final currentUser = await ApiService.fetchCurrentUser();
-        if (currentUser != null) {
-          _user = currentUser;
+        if (!skipNetwork) {
+          // Validate/refresh user profile from backend
+          final currentUser = await ApiService.fetchCurrentUser();
+          if (currentUser != null) {
+            _user = currentUser;
+          }
         }
       } else {
         _status = AuthStatus.unauthenticated;

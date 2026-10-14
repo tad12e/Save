@@ -21,6 +21,18 @@ class ClipsProvider extends ChangeNotifier {
   String _selectedDestination = 'all';
   final Set<String> _favoriteIds = {};
 
+  // Parallel Multi-Dimensional Filters
+  String _selectedContentType = 'all';
+  String _selectedSource = 'all';
+  String _selectedDeadlineFilter = 'all'; // 'all' | 'has_deadline' | 'this_week' | 'overdue' | 'upcoming'
+  String _selectedCustomTag = 'all';
+
+  // User Custom Taxonomies (persisted in SharedPreferences)
+  List<String> _customIntents = [];
+  List<String> _customContentTypes = [];
+  List<String> _customTags = [];
+  List<String> _customSources = [];
+
   // Batch Selection Mode
   bool _isBatchMode = false;
   final Set<String> _selectedIds = {};
@@ -36,6 +48,10 @@ class ClipsProvider extends ChangeNotifier {
       _sortBy = prefs.getString('clips_sort_by') ?? 'newest';
       final favList = prefs.getStringList('clips_favorites') ?? [];
       _favoriteIds.addAll(favList);
+      _customIntents = prefs.getStringList('clips_custom_intents') ?? [];
+      _customContentTypes = prefs.getStringList('clips_custom_content_types') ?? [];
+      _customTags = prefs.getStringList('clips_custom_tags') ?? [];
+      _customSources = prefs.getStringList('clips_custom_sources') ?? [];
       notifyListeners();
     } catch (_) {}
   }
@@ -55,6 +71,33 @@ class ClipsProvider extends ChangeNotifier {
   String get selectedCategory => _selectedCategory;
   String get searchQuery => _searchQuery;
   String get selectedIntent => _selectedIntent;
+  String get selectedContentType => _selectedContentType;
+  String get selectedSource => _selectedSource;
+  String get selectedDeadlineFilter => _selectedDeadlineFilter;
+  String get selectedCustomTag => _selectedCustomTag;
+  List<String> get customIntents => _customIntents;
+  List<String> get customContentTypes => _customContentTypes;
+  List<String> get customTags => _customTags;
+  List<String> get customSources => _customSources;
+
+  List<String> get allUniqueTags {
+    final set = <String>{..._customTags};
+    for (final c in _clips) {
+      for (final t in c.tags) {
+        final clean = t.trim().toLowerCase().replaceAll('#', '');
+        if (clean.isNotEmpty) set.add(clean);
+      }
+    }
+    final list = set.toList();
+    list.sort();
+    return list;
+  }
+
+  int countForTag(String tag) {
+    if (tag == 'all') return _clips.length;
+    final t = tag.toLowerCase().replaceAll('#', '');
+    return _clips.where((c) => c.tags.any((item) => item.toLowerCase().replaceAll('#', '') == t)).length;
+  }
   String get viewMode => _viewMode;
   String get sortBy => _sortBy;
   String get groupBy => _groupBy;
@@ -66,6 +109,10 @@ class ClipsProvider extends ChangeNotifier {
 
   bool get hasActiveFilters =>
       _selectedIntent != 'all' ||
+      _selectedContentType != 'all' ||
+      _selectedSource != 'all' ||
+      _selectedDeadlineFilter != 'all' ||
+      _selectedCustomTag != 'all' ||
       _selectedCategory != 'All' ||
       _favoritesOnly ||
       _selectedStatus != 'all' ||
@@ -75,6 +122,10 @@ class ClipsProvider extends ChangeNotifier {
   int get activeFiltersCount {
     int count = 0;
     if (_selectedIntent != 'all') count++;
+    if (_selectedContentType != 'all') count++;
+    if (_selectedSource != 'all') count++;
+    if (_selectedDeadlineFilter != 'all') count++;
+    if (_selectedCustomTag != 'all') count++;
     if (_selectedCategory != 'All') count++;
     if (_favoritesOnly) count++;
     if (_selectedStatus != 'all') count++;
@@ -89,20 +140,80 @@ class ClipsProvider extends ChangeNotifier {
     return _clips.where((c) => c.createdAt.isAfter(sevenDaysAgo)).length;
   }
 
-  /// Filtered, searched, and sorted clips matching Web ClipsPage logic
+  /// Parallel Filtered, searched, and sorted clips
   List<ClipModel> get clips {
     var result = _clips.where((clip) {
       // 1. Favorites check
       final isFav = _favoriteIds.contains(clip.id) || clip.isFavorite;
       if (_favoritesOnly && !isFav) return false;
 
-      // 2. Intent filter
+      // 2. Parallel Intent filter (built-in or custom)
       if (_selectedIntent != 'all') {
-        final detected = ClipIntentHelper.detectIntent(clip);
-        if (detected != _selectedIntent) return false;
+        final detected = ClipIntentHelper.detectIntent(clip).toLowerCase();
+        final rawIntent = clip.intent.toLowerCase();
+        final target = _selectedIntent.toLowerCase();
+        final matches = detected == target ||
+            rawIntent == target ||
+            clip.tags.any((t) => t.toLowerCase() == target) ||
+            clip.title.toLowerCase().contains(target) ||
+            clip.summary.toLowerCase().contains(target);
+        if (!matches) return false;
       }
 
-      // 3. Category filter (backwards compatibility)
+      // 3. Parallel Content Type filter (built-in or custom)
+      if (_selectedContentType != 'all') {
+        final targetType = _selectedContentType.toLowerCase();
+        final cType = clip.contentType.toLowerCase();
+        final extType = (clip.extraMetadata['content_type'] ?? '').toString().toLowerCase();
+        final matches = cType == targetType ||
+            cType.contains(targetType) ||
+            extType == targetType ||
+            clip.tags.any((t) => t.toLowerCase() == targetType) ||
+            (targetType == 'video' && (clip.url.contains('youtube.com') || clip.url.contains('youtu.be') || clip.url.contains('tiktok.com') || clip.url.contains('vimeo.com'))) ||
+            (targetType == 'audio' && (clip.url.contains('spotify.com') || clip.url.contains('soundcloud.com'))) ||
+            (targetType == 'code' && (clip.url.contains('github.com') || clip.url.contains('gitlab.com'))) ||
+            (targetType == 'job' && (clip.url.contains('greenhouse.io') || clip.url.contains('lever.co') || clip.url.contains('/jobs') || clip.url.contains('/careers') || clip.tags.contains('job')));
+        if (!matches) return false;
+      }
+
+      // 4. Parallel Source / Platform filter
+      if (_selectedSource != 'all') {
+        final targetSrc = _selectedSource.toLowerCase();
+        final platform = clip.sourcePlatform.toLowerCase();
+        final domain = clip.domain.toLowerCase();
+        final url = clip.url.toLowerCase();
+        final matches = platform == targetSrc ||
+            platform.contains(targetSrc) ||
+            domain.contains(targetSrc) ||
+            url.contains(targetSrc);
+        if (!matches) return false;
+      }
+
+      // 5. Parallel Deadline filter
+      if (_selectedDeadlineFilter != 'all') {
+        final d = clip.deadlineDate;
+        if (d == null) return false;
+        final now = DateTime.now();
+        if (_selectedDeadlineFilter == 'has_deadline') {
+          // any deadline present
+        } else if (_selectedDeadlineFilter == 'this_week') {
+          final nextWeek = now.add(const Duration(days: 7));
+          if (d.isBefore(now) || d.isAfter(nextWeek)) return false;
+        } else if (_selectedDeadlineFilter == 'overdue') {
+          if (!d.isBefore(now)) return false;
+        } else if (_selectedDeadlineFilter == 'upcoming') {
+          if (!d.isAfter(now)) return false;
+        }
+      }
+
+      // 6. Parallel Custom Tag filter
+      if (_selectedCustomTag != 'all') {
+        final targetTag = _selectedCustomTag.toLowerCase();
+        final matches = clip.tags.any((t) => t.toLowerCase() == targetTag || t.toLowerCase().contains(targetTag));
+        if (!matches) return false;
+      }
+
+      // 7. Category filter (backwards compatibility)
       if (_selectedCategory != 'All') {
         final cType = clip.contentType.toLowerCase().replaceAll(RegExp(r's$'), '');
         final selCat = _selectedCategory.toLowerCase().replaceAll(RegExp(r's$'), '');
@@ -112,14 +223,14 @@ class ClipsProvider extends ChangeNotifier {
         if (!matchesCategory) return false;
       }
 
-      // 4. Status filter
+      // 8. Status filter
       if (_selectedStatus != 'all') {
         final isSynced = clip.exportStatus == 'done' || clip.status == 'synced';
         if (_selectedStatus == 'synced' && !isSynced) return false;
         if (_selectedStatus == 'pending' && isSynced) return false;
       }
 
-      // 5. Destination filter
+      // 9. Destination filter
       if (_selectedDestination != 'all') {
         final dests = clip.destinations.map((d) => d.toLowerCase()).toList();
         if (!dests.any((d) => d.contains(_selectedDestination.toLowerCase()))) {
@@ -127,7 +238,7 @@ class ClipsProvider extends ChangeNotifier {
         }
       }
 
-      // 6. Search query
+      // 10. Search query
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
         final matches = clip.title.toLowerCase().contains(q) ||
@@ -160,10 +271,60 @@ class ClipsProvider extends ChangeNotifier {
     return result;
   }
 
-  /// Count for each intent pill in the toolbar
+  /// Count for each intent pill in the toolbar (supports custom intents)
   int countForIntent(String intent) {
     if (intent == 'all') return _clips.length;
-    return _clips.where((c) => ClipIntentHelper.detectIntent(c) == intent).length;
+    final t = intent.toLowerCase();
+    return _clips.where((c) {
+      return ClipIntentHelper.detectIntent(c).toLowerCase() == t ||
+          c.intent.toLowerCase() == t ||
+          c.tags.any((tag) => tag.toLowerCase() == t) ||
+          c.title.toLowerCase().contains(t);
+    }).length;
+  }
+
+  int countForContentType(String type) {
+    if (type == 'all') return _clips.length;
+    final t = type.toLowerCase();
+    return _clips.where((clip) {
+      final cType = clip.contentType.toLowerCase();
+      final extType = (clip.extraMetadata['content_type'] ?? '').toString().toLowerCase();
+      return cType == t ||
+          cType.contains(t) ||
+          extType == t ||
+          clip.tags.any((tag) => tag.toLowerCase() == t) ||
+          (t == 'video' && (clip.url.contains('youtube.com') || clip.url.contains('youtu.be') || clip.url.contains('tiktok.com'))) ||
+          (t == 'audio' && (clip.url.contains('spotify.com') || clip.url.contains('soundcloud.com'))) ||
+          (t == 'code' && clip.url.contains('github.com')) ||
+          (t == 'job' && (clip.url.contains('greenhouse.io') || clip.url.contains('lever.co') || clip.url.contains('/jobs')));
+    }).length;
+  }
+
+  int countForSource(String source) {
+    if (source == 'all') return _clips.length;
+    final s = source.toLowerCase();
+    return _clips.where((clip) {
+      return clip.sourcePlatform.toLowerCase().contains(s) ||
+          clip.domain.toLowerCase().contains(s) ||
+          clip.url.toLowerCase().contains(s);
+    }).length;
+  }
+
+  int countForDeadline(String filter) {
+    if (filter == 'all') return _clips.length;
+    final now = DateTime.now();
+    return _clips.where((clip) {
+      final d = clip.deadlineDate;
+      if (d == null) return false;
+      if (filter == 'has_deadline') return true;
+      if (filter == 'this_week') {
+        final nextWeek = now.add(const Duration(days: 7));
+        return !d.isBefore(now) && !d.isAfter(nextWeek);
+      }
+      if (filter == 'overdue') return d.isBefore(now);
+      if (filter == 'upcoming') return d.isAfter(now);
+      return false;
+    }).length;
   }
 
   bool isFavorite(String clipId) {
@@ -252,8 +413,122 @@ class ClipsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setContentType(String type) {
+    _selectedContentType = type;
+    notifyListeners();
+  }
+
+  void setSource(String source) {
+    _selectedSource = source;
+    notifyListeners();
+  }
+
+  void setDeadlineFilter(String filter) {
+    _selectedDeadlineFilter = filter;
+    notifyListeners();
+  }
+
+  void setCustomTag(String tag) {
+    _selectedCustomTag = tag;
+    notifyListeners();
+  }
+
+  Future<void> addCustomIntent(String intent) async {
+    final clean = intent.trim().toLowerCase();
+    if (clean.isEmpty) return;
+    if (!_customIntents.contains(clean)) {
+      _customIntents.add(clean);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('clips_custom_intents', _customIntents);
+    }
+    _selectedIntent = clean;
+    notifyListeners();
+  }
+
+  Future<void> removeCustomIntent(String intent) async {
+    _customIntents.remove(intent.trim().toLowerCase());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('clips_custom_intents', _customIntents);
+    if (_selectedIntent == intent.toLowerCase()) {
+      _selectedIntent = 'all';
+    }
+    notifyListeners();
+  }
+
+  Future<void> addCustomContentType(String type) async {
+    final clean = type.trim().toLowerCase();
+    if (clean.isEmpty) return;
+    if (!_customContentTypes.contains(clean)) {
+      _customContentTypes.add(clean);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('clips_custom_content_types', _customContentTypes);
+    }
+    _selectedContentType = clean;
+    notifyListeners();
+  }
+
+  Future<void> removeCustomContentType(String type) async {
+    _customContentTypes.remove(type.trim().toLowerCase());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('clips_custom_content_types', _customContentTypes);
+    if (_selectedContentType == type.toLowerCase()) {
+      _selectedContentType = 'all';
+    }
+    notifyListeners();
+  }
+
+  Future<void> addCustomTag(String tag) async {
+    final clean = tag.trim().toLowerCase().replaceAll('#', '');
+    if (clean.isEmpty) return;
+    if (!_customTags.contains(clean)) {
+      _customTags.add(clean);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('clips_custom_tags', _customTags);
+    }
+    _selectedCustomTag = clean;
+    notifyListeners();
+  }
+
+  Future<void> removeCustomTag(String tag) async {
+    final clean = tag.trim().toLowerCase().replaceAll('#', '');
+    _customTags.remove(clean);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('clips_custom_tags', _customTags);
+    if (_selectedCustomTag == clean) {
+      _selectedCustomTag = 'all';
+    }
+    notifyListeners();
+  }
+
+  Future<void> addCustomSource(String source) async {
+    final clean = source.trim().toLowerCase();
+    if (clean.isEmpty) return;
+    if (!_customSources.contains(clean)) {
+      _customSources.add(clean);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('clips_custom_sources', _customSources);
+    }
+    _selectedSource = clean;
+    notifyListeners();
+  }
+
+  Future<void> removeCustomSource(String source) async {
+    final clean = source.trim().toLowerCase();
+    _customSources.remove(clean);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('clips_custom_sources', _customSources);
+    if (_selectedSource == clean) {
+      _selectedSource = 'all';
+    }
+    notifyListeners();
+  }
+
   void resetFilters() {
     _selectedIntent = 'all';
+    _selectedContentType = 'all';
+    _selectedSource = 'all';
+    _selectedDeadlineFilter = 'all';
+    _selectedCustomTag = 'all';
     _selectedCategory = 'All';
     _favoritesOnly = false;
     _selectedStatus = 'all';
@@ -553,8 +828,38 @@ class ClipsProvider extends ChangeNotifier {
 
   // --- Extension-parity state: destinations + detailed save ---
 
-  List<SaveDestination> _destinations = [];
-  String _selectedDestinationId = '';
+  // Pre-seeded with instant offline defaults so share overlay renders on frame 1 without awaiting network
+  List<SaveDestination> _destinations = const [
+    SaveDestination(
+      id: 'google_sheets',
+      name: 'Google Sheets',
+      provider: 'google_sheets',
+      isDefault: true,
+      isActive: true,
+    ),
+    SaveDestination(
+      id: 'notion',
+      name: 'Notion',
+      provider: 'notion',
+      isDefault: false,
+      isActive: true,
+    ),
+    SaveDestination(
+      id: 'spotify',
+      name: 'Spotify',
+      provider: 'spotify',
+      isDefault: false,
+      isActive: true,
+    ),
+    SaveDestination(
+      id: 'vault',
+      name: 'Vault',
+      provider: 'vault',
+      isDefault: false,
+      isActive: true,
+    ),
+  ];
+  String _selectedDestinationId = 'google_sheets';
   bool _destinationsLoading = false;
 
   List<SaveDestination> get destinations => _destinations;
@@ -565,7 +870,10 @@ class ClipsProvider extends ChangeNotifier {
     _destinationsLoading = true;
     notifyListeners();
     try {
-      _destinations = await ApiService.getDestinations();
+      final fetched = await ApiService.getDestinations();
+      if (fetched.isNotEmpty) {
+        _destinations = fetched;
+      }
       SaveDestination? def;
       for (final d in _destinations) {
         if (d.isDefault) {
@@ -582,9 +890,9 @@ class ClipsProvider extends ChangeNotifier {
         }
       }
       _selectedDestinationId =
-          def?.id ?? lastMatch?.id ?? (_destinations.isNotEmpty ? _destinations.first.id : '');
+          def?.id ?? lastMatch?.id ?? (_destinations.isNotEmpty ? _destinations.first.id : 'google_sheets');
     } catch (_) {
-      _destinations = [];
+      // Keep existing destinations on network failure
     } finally {
       _destinationsLoading = false;
       notifyListeners();
@@ -617,7 +925,8 @@ class ClipsProvider extends ChangeNotifier {
       tableName: tableName,
     );
     if (res.ok) {
-      await loadClips();
+      // Refresh clips list in background without stalling the return
+      loadClips().catchError((_) {});
     }
     return res;
   }
