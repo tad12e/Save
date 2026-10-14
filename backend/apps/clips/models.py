@@ -3,6 +3,12 @@ import uuid
 from django.conf import settings
 from django.db import models
 
+try:
+    from pgvector.django import VectorField, HnswIndex
+    PGVECTOR_SUPPORT = True
+except ImportError:
+    PGVECTOR_SUPPORT = False
+
 
 class CustomPage(models.Model):
     """
@@ -103,6 +109,7 @@ class Clip(models.Model):
     PLATFORM_GITHUB = 'github'
     PLATFORM_INSTAGRAM = 'instagram'
     PLATFORM_TIKTOK = 'tiktok'
+    PLATFORM_SPOTIFY = 'spotify'
 
     PLATFORM_CHOICES = (
         (PLATFORM_WEB, 'Web'),
@@ -113,6 +120,7 @@ class Clip(models.Model):
         (PLATFORM_GITHUB, 'GitHub'),
         (PLATFORM_INSTAGRAM, 'Instagram'),
         (PLATFORM_TIKTOK, 'TikTok'),
+        (PLATFORM_SPOTIFY, 'Spotify'),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -170,7 +178,7 @@ class Clip(models.Model):
         help_text="Dynamic 1-word action verb (e.g. 'apply', 'cook', 'listen', 'deploy', 'learn')",
     )
     tags = models.JSONField(default=list, blank=True)
-    embedding = models.JSONField(default=list, blank=True, null=True)
+    embedding = VectorField(dimensions=768, null=True, blank=True) if PGVECTOR_SUPPORT else models.JSONField(default=list, blank=True, null=True)
 
     # --- AI-extracted metadata ---
     deadline_date = models.DateField(null=True, blank=True)
@@ -206,9 +214,47 @@ class Clip(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at'], name='clips_clip_user_created_idx'),
+            models.Index(fields=['user', 'status', '-created_at'], name='clips_clip_usr_stat_idx'),
+            models.Index(fields=['user', 'source_platform', '-created_at'], name='clips_clip_usr_plat_idx'),
+            models.Index(fields=['user', 'intent', '-created_at'], name='clips_usr_intent_idx'),
+            models.Index(fields=['user', 'url_hash'], name='clips_usr_urlhash_idx'),
+        ]
+        if PGVECTOR_SUPPORT:
+            indexes.append(
+                HnswIndex(
+                    name='clips_clip_emb_hnsw_idx',
+                    fields=['embedding'],
+                    m=16,
+                    ef_construction=64,
+                    opclasses=['vector_cosine_ops'],
+                )
+            )
 
     def __str__(self):
         return f'{self.url} ({self.status})'
+
+    # --- Native bookmark skin contract (see apps/clips/platform_meta.py) ---
+    # extra_metadata["platform_meta"] = {"v": 1, "skin": "x"|"youtube"|..., ...}
+    @property
+    def platform_skin(self) -> str:
+        from .platform_meta import resolve_skin
+        return resolve_skin(self.source_platform, self.url)
+
+    @property
+    def platform_meta(self) -> dict:
+        from .platform_meta import get_platform_meta
+        return get_platform_meta(self.extra_metadata, self.source_platform, self.url)
+
+    def set_platform_meta(self, raw: dict) -> dict:
+        """Normalize + store scraper output. Caller is responsible for save()."""
+        from .platform_meta import PLATFORM_META_KEY, build_platform_meta
+        meta = build_platform_meta(self.source_platform, self.url, raw)
+        extra = dict(self.extra_metadata or {})
+        extra[PLATFORM_META_KEY] = meta
+        self.extra_metadata = extra
+        return meta
 
 
 class BulkImportJob(models.Model):
