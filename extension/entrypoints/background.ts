@@ -77,6 +77,7 @@ async function handleSaveClip(data: any): Promise<any> {
   // 4. Handle 401
   if (response.status === 401) {
     await chrome.storage.local.remove(['jwt', 'clipper_access_token']);
+    showNotification('Clipper Sign In Required', 'Session expired or not signed in. Click the Clipper extension icon to sign in.');
     try {
       if (chrome.action?.openPopup) {
         chrome.action.openPopup();

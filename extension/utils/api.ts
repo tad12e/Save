@@ -2,7 +2,9 @@
 
 declare const chrome: any;
 
-const DEFAULT_API_URL = 'http://localhost:8000';
+const DEFAULT_API_URL = 
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) || 
+  'http://localhost:8000';
 
 export interface User {
   id: string;
