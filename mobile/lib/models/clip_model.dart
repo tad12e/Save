@@ -1,3 +1,5 @@
+import 'platform_meta.dart';
+
 class ClipModel {
   final String id;
   final String url;
@@ -35,6 +37,16 @@ class ClipModel {
   });
 
   factory ClipModel.fromJson(Map<String, dynamic> json) {
+    final extra = json['extra_metadata'] is Map
+        ? Map<String, dynamic>.from(json['extra_metadata'])
+        : <String, dynamic>{};
+    final topLevelIntent = json['intent']?.toString().trim();
+    if (topLevelIntent != null && topLevelIntent.isNotEmpty && topLevelIntent != 'other') {
+      if (!extra.containsKey('intent') || extra['intent'] == null || extra['intent'] == 'other') {
+        extra['intent'] = topLevelIntent;
+      }
+    }
+
     return ClipModel(
       id: json['id'] ?? '',
       url: json['url'] ?? '',
@@ -49,7 +61,7 @@ class ClipModel {
       status: json['status'] ?? 'pending',
       exportStatus: json['export_status'] ?? 'pending',
       createdAt: DateTime.tryParse(json['created_at'] ?? '') ?? DateTime.now(),
-      extraMetadata: json['extra_metadata'] is Map ? Map<String, dynamic>.from(json['extra_metadata']) : {},
+      extraMetadata: extra,
       isFavorite: json['is_favorite'] == true || json['is_starred'] == true,
     );
   }
@@ -61,6 +73,7 @@ class ClipModel {
       'title': title,
       'summary': summary,
       'content_type': contentType,
+      'intent': intent,
       'tags': tags,
       'source_platform': sourcePlatform,
       'source_author': sourceAuthor,
@@ -120,9 +133,21 @@ class ClipModel {
 
   DateTime? get deadline => deadlineDate;
 
+  String get platform => sourcePlatform;
+
+  /// Native skin payload. Parsed once on first access and cached, so
+  /// ListView rebuilds during fast scrolling never re-parse JSON.
+  late final PlatformMeta platformMeta = PlatformMeta.parse(
+    extraMetadata['platform_meta'],
+    sourcePlatform: sourcePlatform,
+    url: url,
+  );
+
+  PlatformSkin get skin => platformMeta.skin;
+
   String get intent {
     final raw = extraMetadata['intent'];
-    if (raw != null && raw.toString().isNotEmpty) {
+    if (raw != null && raw.toString().isNotEmpty && raw.toString().toLowerCase() != 'other') {
       return raw.toString().toLowerCase();
     }
     return 'learn';
@@ -160,18 +185,40 @@ class ClipModel {
     final summaryStr = (rawSummary?.toString() ?? '').trim();
     final urlStr = (rawUrl?.toString() ?? '').toLowerCase();
 
-    final isDomainTitle = titleStr.isEmpty ||
-        titleStr == 'x.com' ||
-        titleStr == 'twitter.com' ||
-        titleStr == 'Untitled Clip' ||
-        titleStr.startsWith('http');
+    // 1. Check Reddit URLs: extract slug if title is generic or missing
+    if (urlStr.contains('reddit.com') || urlStr.contains('redd.it')) {
+      final redditSlugMatch = RegExp(r'/comments/[a-zA-Z0-9]+(?:/([a-zA-Z0-9_\-]+))?', caseSensitive: false)
+          .firstMatch(rawUrl?.toString() ?? '');
+      if (redditSlugMatch != null && redditSlugMatch.group(1) != null && redditSlugMatch.group(1)!.isNotEmpty) {
+        final slug = redditSlugMatch.group(1)!.replaceAll('-', ' ').replaceAll('_', ' ').trim();
+        final isGeneric = titleStr.isEmpty ||
+            titleStr == 'Untitled Clip' ||
+            titleStr.toLowerCase() == 'reddit.com' ||
+            titleStr.toLowerCase() == 'reddit' ||
+            titleStr.toLowerCase() == 'saved clip' ||
+            titleStr.startsWith('http');
+        if (isGeneric && slug.isNotEmpty) {
+          return slug.split(' ').map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '').join(' ');
+        }
+      }
+    }
+
+    // Clean any trailing Reddit suffix from title: "NUS IRIS JAN 2027 Acceptance : r/REU"
+    var cleanedTitle = titleStr.replaceAll(RegExp(r'\s*[:\-–—|]\s*(r/[a-zA-Z0-9_]+|Reddit|reddit\.com)$', caseSensitive: false), '').trim();
+
+    final isDomainTitle = cleanedTitle.isEmpty ||
+        cleanedTitle == 'x.com' ||
+        cleanedTitle == 'twitter.com' ||
+        cleanedTitle == 'Untitled Clip' ||
+        cleanedTitle.startsWith('http');
 
     if (isDomainTitle && summaryStr.isNotEmpty && summaryStr != 'Saved webpage clip.') {
       return summaryStr.length > 65 ? '${summaryStr.substring(0, 65).trim()}...' : summaryStr;
     }
 
-    if (titleStr.isNotEmpty) return titleStr;
+    if (cleanedTitle.isNotEmpty) return cleanedTitle;
     if (urlStr.contains('x.com') || urlStr.contains('twitter.com')) return 'X Post';
+    if (urlStr.contains('reddit.com') || urlStr.contains('redd.it')) return 'Reddit Post';
     return 'Untitled Clip';
   }
 }

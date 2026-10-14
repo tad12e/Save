@@ -116,7 +116,84 @@ class AppTheme {
     );
   }
 
-  // Backward compatibility alias for darkTheme getter
-  static ThemeData get darkTheme => lightTheme;
+  // Dark Theme Definition
+  static ThemeData get darkTheme {
+    const darkBackground = Color(0xFF0F172A); // Slate-900
+    const darkSurface = Color(0xFF1E293B); // Slate-800
+    const darkBorder = Color(0xFF334155); // Slate-700
+    const darkTextPrimary = Color(0xFFF8FAFC); // Slate-50
+    const darkTextMuted = Color(0xFF94A3B8); // Slate-400
+
+    return ThemeData(
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: darkBackground,
+      primaryColor: primaryViolet,
+      canvasColor: darkSurface,
+      cardColor: darkSurface,
+      dividerColor: darkBorder,
+      colorScheme: const ColorScheme.dark(
+        primary: primaryGreenLight,
+        secondary: primaryGreen,
+        surface: darkSurface,
+        error: urgencyRed,
+      ),
+      textTheme: TextTheme(
+        headlineLarge: GoogleFonts.outfit(
+          fontSize: 26,
+          fontWeight: FontWeight.bold,
+          color: darkTextPrimary,
+        ),
+        headlineMedium: GoogleFonts.outfit(
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+          color: darkTextPrimary,
+        ),
+        titleLarge: GoogleFonts.outfit(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: darkTextPrimary,
+        ),
+        titleMedium: GoogleFonts.outfit(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: darkTextPrimary,
+        ),
+        bodyLarge: GoogleFonts.inter(
+          fontSize: 14,
+          fontWeight: FontWeight.normal,
+          color: darkTextPrimary,
+        ),
+        bodyMedium: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.normal,
+          color: darkTextMuted,
+        ),
+        bodySmall: GoogleFonts.inter(
+          fontSize: 10,
+          fontWeight: FontWeight.normal,
+          color: darkTextMuted,
+        ),
+        labelSmall: GoogleFonts.inter(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: darkTextMuted,
+        ),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: darkSurface,
+        foregroundColor: darkTextPrimary,
+        elevation: 0,
+        centerTitle: false,
+      ),
+      cardTheme: const CardThemeData(
+        color: darkSurface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: darkBorder, width: 1.0),
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+      ),
+    );
+  }
 }
 

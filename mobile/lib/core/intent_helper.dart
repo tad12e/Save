@@ -4,6 +4,7 @@ import '../models/clip_model.dart';
 
 enum ClipIntentType {
   all,
+  watch,
   learn,
   apply,
   track,
@@ -42,6 +43,24 @@ class ClipIntentHelper {
       bgColor: Color(0xFFF1F5F9),
       textColor: Color(0xFF334155),
       borderColor: Color(0xFFE2E8F0),
+    ),
+    'watch': IntentStyle(
+      key: 'watch',
+      label: 'WATCH',
+      displayName: 'Watch',
+      icon: LucideIcons.play,
+      bgColor: Color(0xFFFEE2E2),
+      textColor: Color(0xFFDC2626),
+      borderColor: Color(0xFFFECACA),
+    ),
+    'view': IntentStyle(
+      key: 'view',
+      label: 'VIEW',
+      displayName: 'View',
+      icon: LucideIcons.eye,
+      bgColor: Color(0xFFFEE2E2),
+      textColor: Color(0xFFDC2626),
+      borderColor: Color(0xFFFECACA),
     ),
     'learn': IntentStyle(
       key: 'learn',
@@ -106,23 +125,42 @@ class ClipIntentHelper {
 
   /// Exact parity heuristic with Web getClipIntent()
   static String detectIntent(ClipModel clip) {
+    final url = clip.url.toLowerCase();
+    final contentType = clip.contentType.toLowerCase();
+
+    // 0. Deterministic Video / Reel override
+    final isVideo = contentType == 'video' ||
+        contentType == 'reel' ||
+        url.contains('instagram.com/reel') ||
+        url.contains('instagram.com/reels') ||
+        url.contains('instagram.com/tv') ||
+        url.contains('youtube.com/watch') ||
+        url.contains('youtube.com/shorts') ||
+        url.contains('youtu.be/') ||
+        url.contains('tiktok.com') ||
+        url.contains('vimeo.com') ||
+        url.contains('twitch.tv');
+    if (isVideo) {
+      return 'watch';
+    }
+
     // 1. Direct explicit intent from backend
-    final rawIntent = clip.extraMetadata['intent']?.toString().toLowerCase().trim();
-    if (rawIntent != null && rawIntent.isNotEmpty) {
+    final rawIntent = (clip.extraMetadata['intent'] ?? clip.intent).toString().toLowerCase().trim();
+    if (rawIntent.isNotEmpty && rawIntent != 'other' && rawIntent != 'all') {
+      if (['watch', 'stream', 'play'].contains(rawIntent)) return 'watch';
+      if (['view'].contains(rawIntent)) return 'watch';
       if (['apply', 'submit', 'pitch'].contains(rawIntent)) return 'apply';
       if (['hire', 'recruit', 'contact'].contains(rawIntent)) return 'hire';
       if (['track', 'build', 'code', 'deploy', 'monitor', 'compare', 'benchmark'].contains(rawIntent)) return 'track';
       if (['attend', 'meet', 'rsvp', 'join'].contains(rawIntent)) return 'attend';
       if (['buy', 'shop', 'order', 'subscribe'].contains(rawIntent)) return 'buy';
       if (['learn', 'read', 'study', 'install', 'debug'].contains(rawIntent)) return 'learn';
-      if (rawIntent != 'other' && rawIntent != 'all') return rawIntent;
+      return rawIntent;
     }
 
-    final url = clip.url.toLowerCase();
     final title = clip.title.toLowerCase();
     final summary = clip.summary.toLowerCase();
     final tags = clip.tags.map((t) => t.toLowerCase()).toList();
-    final contentType = clip.contentType.toLowerCase();
     final text = '$title $summary $url ${tags.join(" ")}';
 
     // 2. Hire
