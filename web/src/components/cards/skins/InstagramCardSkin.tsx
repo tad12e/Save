@@ -125,10 +125,10 @@ export const InstagramCardSkin: React.FC<InstagramCardSkinProps> = ({
   const caption = React.useMemo(() => {
     const raw = clip.summary || clip.title || '';
     let cleaned = raw
-      .replace(/(?i)\b(?:instagram\s+)?meta\s+about\s+blog\s+jobs\s+help\s+api\s+privacy\s+terms\b.*/gi, '')
-      .replace(/(?i)\bpopular\s+instagram\s+lite\s+threads\b.*/gi, '')
-      .replace(/(?i)\blog\s*in\s+to\s+see\s+(?:photos|videos|posts)\b.*/gi, '')
-      .replace(/(?i)\binstagram\s+instagram\s+meta\b.*/gi, '')
+      .replace(/\b(?:instagram\s+)?meta\s+about\s+blog\s+jobs\s+help\s+api\s+privacy\s+terms\b.*/gi, '')
+      .replace(/\bpopular\s+instagram\s+lite\s+threads\b.*/gi, '')
+      .replace(/\blog\s*in\s+to\s+see\s+(?:photos|videos|posts)\b.*/gi, '')
+      .replace(/\binstagram\s+instagram\s+meta\b.*/gi, '')
       .trim();
 
     if (!cleaned || cleaned.toLowerCase() === 'instagram' || cleaned.toLowerCase() === 'reel') {
