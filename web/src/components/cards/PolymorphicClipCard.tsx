@@ -61,7 +61,8 @@ export const PolymorphicClipCard: React.FC<PolymorphicClipCardProps> = (props) =
 
   const isXSkin = skin === 'x';
   const isLinkedInSkin = skin === 'linkedin';
-  const isNativePostSkin = isXSkin || isLinkedInSkin;
+  const isRedditSkin = skin === 'reddit';
+  const isNativePostSkin = isXSkin || isLinkedInSkin || isRedditSkin;
 
   // Common card container styling (with authentic native dark mode styling)
   const cardBorderClass = isSelected
@@ -74,9 +75,13 @@ export const PolymorphicClipCard: React.FC<PolymorphicClipCardProps> = (props) =
         ? isDark
           ? 'border-[#383E45] hover:border-[#525B65]'
           : 'border-slate-200 hover:border-slate-300'
-        : isDark
-          ? 'border-[#222222] hover:border-[#383838]'
-          : 'border-slate-200 hover:border-slate-300';
+        : isRedditSkin
+          ? isDark
+            ? 'border-[#2E3236] hover:border-[#454B52]'
+            : 'border-slate-200 hover:border-slate-300'
+          : isDark
+            ? 'border-[#222222] hover:border-[#383838]'
+            : 'border-slate-200 hover:border-slate-300';
 
   const cardBgClass = isSelected
     ? isDark ? 'bg-[#141815]' : 'bg-emerald-50/40'
@@ -88,9 +93,13 @@ export const PolymorphicClipCard: React.FC<PolymorphicClipCardProps> = (props) =
         ? isDark
           ? 'bg-[#1B1F23] hover:bg-[#1E2328]'
           : 'bg-white hover:shadow-md'
-        : isDark
-          ? 'bg-[#0D0D0D] hover:bg-[#121212]'
-          : 'bg-white hover:shadow-md';
+        : isRedditSkin
+          ? isDark
+            ? 'bg-[#0E1113] hover:bg-[#121518]'
+            : 'bg-white hover:shadow-md'
+          : isDark
+            ? 'bg-[#0D0D0D] hover:bg-[#121212]'
+            : 'bg-white hover:shadow-md';
 
   return (
     <motion.div
@@ -180,7 +189,18 @@ const PlatformCardBody: React.FC<PlatformCardBodyProps> = ({ skin, clip, isDark,
     case 'youtube':
       return <YouTubeCardSkin clip={clip} meta={meta as YouTubeMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
     case 'reddit':
-      return <RedditCardSkin clip={clip} meta={meta as RedditMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
+      return (
+        <RedditCardSkin
+          clip={clip}
+          meta={meta as RedditMeta | undefined}
+          isDark={isDark}
+          isSelected={rest.isSelected}
+          onToggleSelect={rest.onToggleSelect}
+          onToggleFavorite={rest.onToggleFavorite}
+          showCheckbox={rest.showCheckbox}
+          onOpenDetail={onOpenDetail}
+        />
+      );
     case 'github':
       return <GitHubCardSkin clip={clip} meta={meta as GitHubMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
     case 'instagram':
