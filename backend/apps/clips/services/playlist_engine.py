@@ -48,6 +48,7 @@ class PlaylistEngine:
         clips_qs = (
             Clip.objects.filter(user=user)
             .exclude(status=Clip.STATUS_FAILED)
+            .defer('raw_content', 'embedding')
             .order_by('-created_at')
         )
 
@@ -320,8 +321,8 @@ class PlaylistEngine:
                     snooze_dt = datetime.fromisoformat(snoozed_until)
                     if snooze_dt > now:
                         is_snoozed = True
-                except Exception:
-                    pass
+                except (ValueError, TypeError) as exc:
+                    logger.warning("Playlist Engine: invalid feed_snoozed_until format %r: %s", snoozed_until, exc)
 
             if not meta.get('feed_reviewed_at') and not is_snoozed:
                 unreviewed.append(c)
@@ -436,8 +437,8 @@ class PlaylistEngine:
         if snoozed_until:
             try:
                 is_snoozed = datetime.fromisoformat(snoozed_until) > timezone.now()
-            except Exception:
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("Playlist Engine: invalid feed_snoozed_until in card format %r: %s", snoozed_until, exc)
 
         # Deadline countdown
         days_until_deadline = None

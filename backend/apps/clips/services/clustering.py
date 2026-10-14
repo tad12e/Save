@@ -9,10 +9,12 @@ Generates cluster names using:
 2. Frequency & Noun N-Gram Extraction (Zero-AI Fallback, 0 API cost)
 """
 
+import json
 import logging
 import math
 import os
 import re
+import urllib.request
 from collections import Counter
 from typing import Any, Dict, List, Optional
 from django.conf import settings
@@ -59,10 +61,14 @@ class ClipClusterEngine:
         if not clusters:
             clusters = cls._cluster_by_keyword_overlap(clips_list, min_cluster_size)
 
-        # 3. Generate human-readable names for each cluster
+        # 3. Generate human-readable names for each cluster in a single batch call
+        cluster_names = cls._generate_cluster_names_batch(clusters)
         results = []
         for idx, cluster_clips in enumerate(clusters):
-            cluster_name = cls._generate_cluster_name(cluster_clips)
+            cluster_name = cluster_names.get(idx) or cls._fallback_ngram_cluster_name(
+                [c.get('title') or '' for c in cluster_clips if c.get('title')],
+                cluster_clips
+            )
             intents = [c.get('intent') for c in cluster_clips if c.get('intent')]
             intent_summary = dict(Counter(intents))
             results.append({
@@ -86,7 +92,7 @@ class ClipClusterEngine:
         return results
 
     # =========================================================================
-    # 1. VECTOR CLUSTERING (Pure Math: 0 AI API Calls)
+    # 1. VECTOR CLUSTERING (Vectorized Matrix Math: ~2ms, 0 API Calls)
     # =========================================================================
     @classmethod
     def _cluster_by_vector_embeddings(
@@ -97,7 +103,7 @@ class ClipClusterEngine:
     ) -> List[List[Dict]]:
         """
         Greedy centroid clustering based on Cosine Similarity.
-        Runs 100% locally on server CPU (0 API cost).
+        Uses NumPy BLAS vectorization for sub-millisecond execution.
         """
         valid_clips = [
             c for c in clips_list
@@ -106,33 +112,64 @@ class ClipClusterEngine:
         if len(valid_clips) < min_size:
             return []
 
-        visited = set()
-        clusters: List[List[Dict]] = []
+        try:
+            import numpy as np
 
-        for i, clip_a in enumerate(valid_clips):
-            cid = clip_a['id']
-            if cid in visited:
-                continue
+            # 1. Convert to float32 matrix: Shape (N, 768)
+            matrix = np.array([c['embedding'] for c in valid_clips], dtype=np.float32)
 
-            current_cluster = [clip_a]
-            visited.add(cid)
-            vec_a = clip_a['embedding']
+            # 2. Normalize all vectors ONCE upfront
+            norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+            norms[norms == 0] = 1e-10
+            normalized = matrix / norms
 
-            for j, clip_b in enumerate(valid_clips):
-                c_bid = clip_b['id']
-                if c_bid in visited or i == j:
+            # 3. Compute all pairwise cosine similarities in 1 single C/SIMD operation
+            sim_matrix = np.dot(normalized, normalized.T)
+
+            # 4. Form clusters from precomputed matrix
+            visited = set()
+            clusters: List[List[Dict]] = []
+
+            for i, clip_a in enumerate(valid_clips):
+                if i in visited:
                     continue
 
-                vec_b = clip_b['embedding']
-                sim = cls._cosine_similarity(vec_a, vec_b)
-                if sim >= threshold:
-                    current_cluster.append(clip_b)
-                    visited.add(c_bid)
+                current_cluster = [clip_a]
+                visited.add(i)
 
-            if len(current_cluster) >= min_size:
-                clusters.append(current_cluster)
+                # Find all neighbors where similarity >= threshold in microseconds
+                matching_indices = np.where(sim_matrix[i] >= threshold)[0]
+                for j in matching_indices:
+                    if j not in visited and i != j:
+                        current_cluster.append(valid_clips[j])
+                        visited.add(j)
 
-        return clusters
+                if len(current_cluster) >= min_size:
+                    clusters.append(current_cluster)
+
+            return clusters
+
+        except ImportError:
+            # Fallback if numpy is not installed
+            visited = set()
+            clusters = []
+            for i, clip_a in enumerate(valid_clips):
+                cid = clip_a['id']
+                if cid in visited:
+                    continue
+                current_cluster = [clip_a]
+                visited.add(cid)
+                vec_a = clip_a['embedding']
+                for j, clip_b in enumerate(valid_clips):
+                    c_bid = clip_b['id']
+                    if c_bid in visited or i == j:
+                        continue
+                    if cls._cosine_similarity(vec_a, clip_b['embedding']) >= threshold:
+                        current_cluster.append(clip_b)
+                        visited.add(c_bid)
+                if len(current_cluster) >= min_size:
+                    clusters.append(current_cluster)
+            return clusters
 
     @staticmethod
     def _cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
@@ -196,54 +233,74 @@ class ClipClusterEngine:
     # 3. CLUSTER NAMING (Gemini AI with Zero-AI Fallback)
     # =========================================================================
     @classmethod
-    def _generate_cluster_name(cls, cluster_clips: List[Dict]) -> str:
+    def _generate_cluster_names_batch(cls, clusters: List[List[Dict]]) -> Dict[int, str]:
         """
-        Names the cluster using Gemini AI if available.
-        Falls back to pure Python frequency analysis if offline / no API key.
+        Names all clusters in a single batch request to Gemini (O(1) network round-trip).
+        Falls back to pure Python frequency analysis for any missing clusters.
         """
-        titles = [c.get('title') or '' for c in cluster_clips if c.get('title')]
-
-        # Try Gemini Generative AI first
+        results: Dict[int, str] = {}
         api_key = os.getenv('GEMINI_API_KEY') or getattr(settings, 'GEMINI_API_KEY', '')
-        if api_key and len(titles) >= 2:
+
+        # Gather titles per cluster
+        cluster_data: Dict[int, tuple[List[str], List[Dict]]] = {}
+        for idx, cluster_clips in enumerate(clusters):
+            titles = [c.get('title') or '' for c in cluster_clips if c.get('title')]
+            cluster_data[idx] = (titles, cluster_clips)
+
+        if api_key and cluster_data:
             try:
-                ai_name = cls._ask_gemini_for_cluster_name(titles, api_key)
-                if ai_name:
-                    return ai_name
-            except Exception as e:
-                logger.info("Gemini cluster naming fallback triggered: %s", e)
+                # Prepare a single prompt with all clusters
+                cluster_prompt_blocks = []
+                for idx, (titles, _) in cluster_data.items():
+                    sample = titles[:5]
+                    if sample:
+                        titles_str = '\n'.join(f"  - {t}" for t in sample)
+                        cluster_prompt_blocks.append(f"Cluster {idx}:\n{titles_str}")
 
-        # ─── Pure Python N-Gram Frequency Fallback (0 API Cost) ───
-        return cls._fallback_ngram_cluster_name(titles, cluster_clips)
+                if cluster_prompt_blocks:
+                    prompt = (
+                        "Here are clusters of saved bookmarks:\n\n"
+                        + "\n\n".join(cluster_prompt_blocks)
+                        + "\n\nTask: For each cluster, produce a concise 2-4 word category name (e.g., 'Remote Tech Jobs', 'Machine Learning', 'Productivity Tools').\n"
+                        "Respond ONLY with a valid JSON object mapping the numeric cluster index string to its category name, like: {\"0\": \"AI News\", \"1\": \"Frontend Tools\"}"
+                    )
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+                    body = json.dumps({
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}
+                    }).encode('utf-8')
+                    req = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/json'})
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        res_json = json.loads(response.read().decode('utf-8'))
+                        candidate = res_json.get('candidates', [{}])[0]
+                        raw_text = candidate.get('content', {}).get('parts', [{}])[0].get('text', '').strip()
+                        if raw_text:
+                            parsed_map = json.loads(raw_text)
+                            if isinstance(parsed_map, dict):
+                                for k, name in parsed_map.items():
+                                    try:
+                                        k_int = int(k)
+                                        clean_name = re.sub(r'["\'.]', '', str(name)).strip()
+                                        if 2 <= len(clean_name) <= 40:
+                                            results[k_int] = clean_name
+                                    except (ValueError, TypeError) as parse_err:
+                                        logger.warning("Batch cluster naming: skipping invalid key/name pair (%r: %r): %s", k, name, parse_err)
+                                        continue
+            except Exception as exc:
+                logger.info("Batch Gemini cluster naming fallback triggered: %s", exc)
 
-    @staticmethod
-    def _ask_gemini_for_cluster_name(titles: List[str], api_key: str) -> Optional[str]:
-        import json
-        import urllib.request
+        # Fall back to instant local N-Gram analysis for any missing clusters
+        for idx, (titles, cluster_clips) in cluster_data.items():
+            if idx not in results:
+                results[idx] = cls._fallback_ngram_cluster_name(titles, cluster_clips)
 
-        titles_text = "\n".join(f"- {t}" for t in titles[:6])
-        prompt = (
-            f"Here are titles of saved items in a group:\n{titles_text}\n\n"
-            "Task: Generate a concise, natural 2-4 word title for this category/folder. "
-            "Examples: 'Remote Engineering Jobs', 'AI Newsletters', 'Side Project Tools', 'System Design Reads'. "
-            "Return ONLY the title string without quotes, explanations, or punctuation."
-        )
+        return results
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-        body = json.dumps({
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 16}
-        }).encode('utf-8')
-
-        req = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            res_json = json.loads(response.read().decode('utf-8'))
-            candidate = res_json.get('candidates', [{}])[0]
-            name = candidate.get('content', {}).get('parts', [{}])[0].get('text', '').strip()
-            name = re.sub(r'["\'.]', '', name).strip()
-            if 2 <= len(name) <= 35:
-                return name
-        return None
+    @classmethod
+    def _generate_cluster_name(cls, cluster_clips: List[Dict]) -> str:
+        """Single cluster naming wrapper for backwards compatibility."""
+        batch_res = cls._generate_cluster_names_batch([cluster_clips])
+        return batch_res.get(0, 'Saved Collection')
 
     @classmethod
     def _fallback_ngram_cluster_name(cls, titles: List[str], cluster_clips: List[Dict]) -> str:

@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.clips.models import Clip
@@ -42,8 +42,12 @@ class FeedEngine:
         now = timezone.now()
         today = now.date()
 
-        # Base queryset of all user clips
-        clips_qs = Clip.objects.filter(user=user).select_related('destination')
+        # Base queryset of all user clips (defer heavy blobs to save RAM)
+        clips_qs = (
+            Clip.objects.filter(user=user)
+            .defer('raw_content', 'embedding')
+            .select_related('destination')
+        )
 
         # 1. Stream Metrics & Category Counts
         metrics = cls._compute_metrics(clips_qs, today)
@@ -78,50 +82,64 @@ class FeedEngine:
     # -------------------------------------------------------------------------
     @classmethod
     def _compute_metrics(cls, clips_qs, today: date) -> dict[str, Any]:
-        total_clips = clips_qs.count()
-
-        # Start of today (midnight)
+        # Start of today (midnight) and start of week
         start_of_today = timezone.make_aware(datetime.combine(today, datetime.min.time()))
-        today_new_count = clips_qs.filter(created_at__gte=start_of_today).count()
-
-        # Start of week (7 days ago)
         start_of_week = start_of_today - timedelta(days=7)
-        week_new_count = clips_qs.filter(created_at__gte=start_of_week).count()
 
-        # Category Counts
-        # Action Required: Upcoming deadlines or pending actionable items
-        action_required_count = clips_qs.filter(
-            Q(deadline_date__isnull=False) |
-            Q(intent__in=['apply', 'attend', 'deploy', 'review']) |
-            Q(content_type__in=['job', 'event', 'scholarship', 'grant'])
-        ).count()
+        # Single SQL Query: Computes all 8 metrics in 1 database round-trip
+        counts = clips_qs.aggregate(
+            total=Count('id'),
+            today_new=Count('id', filter=Q(created_at__gte=start_of_today)),
+            week_new=Count('id', filter=Q(created_at__gte=start_of_week)),
+            action_required=Count(
+                'id',
+                filter=(
+                    Q(deadline_date__isnull=False) |
+                    Q(intent__in=['apply', 'attend', 'deploy', 'review']) |
+                    Q(content_type__in=['job', 'event', 'scholarship', 'grant'])
+                )
+            ),
+            articles=Count(
+                'id',
+                filter=(
+                    Q(content_type__in=['article', 'research', 'paper', 'essay', 'newsletter']) |
+                    Q(intent__in=['learn', 'read', 'research'])
+                )
+            ),
+            opportunities=Count(
+                'id',
+                filter=(
+                    Q(content_type__in=['job', 'event', 'scholarship', 'grant', 'contest']) |
+                    Q(intent__in=['apply', 'attend', 'interview'])
+                )
+            ),
+            audio=Count(
+                'id',
+                filter=(
+                    Q(music_embed_url__gt='') |
+                    Q(content_type__in=['audio', 'podcast', 'track', 'music', 'album']) |
+                    Q(url__icontains='spotify.com') |
+                    Q(url__icontains='music.youtube.com') |
+                    Q(url__icontains='soundcloud.com')
+                )
+            ),
+            sync_logs=Count(
+                'id',
+                filter=(
+                    Q(destination__isnull=False) |
+                    Q(export_status__in=['done', 'processing'])
+                )
+            ),
+        )
 
-        # Articles & Papers
-        articles_count = clips_qs.filter(
-            Q(content_type__in=['article', 'research', 'paper', 'essay', 'newsletter']) |
-            Q(intent__in=['learn', 'read', 'research'])
-        ).count()
-
-        # Opportunities
-        opportunities_count = clips_qs.filter(
-            Q(content_type__in=['job', 'event', 'scholarship', 'grant', 'contest']) |
-            Q(intent__in=['apply', 'attend', 'interview'])
-        ).count()
-
-        # Audio
-        audio_count = clips_qs.filter(
-            Q(music_embed_url__gt='') |
-            Q(content_type__in=['audio', 'podcast', 'track', 'music', 'album']) |
-            Q(url__icontains='spotify.com') |
-            Q(url__icontains='music.youtube.com') |
-            Q(url__icontains='soundcloud.com')
-        ).count()
-
-        # Sync Logs: Clips with active destination exports
-        sync_logs_count = clips_qs.filter(
-            Q(destination__isnull=False) |
-            Q(export_status__in=['done', 'processing'])
-        ).count()
+        total_clips = counts['total']
+        today_new_count = counts['today_new']
+        week_new_count = counts['week_new']
+        action_required_count = counts['action_required']
+        articles_count = counts['articles']
+        opportunities_count = counts['opportunities']
+        audio_count = counts['audio']
+        sync_logs_count = counts['sync_logs']
 
         # Compute Review Streak
         review_streak = cls._calculate_review_streak(clips_qs, today)
@@ -150,103 +168,123 @@ class FeedEngine:
     @classmethod
     def _build_daily_review_queue(cls, clips_qs, today: date) -> list[dict[str, Any]]:
         """
-        Algorithmically selects up to 5 diverse cards for today's review:
-        1. Recent Gem (last 24-48h)
-        2. Impending Opportunity Deadline
-        3. Blast from the Past (>14 days ago)
+        Algorithmically selects up to 5 diverse cards for today's review.
+        Rotates day-to-day deterministically based on calendar date seed
+        and prioritizes unreviewed or least-recently reviewed clips.
+
+        1. Impending Opportunity Deadline
+        2. Recent Gem
+        3. Blast from the Past (spaced repetition)
         4. Deep Dive / High Density
         5. Action / Tool Gem
         """
         chosen_ids: set[str] = set()
         queue: list[dict[str, Any]] = []
 
+        day_seed = today.toordinal()
+
+        def _pick_rotating(qs, multiplier: int):
+            """
+            Rotates through candidates deterministically by day_seed.
+            Prioritizes unreviewed clips first.
+            """
+            candidates = list(qs.exclude(id__in=chosen_ids))
+            if not candidates:
+                return None
+
+            unreviewed = []
+            reviewed = []
+            now_dt = timezone.now()
+            cutoff = now_dt - timedelta(days=7)
+
+            for c in candidates:
+                meta = c.extra_metadata or {}
+                rev_str = meta.get('feed_reviewed_at')
+                is_recent_rev = False
+                if rev_str:
+                    try:
+                        rev_dt = datetime.fromisoformat(rev_str)
+                        if timezone.is_naive(rev_dt):
+                            rev_dt = timezone.make_aware(rev_dt)
+                        if rev_dt > cutoff:
+                            is_recent_rev = True
+                    except (ValueError, TypeError) as exc:
+                        logger.warning("Feed Engine: invalid feed_reviewed_at format %r: %s", rev_str, exc)
+                if is_recent_rev:
+                    reviewed.append(c)
+                else:
+                    unreviewed.append(c)
+
+            pool = unreviewed if unreviewed else reviewed
+            idx = (day_seed * multiplier) % len(pool)
+            return pool[idx]
+
         # Candidate 1: Impending Opportunity Deadline (Urgency)
-        deadline_clip = (
-            clips_qs.filter(deadline_date__gte=today)
-            .exclude(id__in=chosen_ids)
-            .order_by('deadline_date')
-            .first()
-        )
+        deadline_qs = clips_qs.filter(deadline_date__gte=today).order_by('deadline_date', '-created_at')
+        deadline_clip = _pick_rotating(deadline_qs, multiplier=3)
         if not deadline_clip:
-            # Fallback to any clip with intent 'apply'
-            deadline_clip = (
-                clips_qs.filter(intent__in=['apply', 'attend'])
-                .exclude(id__in=chosen_ids)
-                .order_by('-created_at')
-                .first()
-            )
+            # Fallback to any clip with intent 'apply' or 'attend'
+            fallback_qs = clips_qs.filter(intent__in=['apply', 'attend', 'hire']).order_by('-created_at')
+            deadline_clip = _pick_rotating(fallback_qs, multiplier=3)
         if deadline_clip:
             chosen_ids.add(str(deadline_clip.id))
             days_left = (deadline_clip.deadline_date - today).days if deadline_clip.deadline_date else 0
             badge_text = f"Deadline in {days_left}d" if deadline_clip.deadline_date and days_left >= 0 else "High Priority"
             queue.append(cls._format_review_item(deadline_clip, 'deadline', badge_text, '#EF4444'))
 
-        # Candidate 2: Recent Gem (saved in the last 48h)
-        recent_clip = (
-            clips_qs.exclude(id__in=chosen_ids)
-            .order_by('-created_at')
-            .first()
-        )
+        # Candidate 2: Recent Gem (saved in the last 48h or newest)
+        two_days_ago = today - timedelta(days=2)
+        recent_qs = clips_qs.filter(created_at__date__gte=two_days_ago).order_by('-created_at')
+        recent_clip = _pick_rotating(recent_qs, multiplier=5)
+        if not recent_clip:
+            recent_clip = _pick_rotating(clips_qs.order_by('-created_at'), multiplier=5)
         if recent_clip:
             chosen_ids.add(str(recent_clip.id))
             queue.append(cls._format_review_item(recent_clip, 'recent', 'Recent Gem', '#3FE769'))
 
         # Candidate 3: Blast from the Past (saved >14 days ago for spaced repetition)
         two_weeks_ago = today - timedelta(days=14)
-        blast_clip = (
-            clips_qs.filter(created_at__date__lte=two_weeks_ago)
-            .exclude(id__in=chosen_ids)
-            .order_by('created_at')
-            .first()
-        )
+        blast_qs = clips_qs.filter(created_at__date__lte=two_weeks_ago).order_by('created_at')
+        blast_clip = _pick_rotating(blast_qs, multiplier=7)
         if not blast_clip:
-            # Pick oldest clip in vault
-            blast_clip = (
-                clips_qs.exclude(id__in=chosen_ids)
-                .order_by('created_at')
-                .first()
-            )
+            blast_clip = _pick_rotating(clips_qs.order_by('created_at'), multiplier=7)
         if blast_clip:
             chosen_ids.add(str(blast_clip.id))
             queue.append(cls._format_review_item(blast_clip, 'spaced_repetition', 'Blast from Past', '#A855F7'))
 
         # Candidate 4: Deep Dive (Article or research paper)
-        deep_clip = (
-            clips_qs.filter(
-                Q(content_type__in=['article', 'research', 'paper', 'essay']) |
-                Q(intent__in=['learn', 'read'])
-            )
-            .exclude(id__in=chosen_ids)
-            .order_by('-created_at')
-            .first()
-        )
+        deep_qs = clips_qs.filter(
+            Q(content_type__in=['article', 'research', 'paper', 'essay', 'book']) |
+            Q(intent__in=['learn', 'read'])
+        ).order_by('-created_at')
+        deep_clip = _pick_rotating(deep_qs, multiplier=11)
         if deep_clip:
             chosen_ids.add(str(deep_clip.id))
             queue.append(cls._format_review_item(deep_clip, 'deep_dive', 'Deep Dive', '#38BDF8'))
 
         # Candidate 5: Action Tool / Project
-        action_clip = (
-            clips_qs.filter(
-                Q(content_type__in=['tool', 'code', 'repository', 'course']) |
-                Q(intent__in=['deploy', 'build', 'track'])
-            )
-            .exclude(id__in=chosen_ids)
-            .order_by('-created_at')
-            .first()
-        )
+        action_qs = clips_qs.filter(
+            Q(content_type__in=['tool', 'code', 'repository', 'course', 'project']) |
+            Q(intent__in=['deploy', 'build', 'track'])
+        ).order_by('-created_at')
+        action_clip = _pick_rotating(action_qs, multiplier=13)
         if action_clip:
             chosen_ids.add(str(action_clip.id))
             queue.append(cls._format_review_item(action_clip, 'action_gem', 'Action Gem', '#F59E0B'))
 
-        # If vault has fewer than 5 distinct candidates, fill with remaining un-reviewed clips
+        # If vault has fewer than 5 distinct candidates, fill with remaining rotating clips
         if len(queue) < 5:
-            remaining_clips = (
-                clips_qs.exclude(id__in=chosen_ids)
-                .order_by('-created_at')[: (5 - len(queue))]
-            )
-            for c in remaining_clips:
-                chosen_ids.add(str(c.id))
-                queue.append(cls._format_review_item(c, 'vault_pick', 'Vault Pick', '#3FE769'))
+            remaining_qs = clips_qs.exclude(id__in=chosen_ids).order_by('-created_at')
+            rem_list = list(remaining_qs)
+            if rem_list:
+                needed = 5 - len(queue)
+                start_idx = (day_seed * 17) % len(rem_list)
+                for i in range(min(needed, len(rem_list))):
+                    pick_idx = (start_idx + i) % len(rem_list)
+                    c = rem_list[pick_idx]
+                    if str(c.id) not in chosen_ids:
+                        chosen_ids.add(str(c.id))
+                        queue.append(cls._format_review_item(c, 'vault_pick', 'Vault Pick', '#3FE769'))
 
         return queue
 
@@ -434,6 +472,8 @@ class FeedEngine:
             'domain': domain,
             'author': clip.source_author or '',
             'source_platform': clip.source_platform or 'web',
+            'platform_skin': clip.platform_skin,
+            'platform_meta': clip.platform_meta,
             'content_type': clip.content_type or 'article',
             'intent': clip.intent or 'learn',
             'tags': clip.tags or [],
@@ -589,8 +629,8 @@ class FeedEngine:
                 try:
                     rev_d = datetime.fromisoformat(rev_str).date()
                     active_dates.add(rev_d)
-                except Exception:
-                    pass
+                except (ValueError, TypeError) as exc:
+                    logger.warning("Feed Engine: invalid feed_reviewed_at timestamp in streak calc %r: %s", rev_str, exc)
 
         if not active_dates:
             return 0
