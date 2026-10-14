@@ -131,7 +131,56 @@ class ClipsFilterBottomSheet extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Section 3: Sync Status
+            // Section 3: Content Type Filter
+            Text(
+              'CONTENT TYPE',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+                color: AppTheme.textMuted,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildTypeChip(context, clips, 'all', 'All', LucideIcons.layers),
+                _buildTypeChip(context, clips, 'video', 'Video', LucideIcons.video),
+                _buildTypeChip(context, clips, 'article', 'Article', LucideIcons.fileText),
+                _buildTypeChip(context, clips, 'audio', 'Audio', LucideIcons.headphones),
+                _buildTypeChip(context, clips, 'code', 'Code', LucideIcons.code),
+                _buildTypeChip(context, clips, 'job', 'Jobs', LucideIcons.briefcase),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Section 4: Deadline Filter
+            Text(
+              'DEADLINE & SCHEDULE',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+                color: AppTheme.textMuted,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildDeadlineChip(context, clips, 'all', 'All Dates'),
+                _buildDeadlineChip(context, clips, 'has_deadline', 'Has Deadline'),
+                _buildDeadlineChip(context, clips, 'this_week', 'Due This Week'),
+                _buildDeadlineChip(context, clips, 'overdue', 'Overdue'),
+                _buildDeadlineChip(context, clips, 'upcoming', 'Upcoming'),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Section 5: Sync Status
             Text(
               'SYNC STATUS',
               style: GoogleFonts.inter(
@@ -209,6 +258,66 @@ class ClipsFilterBottomSheet extends StatelessWidget {
         color: isSelected ? AppTheme.primaryViolet : AppTheme.borderSubtle,
       ),
       onSelected: (_) => clips.setSortBy(key),
+    );
+  }
+
+  Widget _buildTypeChip(
+    BuildContext context,
+    ClipsProvider clips,
+    String key,
+    String label,
+    IconData icon,
+  ) {
+    final isSelected = clips.selectedContentType == key;
+    return ChoiceChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 13,
+            color: isSelected ? Colors.white : AppTheme.textMuted,
+          ),
+          const SizedBox(width: 4),
+          Text(label),
+        ],
+      ),
+      selected: isSelected,
+      selectedColor: AppTheme.primaryViolet,
+      backgroundColor: AppTheme.surfaceMuted,
+      labelStyle: GoogleFonts.inter(
+        fontSize: 11,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        color: isSelected ? Colors.white : AppTheme.textPrimary,
+      ),
+      side: BorderSide(
+        color: isSelected ? AppTheme.primaryViolet : AppTheme.borderSubtle,
+      ),
+      onSelected: (_) => clips.setContentType(key),
+    );
+  }
+
+  Widget _buildDeadlineChip(
+    BuildContext context,
+    ClipsProvider clips,
+    String key,
+    String label,
+  ) {
+    final isSelected = clips.selectedDeadlineFilter == key;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      selectedColor: AppTheme.primaryViolet,
+      backgroundColor: AppTheme.surfaceMuted,
+      labelStyle: GoogleFonts.inter(
+        fontSize: 11,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+        color: isSelected ? Colors.white : AppTheme.textPrimary,
+      ),
+      side: BorderSide(
+        color: isSelected ? AppTheme.primaryViolet : AppTheme.borderSubtle,
+      ),
+      onSelected: (_) => clips.setDeadlineFilter(key),
     );
   }
 

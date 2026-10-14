@@ -31,6 +31,37 @@ class SourceBrandHelper {
     final domain = clip.domain.toLowerCase();
     final type = clip.contentType.toLowerCase();
 
+    // 0. Instagram
+    if (url.contains('instagram.com') ||
+        platform == 'instagram' ||
+        domain.contains('instagram')) {
+      final isReel = url.contains('/reel/') || url.contains('/reels/') || url.contains('/tv/');
+      return SourceBrandMeta(
+        key: 'instagram',
+        label: 'Instagram',
+        brandColor: const Color(0xFFE1306C),
+        bgColor: const Color(0x18E1306C),
+        borderColor: const Color(0x40E1306C),
+        icon: isReel ? LucideIcons.video : LucideIcons.camera,
+        formatLabel: isReel ? 'REEL' : 'POST',
+      );
+    }
+
+    // 0.5 TikTok
+    if (url.contains('tiktok.com') ||
+        platform == 'tiktok' ||
+        domain.contains('tiktok')) {
+      return const SourceBrandMeta(
+        key: 'tiktok',
+        label: 'TikTok',
+        brandColor: Color(0xFF000000),
+        bgColor: Color(0x18000000),
+        borderColor: Color(0x40000000),
+        icon: LucideIcons.video,
+        formatLabel: 'VIDEO',
+      );
+    }
+
     // 1. YouTube
     if (url.contains('youtube.com') ||
         url.contains('youtu.be') ||
@@ -168,7 +199,10 @@ class SourceBrandHelper {
     // Default web source with format matching web app
     String defaultFormat = 'CLIP';
     IconData defaultIcon = LucideIcons.globe;
-    if (type == 'job' || type == 'scholarship') {
+    if (type == 'video' || type == 'reel') {
+      defaultFormat = 'VIDEO';
+      defaultIcon = LucideIcons.video;
+    } else if (type == 'job' || type == 'scholarship') {
       defaultFormat = 'OPPORTUNITY';
       defaultIcon = LucideIcons.briefcase;
     } else if (type == 'event') {
