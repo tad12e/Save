@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import secrets
 import urllib.error
 import urllib.request
@@ -14,11 +15,44 @@ from django.utils import timezone
 
 OTP_LENGTH = 6
 OTP_COOLDOWN_SECONDS = 60  # minimum seconds between OTP sends per user
+MAX_OTP_ATTEMPTS = 7  # maximum allowed failed verification attempts
+OTP_LOCKOUT_TIMEOUT_SECONDS = 900  # 15 minutes lockout window
 BREVO_SEND_EMAIL_URL = 'https://api.brevo.com/v3/smtp/email'
+
+logger = logging.getLogger(__name__)
 
 
 class OTPEmailDeliveryError(Exception):
     """Raised when the verification email cannot be delivered."""
+
+
+def _otp_attempt_cache_key(email: str) -> str:
+    return f"otp_fail_count:{email.strip().lower()}"
+
+
+def check_otp_verification_attempts(email: str):
+    """Raise ValueError if max verification attempts have been reached."""
+    key = _otp_attempt_cache_key(email)
+    fails = cache.get(key, 0)
+    if fails >= MAX_OTP_ATTEMPTS:
+        raise ValueError(
+            'Too many failed verification attempts. Verification is locked for 15 minutes.'
+        )
+
+
+def record_otp_verification_failure(email: str) -> int:
+    """Increment failed attempts count in cache and return remaining attempts."""
+    key = _otp_attempt_cache_key(email)
+    current = cache.get(key, 0) + 1
+    cache.set(key, current, timeout=OTP_LOCKOUT_TIMEOUT_SECONDS)
+    remaining = max(0, MAX_OTP_ATTEMPTS - current)
+    return remaining
+
+
+def clear_otp_verification_attempts(email: str):
+    """Reset the failure attempt counter for an email."""
+    key = _otp_attempt_cache_key(email)
+    cache.delete(key)
 
 
 def _otp_expiry_minutes():
@@ -141,11 +175,32 @@ def clear_otp(user):
     user.otp = ''
     user.otp_expires_at = None
     user.save(update_fields=['otp', 'otp_expires_at'])
+    if getattr(user, 'email', None):
+        clear_otp_verification_attempts(user.email)
 
 
-def issue_and_send_otp(user):
-    """Full flow: rate-limit check → generate → hash & store → email raw OTP."""
+def issue_and_send_otp(user, async_delivery: bool = True):
+    """Full flow: rate-limit check → generate → hash & store → dispatch raw OTP via Celery."""
     check_otp_rate_limit(user)
     raw_otp = assign_otp(user)       # stores HASH on user, returns raw
-    send_otp_email(user, raw_otp)    # emails the raw OTP
+
+    dispatched = False
+    if async_delivery:
+        try:
+            from apps.users.tasks import send_otp_email_task
+            send_otp_email_task.delay(str(user.id), raw_otp)
+            dispatched = True
+        except Exception as exc:
+            logger.warning(
+                "Celery dispatch failed for OTP email to user %s (%s): %s. Falling back to direct delivery.",
+                user.id,
+                user.email,
+                exc,
+            )
+
+    if not dispatched:
+        send_otp_email(user, raw_otp)
+
     _record_otp_sent(user)           # start cooldown timer
+    if getattr(user, 'email', None):
+        clear_otp_verification_attempts(user.email)

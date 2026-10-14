@@ -207,19 +207,13 @@ class LogoutView(APIView):
 
 class UserSettingsView(APIView):
     """
-    GET: Retrieves the current user's settings (or global/guest settings if unauthenticated).
+    GET: Retrieves the current user's settings.
     PATCH/PUT: Updates user settings and returns the updated state.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def _get_or_create_settings(self, request):
-        user = request.user if (request.user and request.user.is_authenticated) else None
-        if user:
-            settings_obj, _ = UserSettings.objects.get_or_create(user=user)
-        else:
-            settings_obj = UserSettings.objects.filter(user__isnull=True).first()
-            if not settings_obj:
-                settings_obj = UserSettings.objects.create(user=None)
+        settings_obj, _ = UserSettings.objects.get_or_create(user=request.user)
         return settings_obj
 
     def get(self, request):

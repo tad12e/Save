@@ -4,7 +4,14 @@ from rest_framework import serializers
 
 from .models import CustomUser, UserSettings
 from .services.google_auth import GoogleTokenVerificationError, verify_google_access_token
-from .services.otp import clear_otp, issue_and_send_otp, verify_otp
+from .services.otp import (
+    check_otp_verification_attempts,
+    clear_otp,
+    clear_otp_verification_attempts,
+    issue_and_send_otp,
+    record_otp_verification_failure,
+    verify_otp,
+)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -87,6 +94,11 @@ class VerifyOTPSerializer(serializers.Serializer):
         email = CustomUser.objects.normalize_email(attrs['email'])
 
         try:
+            check_otp_verification_attempts(email)
+        except ValueError as err:
+            raise serializers.ValidationError(str(err))
+
+        try:
             user = CustomUser.objects.get(
                 email=email,
                 auth_provider=CustomUser.AUTH_PROVIDER_EMAIL,
@@ -98,11 +110,19 @@ class VerifyOTPSerializer(serializers.Serializer):
             raise serializers.ValidationError('This email is already verified.')
 
         if not user.otp or not verify_otp(attrs['otp'], user.otp):
-            raise serializers.ValidationError('Invalid email or OTP.')
+            remaining = record_otp_verification_failure(email)
+            if remaining > 0:
+                raise serializers.ValidationError(
+                    f'Invalid email or OTP. {remaining} attempt{"s" if remaining != 1 else ""} remaining.'
+                )
+            raise serializers.ValidationError(
+                'Too many failed verification attempts. Verification is locked for 15 minutes.'
+            )
 
         if not user.otp_expires_at or timezone.now() > user.otp_expires_at:
             raise serializers.ValidationError('OTP has expired. Please request a new one.')
 
+        clear_otp_verification_attempts(email)
         attrs['user'] = user
         return attrs
 
@@ -273,6 +293,9 @@ class UserSettingsSerializer(serializers.ModelSerializer):
             'updated_at',
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
+        extra_kwargs = {
+            'spotify_client_secret': {'write_only': True},
+        }
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
@@ -282,6 +305,7 @@ class UserSettingsSerializer(serializers.ModelSerializer):
         ret['enable_floating_bubble'] = extra.get('enable_floating_bubble', False)
         ret['default_destination'] = extra.get('default_destination', 'vault')
         ret['category_rules'] = extra.get('category_rules', {})
+        ret['has_spotify_secret'] = bool(instance.spotify_client_secret)
         return ret
 
     def update(self, instance, validated_data):

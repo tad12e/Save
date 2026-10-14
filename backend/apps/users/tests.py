@@ -47,6 +47,18 @@ class OTPEmailDeliveryTests(SimpleTestCase):
 
 		send_mail_mock.assert_called_once()
 
+	@patch('apps.users.tasks.send_otp_email_task.delay')
+	@patch('apps.users.services.otp.assign_otp')
+	@patch('apps.users.services.otp.check_otp_rate_limit')
+	def test_issue_and_send_otp_dispatches_celery_task(self, rate_mock, assign_mock, delay_mock):
+		from apps.users.services.otp import issue_and_send_otp
+		user = CustomUser(id='00000000-0000-0000-0000-000000000001', email='test@example.com', name='Test User')
+		assign_mock.return_value = '987654'
+
+		issue_and_send_otp(user)
+
+		delay_mock.assert_called_once_with('00000000-0000-0000-0000-000000000001', '987654')
+
 
 class GoogleAuthSerializerTests(TestCase):
 	@patch('apps.users.serializers.verify_google_access_token')
