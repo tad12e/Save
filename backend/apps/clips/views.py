@@ -17,6 +17,7 @@ from apps.destinations.models import Destination
 from .models import Clip, CustomCategory, CustomPage
 from .serializers import (
     ClipCreateSerializer,
+    ClipDetailSerializer,
     ClipSerializer,
     CustomCategorySerializer,
     CustomPageSerializer,
@@ -32,6 +33,35 @@ User = get_user_model()
 #         defaults={'name': 'Tadiwos User', 'is_active': True},
 #     )
 #     return user
+
+
+def get_user_clips_feed_version(user_id) -> int:
+    """
+    Returns the cache invalidation version number for the user's clips feed.
+    """
+    from django.core.cache import cache
+    version_key = f"user_clips_feed_ver_{user_id}"
+    try:
+        ver = cache.get(version_key)
+        if ver is None:
+            ver = int(timezone.now().timestamp())
+            cache.set(version_key, ver, timeout=86400 * 14)
+        return ver
+    except Exception:
+        return 1
+
+
+def invalidate_user_clips_feed_cache(user_id):
+    """
+    Bumps the cache version for the user's clips feed, atomically invalidating
+    all cached query variations (all filters, intents, sources, and pages) in O(1) time.
+    """
+    from django.core.cache import cache
+    version_key = f"user_clips_feed_ver_{user_id}"
+    try:
+        cache.set(version_key, int(timezone.now().timestamp()), timeout=86400 * 14)
+    except Exception as exc:
+        logger.warning("Clips feed cache version bump failed for user %s: %s", user_id, exc)
 
 
 class ClipCreateView(APIView):
@@ -95,27 +125,38 @@ class ClipCreateView(APIView):
             except (ValueError, TypeError):
                 clips_qs = clips_qs.filter(custom_page__slug=page_param)
 
+        # 1. Fast Redis Cache lookup (<2ms)
+        from django.core.cache import cache
+        feed_ver = get_user_clips_feed_version(request.user.id)
+        cache_key = (
+            f"clips_feed_{request.user.id}_v{feed_ver}_"
+            f"{intent_param}_{source_param}_{type_param}_{page_param}"
+        )
+        try:
+            cached_data = cache.get(cache_key)
+            if cached_data is not None:
+                return Response(cached_data)
+        except Exception as exc:
+            logger.warning("Clips feed cache read error for user %s: %s", request.user.id, exc)
+
+        # 2. Database query on cache miss (Deferred heavy blobs, pre-indexed, zero write locks)
         clips = list(
             clips_qs
-            .select_related('destination', 'custom_page')
+            .defer('raw_content', 'embedding')
+            .select_related('destination', 'custom_page', 'parent_clip')
             .annotate(prefetched_child_count=Count('child_clips'))
             .order_by('-created_at')[:100]
         )
 
-        # Auto-detect intent on the fly for any clips that missed Celery enrichment
-        from apps.clips.services.intent_detector import IntentDetector, clean_action_intent
-        for c in clips:
-            if not c.intent or c.intent == 'other':
-                detected = IntentDetector.detect_heuristic_intent(
-                    url=c.url,
-                    text=f"{c.title or ''} {c.selected_text or ''} {c.summary or ''} {' '.join(c.tags or [])}",
-                    content_type=c.content_type or '',
-                )
-                if detected and detected != 'other':
-                    c.intent = clean_action_intent(detected)
-                    c.save(update_fields=['intent'])
+        serialized_data = ClipSerializer(clips, many=True).data
 
-        return Response(ClipSerializer(clips, many=True).data)
+        # 3. Store in Redis cache (5 minutes TTL)
+        try:
+            cache.set(cache_key, serialized_data, timeout=300)
+        except Exception as exc:
+            logger.warning("Clips feed cache write error for user %s: %s", request.user.id, exc)
+
+        return Response(serialized_data)
 
     def post(self, request):
         if not request.user or not request.user.is_authenticated:
@@ -204,14 +245,17 @@ class ClipCreateView(APIView):
         if request.data.get('table_name') or request.data.get('tableName'):
             extra_meta['target_table_name'] = request.data.get('table_name') or request.data.get('tableName')
 
-        # Fast 0ms intent detection for immediate badge display before Celery task completes
+        # Fast 0ms intent and content_type detection for immediate badge display before Celery task completes
         from apps.clips.services.intent_detector import IntentDetector, clean_action_intent
+        from apps.clips.services.extract import _detect_content_type
+
+        initial_content_type = request.data.get('content_type') or _detect_content_type(sel_text, url_val)
         initial_intent = request.data.get('intent')
         if not initial_intent:
             initial_intent = IntentDetector.detect_heuristic_intent(
                 url=url_val,
                 text=sel_text,
-                content_type=request.data.get('content_type', ''),
+                content_type=initial_content_type,
             )
         initial_intent = clean_action_intent(initial_intent or 'other')
 
@@ -231,6 +275,7 @@ class ClipCreateView(APIView):
             url=url_val,
             url_hash=u_hash,
             selected_text=request.data.get('selected_text', ''),
+            content_type=initial_content_type,
             status=Clip.STATUS_PENDING,
             intent=initial_intent,
             destination=destination,
@@ -275,9 +320,10 @@ class ClipCreateView(APIView):
             warnings.append('Clip saved but analytics cache refresh failed. Stats may be briefly stale.')
 
         try:
+            invalidate_user_clips_feed_cache(user.id)
             invalidate_user_clusters_cache(user.id)
         except Exception as exc:
-            logger.warning("Cluster cache invalidation failed for user %s: %s", user.id, exc)
+            logger.warning("Cluster/feed cache invalidation failed for user %s: %s", user.id, exc)
 
         data = ClipSerializer(clip).data
         if warnings:
@@ -305,7 +351,8 @@ class ClipCreateView(APIView):
         for i in ids:
             try:
                 valid_uuids.append(uuid_pkg.UUID(str(i).strip()))
-            except (ValueError, TypeError, AttributeError):
+            except (ValueError, TypeError, AttributeError) as exc:
+                logger.warning("Bulk delete: skipping invalid UUID identifier %r: %s", i, exc)
                 continue
 
         if not valid_uuids:
@@ -313,26 +360,27 @@ class ClipCreateView(APIView):
 
         deleted_count, _ = Clip.objects.filter(user=request.user, id__in=valid_uuids).delete()
         try:
+            invalidate_user_clips_feed_cache(request.user.id)
             invalidate_user_clusters_cache(request.user.id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Cache invalidation failed after bulk deletion for user %s: %s", request.user.id, exc)
         return Response({'deleted': deleted_count, 'message': f'{deleted_count} clips deleted.'}, status=status.HTTP_200_OK)
 
 
 class ClipDetailView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, clip_id):
         import uuid as uuid_pkg
         try:
             c_uuid = uuid_pkg.UUID(str(clip_id).strip())
         except (ValueError, TypeError, AttributeError):
-            return Response({'error': 'Clip not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        clip = Clip.objects.select_related('destination').filter(pk=c_uuid).first()
+        clip = Clip.objects.select_related('destination', 'custom_page', 'parent_clip').filter(pk=c_uuid, user=request.user).first()
         if not clip:
-            return Response({'error': 'Clip not found'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(ClipSerializer(clip).data)
+            return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(ClipDetailSerializer(clip).data)
 
     def patch(self, request, clip_id):
         if not request.user or not request.user.is_authenticated:
@@ -414,8 +462,8 @@ class ClipDetailView(APIView):
             else:
                 try:
                     clip.deadline_date = datetime.date.fromisoformat(str(d_val)[:10])
-                except Exception:
-                    pass
+                except (ValueError, TypeError) as exc:
+                    logger.warning("Invalid deadline format %r for clip %s: %s", d_val, clip.id, exc)
             update_fields.append('deadline_date')
 
         if 'status' in request.data:
@@ -433,6 +481,10 @@ class ClipDetailView(APIView):
 
         if update_fields:
             clip.save(update_fields=update_fields)
+            try:
+                invalidate_user_clips_feed_cache(request.user.id)
+            except Exception as exc:
+                logger.warning("Cache invalidation failed after updating clip %s: %s", clip.id, exc)
 
         return Response(ClipSerializer(clip).data, status=status.HTTP_200_OK)
 
@@ -451,6 +503,7 @@ class ClipDetailView(APIView):
             return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
         clip.delete()
         try:
+            invalidate_user_clips_feed_cache(request.user.id)
             invalidate_user_clusters_cache(request.user.id)
         except Exception as exc:
             logger.warning("Cluster cache invalidation failed after delete for user %s: %s", request.user.id, exc)
@@ -458,16 +511,18 @@ class ClipDetailView(APIView):
 
 
 class ClipContentView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, clip_id):
-        clip = Clip.objects.filter(pk=clip_id).first()
-        if not clip:
+        import uuid as uuid_pkg
+        try:
+            c_uuid = uuid_pkg.UUID(str(clip_id).strip())
+        except (ValueError, TypeError, AttributeError):
             return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Scoped access check if authenticated
-        if request.user and request.user.is_authenticated and clip.user_id != request.user.id:
-            return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
+        clip = Clip.objects.filter(pk=c_uuid, user=request.user).first()
+        if not clip:
+            return Response({'error': 'Clip not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         full_content = clip.raw_content or clip.selected_text or clip.summary or ''
         return Response({
@@ -549,7 +604,7 @@ class DashboardView(APIView):
         for d in user_dest_objs:
             if d.provider == 'custom_db':
                 continue
-            synced_count = qs.filter(Q(destination=d) | Q(destination_provider=d.provider)).count()
+            synced_count = qs.filter(Q(destination=d) | Q(destination__provider=d.provider)).count()
             destinations_status.append({
                 'id': str(d.id),
                 'provider': d.provider,
@@ -575,7 +630,7 @@ class DashboardView(APIView):
 
         # One annotated base queryset per list below, so the serializer's
         # child-clip count comes from the same query (no N+1 COUNT per clip).
-        base_clips_qs = qs.select_related('destination').annotate(
+        base_clips_qs = qs.defer('raw_content', 'embedding').select_related('destination', 'parent_clip').annotate(
             prefetched_child_count=Count('child_clips')
         )
         recent_clips = ClipSerializer(base_clips_qs.order_by('-created_at')[:50], many=True).data
@@ -603,7 +658,8 @@ class DashboardView(APIView):
         from apps.clips.services.intent_detector import CANONICAL_INTENTS, normalize_canonical_intent, IntentDetector, clean_action_intent
 
         # Auto-detect intent on the fly for any clips that missed Celery enrichment
-        other_clips = qs.filter(Q(intent='other') | Q(intent__isnull=True) | Q(intent=''))[:100]
+        other_clips = list(qs.filter(Q(intent='other') | Q(intent__isnull=True) | Q(intent=''))[:100])
+        clips_to_update = []
         for c in other_clips:
             detected = IntentDetector.detect_heuristic_intent(
                 url=c.url,
@@ -612,7 +668,10 @@ class DashboardView(APIView):
             )
             if detected and detected != 'other':
                 c.intent = clean_action_intent(detected)
-                c.save(update_fields=['intent'])
+                clips_to_update.append(c)
+
+        if clips_to_update:
+            Clip.objects.bulk_update(clips_to_update, ['intent'])
 
         raw_intent_counts = qs.values('intent').annotate(count=Count('id'))
         intent_map = {ci: 0 for ci in CANONICAL_INTENTS}
@@ -624,6 +683,7 @@ class DashboardView(APIView):
             'learn': '#2D6A4F',
             'track': '#40916C',
             'apply': '#D97706',
+            'watch': '#EF4444',
             'buy': '#0284C7',
             'attend': '#7C3AED',
             'hire': '#EC4899',
@@ -1024,9 +1084,13 @@ class CustomPageListCreateView(APIView):
         if not base_slug:
             base_slug = 'page'
 
+        existing_slugs = set(
+            CustomPage.objects.filter(user=request.user, slug__startswith=base_slug)
+            .values_list('slug', flat=True)
+        )
         slug = base_slug
         counter = 1
-        while CustomPage.objects.filter(user=request.user, slug=slug).exists():
+        while slug in existing_slugs:
             slug = f"{base_slug}-{counter}"
             counter += 1
 
@@ -1154,9 +1218,13 @@ class CustomCategoryListCreateView(APIView):
         if not base_slug:
             base_slug = 'category'
 
+        existing_slugs = set(
+            CustomCategory.objects.filter(user=request.user, dimension=dimension, slug__startswith=base_slug)
+            .values_list('slug', flat=True)
+        )
         slug = base_slug
         counter = 1
-        while CustomCategory.objects.filter(user=request.user, dimension=dimension, slug=slug).exists():
+        while slug in existing_slugs:
             slug = f"{base_slug}-{counter}"
             counter += 1
 
@@ -1241,21 +1309,10 @@ class FeedStreamView(APIView):
     - Destination Sync River activity
     - Career Opportunity Watchlist
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user if (request.user and request.user.is_authenticated) else None
-        if not user:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            user = User.objects.first()
-
-        if not user:
-            return Response(
-                {'error': 'No user profile found. Please create an account or sign in.'},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
+        user = request.user
         timeframe = request.query_params.get('timeframe', 'today').strip().lower()
         category = request.query_params.get('category', 'all').strip().lower()
         limit = int(request.query_params.get('limit', 50))
@@ -1280,21 +1337,10 @@ class FeedItemActionView(APIView):
     - 'watchlist': Toggles career opportunity watchlist
     - 'archive': Marks clip status as DONE
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, clip_id):
-        user = request.user if (request.user and request.user.is_authenticated) else None
-        if not user:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            user = User.objects.first()
-
-        if not user:
-            return Response(
-                {'error': 'Authentication required.'},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
+        user = request.user
         action = str(request.data.get('action', 'review')).strip().lower()
         note = str(request.data.get('note', '')).strip()
 
@@ -1317,18 +1363,10 @@ class PlaylistListView(APIView):
     Returns all auto-generated knowledge stacks (Daily 5, tag-based, thematic categories)
     for the user with progress stats and domain previews.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user if (request.user and request.user.is_authenticated) else None
-        if not user:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            user = User.objects.first()
-
-        if not user:
-            return Response({'playlists': []}, status=status.HTTP_200_OK)
-
+        user = request.user
         from .services.playlist_engine import PlaylistEngine
         playlists = PlaylistEngine.get_user_playlists(user)
         return Response({'playlists': playlists}, status=status.HTTP_200_OK)
@@ -1339,18 +1377,10 @@ class PlaylistClipsView(APIView):
     GET /api/clips/playlists/<str:playlist_id>/clips/
     Returns ordered swipe cards for a given knowledge stack.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, playlist_id):
-        user = request.user if (request.user and request.user.is_authenticated) else None
-        if not user:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            user = User.objects.first()
-
-        if not user:
-            return Response({'cards': []}, status=status.HTTP_200_OK)
-
+        user = request.user
         from .services.playlist_engine import PlaylistEngine
         cards = PlaylistEngine.get_playlist_clips(user, playlist_id)
         return Response({'cards': cards, 'total': len(cards), 'playlist_id': playlist_id}, status=status.HTTP_200_OK)
@@ -1362,21 +1392,10 @@ class SwipeActionView(APIView):
     Handles interactive swipe actions:
     like, reviewed, watchlist, snooze, archive, note, share, destination
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, clip_id):
-        user = request.user if (request.user and request.user.is_authenticated) else None
-        if not user:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            user = User.objects.first()
-
-        if not user:
-            return Response(
-                {'error': 'Authentication required.'},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-
+        user = request.user
         action = str(request.data.get('action', 'reviewed')).strip().lower()
         note = str(request.data.get('note', '')).strip()
         destination_id = str(request.data.get('destination_id', '')).strip()

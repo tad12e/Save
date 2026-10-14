@@ -71,21 +71,44 @@ class BulkImportUploadView(APIView):
         created_clips = []
         skipped_duplicates = 0
         seen_in_batch = set()
+        candidates = []
+        candidate_hashes = []
 
+        # Step 1: In-memory normalization and within-batch deduplication
         for bm in parsed_bookmarks:
             try:
                 clean_url = normalise_url(bm.url)
                 u_hash = hash_url(clean_url)
-            except Exception:
+            except Exception as exc:
+                bm_url = getattr(bm, 'url', '<unknown>')
+                logger.warning("Bulk import: failed to normalize/hash bookmark URL %r: %s", bm_url, exc)
+                job.failed_items += 1
+                if len(job.error_log) < 50:
+                    job.error_log.append({'url': str(bm_url)[:500], 'error': f"URL normalization failed: {str(exc)}"})
                 continue
 
             if u_hash in seen_in_batch:
                 skipped_duplicates += 1
                 continue
             seen_in_batch.add(u_hash)
+            candidates.append((u_hash, clean_url, bm))
+            candidate_hashes.append(u_hash)
 
-            # Check existing database records for user
-            if Clip.objects.filter(user=user, url_hash=u_hash).exists():
+        # Step 2: Single batch DB lookup (replaces N sequential round-trips with O(1) chunked batch query)
+        existing_hashes = set()
+        if candidate_hashes:
+            chunk_size = 1000
+            for i in range(0, len(candidate_hashes), chunk_size):
+                chunk = candidate_hashes[i:i + chunk_size]
+                found_hashes = (
+                    Clip.objects.filter(user=user, url_hash__in=chunk)
+                    .values_list('url_hash', flat=True)
+                )
+                existing_hashes.update(found_hashes)
+
+        # Step 3: Fast O(1) in-memory filter and Clip model instantiations
+        for u_hash, clean_url, bm in candidates:
+            if u_hash in existing_hashes:
                 skipped_duplicates += 1
                 continue
 

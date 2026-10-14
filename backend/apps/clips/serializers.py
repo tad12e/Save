@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 
 from apps.destinations.models import Destination
@@ -54,6 +56,16 @@ class CustomPageSerializer(serializers.ModelSerializer):
         return obj.clips.count()
 
 
+from apps.clips.services.sanitizer import (
+    BOILERPLATE_PATTERNS,
+    clean_boilerplate,
+    clean_clip_summary,
+    clean_clip_title,
+)
+
+clean_summary_text = clean_clip_summary
+
+
 class ClipSerializer(serializers.ModelSerializer):
     duplicate = serializers.BooleanField(read_only=True, default=False)
     destination_id = serializers.UUIDField(source='destination.id', read_only=True, allow_null=True)
@@ -65,6 +77,9 @@ class ClipSerializer(serializers.ModelSerializer):
     custom_page_id = serializers.UUIDField(source='custom_page.id', read_only=True, allow_null=True)
     custom_page_name = serializers.CharField(source='custom_page.name', read_only=True, allow_null=True)
     is_favorite = serializers.SerializerMethodField()
+    platform_skin = serializers.CharField(read_only=True)
+    platform_meta = serializers.DictField(read_only=True)
+    platform_metadata = serializers.DictField(source='platform_meta', read_only=True)
 
     class Meta:
         model = Clip
@@ -78,6 +93,9 @@ class ClipSerializer(serializers.ModelSerializer):
             'source_platform',
             'source_author',
             'source_post_url',
+            'platform_skin',
+            'platform_meta',
+            'platform_metadata',
             'parent_clip_id',
             'parent_clip_title',
             'child_clips_count',
@@ -102,9 +120,23 @@ class ClipSerializer(serializers.ModelSerializer):
             'extra_metadata',
             'created_at',
             'updated_at',
-            'raw_content',
+            # raw_content is intentionally excluded here to allow .defer('raw_content')
+            # in list feeds without triggering lazy N+1 queries.
         )
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        summary = data.get('summary')
+        if summary:
+            data['summary'] = clean_summary_text(summary, data.get('title') or '')
+        # Cross-platform parity: ensure extra_metadata includes intent for clients expecting it there
+        intent_val = data.get('intent') or getattr(instance, 'intent', None)
+        if intent_val and intent_val != 'other':
+            if isinstance(data.get('extra_metadata'), dict):
+                if 'intent' not in data['extra_metadata']:
+                    data['extra_metadata']['intent'] = intent_val
+        return data
 
     def get_child_clips_count(self, obj) -> int:
         # Prefers the annotated count (same query, no extra DB hit) when the
@@ -119,6 +151,16 @@ class ClipSerializer(serializers.ModelSerializer):
     def get_is_favorite(self, obj) -> bool:
         meta = obj.extra_metadata or {}
         return bool(meta.get('is_favorite') or meta.get('is_starred') or meta.get('is_liked'))
+
+
+class ClipDetailSerializer(ClipSerializer):
+    """
+    Detailed serializer for single-clip views.
+    Includes the heavy raw_content field.
+    """
+    class Meta(ClipSerializer.Meta):
+        fields = ClipSerializer.Meta.fields + ('raw_content',)
+        read_only_fields = fields
 
 
 class ClipCreateSerializer(serializers.Serializer):
