@@ -260,234 +260,9 @@ export const INITIAL_DESTINATIONS: DestinationConfig[] = [
   }
 ];
 
-export const INITIAL_CLIPS: ClipItem[] = [
-  {
-    id: 'clip_1',
-    title: 'Senior Frontend Engineer (React & TypeScript) - Remote',
-    url: 'https://x.com/tech_careers/status/18219482104921',
-    selectedText: 'We are hiring a Senior React Engineer! Remote worldwide. Stack: React 19, TypeScript, Tailwind CSS, Vite. Salary: $140,000 - $175,000 + equity. DM or apply via link!',
-    summary: 'High-paying remote Senior Frontend Engineer opportunity focused on modern React, TS, and performance.',
-    type: 'job',
-    tags: ['Remote', 'React', 'Frontend', 'TypeScript', '$140k-$175k'],
-    createdAt: '2026-08-09T04:12:00Z',
-    sourceApp: 'Chrome Extension',
-    syncedTo: ['google_sheets', 'notion'],
-    storageMode: 'cloud',
-    pageId: 'page_job',
-    faviconUrl: 'https://www.google.com/s2/favicons?domain=x.com&sz=64',
-    extractedData: {
-      company: 'Vercel Ecosystem Labs',
-      salary: '$140,000 - $175,000',
-      location: 'Remote (Worldwide)',
-      deadline: 'Aug 25, 2026'
-    },
-    isFavorite: true
-  },
-  {
-    id: 'clip_2',
-    title: 'Global AI Founders Hackathon 2026 ($50,000 Cash Prizes)',
-    url: 'https://linkedin.com/posts/ai-founders-hub-2026',
-    selectedText: 'Announcing the 2026 AI Innovation Hackathon! Build using Gemini 2.0 & Claude APIs. $50k total prize pool + YC fast-track interviews. Registration open until Aug 20.',
-    summary: 'Virtual hackathon with $50,000 cash prizes and investor fast-track opportunities for AI builders.',
-    type: 'event',
-    tags: ['Hackathon', 'AI', 'Prizes', 'YC', 'Virtual'],
-    createdAt: '2026-08-08T18:30:00Z',
-    sourceApp: 'Chrome Extension',
-    syncedTo: ['google_sheets'],
-    storageMode: 'cloud',
-    pageId: 'page_job',
-    faviconUrl: 'https://www.google.com/s2/favicons?domain=linkedin.com&sz=64',
-    extractedData: {
-      price: 'Free Entry ($50k Prizes)',
-      deadline: 'Aug 20, 2026',
-      location: 'Online'
-    },
-    isFavorite: true
-  },
-  {
-    id: 'clip_3',
-    title: 'OpenAI Developer Fellowship 2026 - Fully Funded Grant',
-    url: 'https://openai.com/careers/fellowship-2026',
-    selectedText: 'Applications now open for the 6-month Developer Fellowship. Provides $10,000/month stipend, API credits, and direct mentorship from research engineers.',
-    summary: '6-month research fellowship with $10k/month stipend and compute allocation.',
-    type: 'scholarship',
-    tags: ['Fellowship', 'Stipend', 'Research', '$10k/mo'],
-    createdAt: '2026-08-08T11:15:00Z',
-    sourceApp: 'Mobile Share Sheet',
-    syncedTo: ['notion', 'google_sheets'],
-    storageMode: 'local',
-    pageId: 'page_education',
-    faviconUrl: 'https://www.google.com/s2/favicons?domain=openai.com&sz=64',
-    extractedData: {
-      company: 'OpenAI',
-      salary: '$10,000 / month stipend',
-      location: 'San Francisco / Remote',
-      deadline: 'Sept 1, 2026'
-    }
-  },
-  {
-    id: 'clip_4',
-    title: 'Attention Is All You Need 2.0: Scaling Transformer Contexts to 10M Tokens',
-    url: 'https://arxiv.org/abs/2608.01928',
-    selectedText: 'We introduce a novel sparse linear attention mechanism enabling sub-quadratic complexity for 10M+ token context windows with zero loss in recall accuracy.',
-    summary: 'Sub-quadratic attention architecture supporting 10,000,000 token context windows without accuracy degradation.',
-    type: 'research',
-    tags: ['AI Research', 'Transformers', 'LLM', 'ArXiv', 'Sub-Quadratic'],
-    createdAt: '2026-08-08T09:10:00Z',
-    sourceApp: 'Chrome Extension',
-    syncedTo: ['notion'],
-    storageMode: 'local',
-    pageId: 'page_research',
-    faviconUrl: 'https://www.google.com/s2/favicons?domain=arxiv.org&sz=64',
-    extractedData: {
-      author: 'Vaswani et al. (2026)',
-      company: 'Google DeepMind & Stanford',
-      rating: '9.8/10 Impact Score'
-    },
-    isFavorite: true
-  },
-  {
-    id: 'clip_5',
-    title: 'Designing Data-Intensive Applications (2nd Edition) - System Architecture Notes',
-    url: 'https://dataintensive.net/chapter-4-encoding-evolution',
-    selectedText: 'Key takeaway: Schema evolution in distributed datastores requires backward and forward compatibility guarantees across RPC interfaces.',
-    summary: 'Chapter 4 analysis on backward/forward binary serialization and zero-downtime database schema migrations.',
-    type: 'book',
-    tags: ['System Design', 'Books', 'Distributed Systems', 'Architecture'],
-    createdAt: '2026-08-07T14:20:00Z',
-    sourceApp: 'Web App',
-    syncedTo: [],
-    storageMode: 'local',
-    pageId: 'page_books',
-    faviconUrl: 'https://www.google.com/s2/favicons?domain=dataintensive.net&sz=64',
-    extractedData: {
-      author: 'Martin Kleppmann',
-      duration: '45 min reading note'
-    }
-  },
-  {
-    id: 'clip_6',
-    title: 'Fast-Inference Local Agent Server (Rust & WebGPU)',
-    url: 'https://github.com/rust-ai/agent-server',
-    selectedText: 'Ultra-fast local AI agent runner written in Rust with WebGPU acceleration. Sub-10ms token generation for edge devices.',
-    summary: 'Open-source Rust crate for running local LLM agents on device via WebGPU bindings.',
-    type: 'project',
-    tags: ['Rust', 'WebGPU', 'OpenSource', 'GitHub', 'Local AI'],
-    createdAt: '2026-08-06T18:00:00Z',
-    sourceApp: 'Chrome Extension',
-    syncedTo: ['google_sheets'],
-    storageMode: 'cloud',
-    pageId: 'page_projects',
-    faviconUrl: 'https://www.google.com/s2/favicons?domain=github.com&sz=64',
-    extractedData: {
-      author: 'rust-ai-org',
-      rating: '⭐ 4.8k Stars'
-    }
-  },
-  {
-    id: 'clip_7',
-    title: 'Staff ML Infrastructure Engineer — Candidate Portfolio & Recommendations',
-    url: 'https://linkedin.com/in/marcus-chen-ml-infra',
-    selectedText: 'Marcus Chen: Ex-Stripe Staff Platform Lead. Specialized in large-scale model inference, Kubernetes GPU scheduling, and high-throughput vector store architectures.',
-    summary: 'Candidate profile for Staff/Principal Infrastructure role. Strong open-source track record in distributed inference.',
-    type: 'job',
-    tags: ['Hire', 'Candidate', 'ML Infra', 'Staff Engineer', 'Kubernetes'],
-    createdAt: '2026-08-05T16:45:00Z',
-    sourceApp: 'Chrome Extension',
-    syncedTo: ['notion', 'airtable'],
-    storageMode: 'cloud',
-    pageId: 'page_job',
-    faviconUrl: 'https://www.google.com/s2/favicons?domain=linkedin.com&sz=64',
-    extractedData: {
-      company: 'Marcus Chen (Staff Candidate)',
-      salary: '$220,000 - $260,000',
-      location: 'San Francisco, CA / Remote',
-      rating: 'Top 1% Candidate Match'
-    },
-    isFavorite: true
-  },
-  {
-    id: 'clip_8',
-    title: 'H100 SXM5 GPU Cloud Cluster Deal — 40% Off Annual Reserved Instances',
-    url: 'https://lambdalabs.com/service/gpu-cloud/pricing-deal',
-    selectedText: 'Special allocation: 8x H100 SXM5 80GB clusters with 3.2Tbps Quantum-2 InfiniBand. Annual committed contract locked at $1.99/GPU/hr (40% discount).',
-    summary: 'Reserved GPU cloud capacity pricing contract for production LLM training & fine-tuning pipelines.',
-    type: 'deal',
-    tags: ['Buy', 'Deal', 'GPU', 'Infrastructure', 'H100', 'Discount'],
-    createdAt: '2026-08-04T10:15:00Z',
-    sourceApp: 'Chrome Extension',
-    syncedTo: ['google_sheets', 'notion'],
-    storageMode: 'cloud',
-    pageId: 'page_projects',
-    faviconUrl: 'https://www.google.com/s2/favicons?domain=lambdalabs.com&sz=64',
-    extractedData: {
-      price: '$1.99 / GPU / hr (40% Off)',
-      deadline: 'Limited availability (Q3/Q4 2026)',
-      company: 'Lambda Labs & CoreWeave'
-    },
-    isFavorite: false
-  }
-];
+export const INITIAL_CLIPS: ClipItem[] = [];
 
-export const INITIAL_JOBS: JobCard[] = [
-  {
-    id: 'job_1',
-    clipId: 'clip_1',
-    title: 'Senior Frontend Engineer',
-    company: 'Vercel Ecosystem Labs',
-    location: 'Remote Worldwide',
-    salary: '$140,000 - $175,000',
-    status: 'interviewing',
-    fitScore: 94,
-    url: 'https://x.com/tech_careers/status/18219482104921',
-    dateAdded: '2026-08-09',
-    notes: 'Technical interview scheduled for Tuesday with Engineering Lead.',
-    nextActionDate: '2026-08-11',
-    nextActionLabel: 'Technical Round 1'
-  },
-  {
-    id: 'job_2',
-    title: 'Full Stack AI Developer',
-    company: 'Anthropic Partner Studio',
-    location: 'San Francisco, CA (Hybrid)',
-    salary: '$160,000 - $190,000',
-    status: 'applied',
-    fitScore: 88,
-    url: 'https://linkedin.com/jobs/view/9928101',
-    dateAdded: '2026-08-07',
-    notes: 'Submitted customized resume highlighting Gemini API & React 19 experience.',
-    nextActionDate: '2026-08-14',
-    nextActionLabel: 'Follow up with recruiter'
-  },
-  {
-    id: 'job_3',
-    title: 'Product Engineer (TypeScript & UI)',
-    company: 'Linear Labs',
-    location: 'Remote (US/EU)',
-    salary: '$150,000 - $180,000',
-    status: 'saved',
-    fitScore: 91,
-    url: 'https://linear.app/careers/product-engineer',
-    dateAdded: '2026-08-08',
-    notes: 'Need to prepare portfolio video of recent UI design projects.',
-    nextActionDate: '2026-08-10',
-    nextActionLabel: 'Submit application'
-  },
-  {
-    id: 'job_4',
-    title: 'Lead UI Architect',
-    company: 'Supabase Inc',
-    location: 'Remote',
-    salary: '$170,000 - $210,000',
-    status: 'offer',
-    fitScore: 96,
-    url: 'https://supabase.com/careers/ui-architect',
-    dateAdded: '2026-07-28',
-    notes: 'Offer letter received! Reviewing equity package.',
-    nextActionDate: '2026-08-12',
-    nextActionLabel: 'Decide on offer'
-  }
-];
+export const INITIAL_JOBS: JobCard[] = [];
 
 export const INITIAL_SYNC_LOGS: ConnectionSyncLog[] = [];
 
@@ -496,65 +271,24 @@ export const INITIAL_SHARED_BOARDS: SharedBoard[] = [
     id: 'board_1',
     title: '🚀 Top Remote React & AI Opportunities',
     description: 'Curated list of high-tier developer roles, grants, and technical hackathons updated daily.',
-    itemCount: 42,
-    membersCount: 8,
+    itemCount: 0,
+    membersCount: 1,
     tags: ['Jobs', 'AI', 'Remote', 'Tech'],
     isPublic: true,
-    updatedAt: '10 minutes ago',
+    updatedAt: 'Just now',
     coverGradient: 'from-purple-600 to-indigo-600',
     members: [
-      { name: 'Rediet G.', avatar: 'RG', role: 'owner' },
-      { name: 'Sarah Chen', avatar: 'SC', role: 'editor' },
-      { name: 'Alex Rivera', avatar: 'AR', role: 'viewer' }
-    ]
-  },
-  {
-    id: 'board_2',
-    title: '💡 Y Combinator & Startup Grants 2026',
-    description: 'All pitch competitions, accelerator deadlines, and founder micro-grants.',
-    itemCount: 19,
-    membersCount: 5,
-    tags: ['Grants', 'Startups', 'YC', 'Funding'],
-    isPublic: false,
-    updatedAt: '2 hours ago',
-    coverGradient: 'from-emerald-600 to-teal-600',
-    members: [
-      { name: 'Rediet G.', avatar: 'RG', role: 'owner' },
-      { name: 'David K.', avatar: 'DK', role: 'editor' }
-    ]
-  },
-  {
-    id: 'board_3',
-    title: '📚 Must-Read Tech Articles & Courses',
-    description: 'Key papers on AI architecture, system design benchmarks, and free cohorts.',
-    itemCount: 31,
-    membersCount: 12,
-    tags: ['Articles', 'Courses', 'Learning'],
-    isPublic: true,
-    updatedAt: '1 day ago',
-    coverGradient: 'from-amber-500 to-rose-600',
-    members: [
-      { name: 'Rediet G.', avatar: 'RG', role: 'owner' },
-      { name: 'Elena Rostova', avatar: 'ER', role: 'editor' }
+      { name: 'Vault Member', avatar: 'VM', role: 'owner' }
     ]
   }
 ];
 
 export const INITIAL_DIGEST: WeeklyDigestStats = {
-  totalClips: 24,
-  topCategory: 'job',
-  categoryBreakdown: [
-    { type: 'job', count: 12, percentage: 50 },
-    { type: 'event', count: 5, percentage: 21 },
-    { type: 'scholarship', count: 3, percentage: 12 },
-    { type: 'deal', count: 2, percentage: 8 },
-    { type: 'course', count: 2, percentage: 8 }
-  ],
-  opportunitiesSaved: 17,
-  topMatches: [
-    { title: 'Senior Frontend Engineer', company: 'Vercel Ecosystem Labs', score: 94, url: 'https://x.com/tech_careers/status/18219482104921' },
-    { title: 'Lead UI Architect', company: 'Supabase Inc', score: 96, url: 'https://supabase.com/careers/ui-architect' },
-    { title: 'Product Engineer', company: 'Linear Labs', score: 91, url: 'https://linear.app/careers/product-engineer' }
-  ],
-  aiInsightText: "You saved 12 job opportunities this week with an average fit score of 92%. Your top high-value matches are concentrated in Remote React 19 / TypeScript roles. Recommended action: 3 applications have deadlines within 5 days."
+  totalClips: 0,
+  topCategory: 'vault',
+  categoryBreakdown: [],
+  opportunitiesSaved: 0,
+  topMatches: [],
+  aiInsightText: "You do not have anything saved yet. Clip articles, job postings, or research papers to generate your automated weekly digest."
 };
+

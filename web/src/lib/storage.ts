@@ -88,7 +88,13 @@ export const saveStoredDestinations = (destinations: DestinationConfig[]): void 
 export const getStoredClips = (): ClipItem[] => {
   try {
     const item = localStorage.getItem(CLIPS_KEY);
-    return item ? JSON.parse(item) : INITIAL_CLIPS;
+    if (!item) return INITIAL_CLIPS;
+    const parsed: ClipItem[] = JSON.parse(item);
+    if (parsed.some(c => c.id === 'clip_1' || c.id === 'clip_2' || c.id === 'clip_3')) {
+      localStorage.removeItem(CLIPS_KEY);
+      return [];
+    }
+    return parsed;
   } catch (e) {
     console.error('Error loading stored clips', e);
     return INITIAL_CLIPS;
@@ -106,7 +112,13 @@ export const saveStoredClips = (clips: ClipItem[]): void => {
 export const getStoredJobs = (): JobCard[] => {
   try {
     const item = localStorage.getItem(JOBS_KEY);
-    return item ? JSON.parse(item) : INITIAL_JOBS;
+    if (!item) return INITIAL_JOBS;
+    const parsed: JobCard[] = JSON.parse(item);
+    if (parsed.some(j => j.id === 'job_1' || j.id === 'job_2')) {
+      localStorage.removeItem(JOBS_KEY);
+      return [];
+    }
+    return parsed;
   } catch (e) {
     console.error('Error loading stored jobs', e);
     return INITIAL_JOBS;

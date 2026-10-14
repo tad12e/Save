@@ -715,18 +715,18 @@ function generateClientSynthesizedAnalytics(
     const d = new Date();
     d.setDate(d.getDate() + i);
     const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
-    const avgRecent = Math.max(1, Math.round(totalClips / 14));
+    const avgRecent = totalClips > 0 ? Math.max(1, Math.round(totalClips / 14)) : 0;
     forecast_days.push({
       date: dateStr,
       predicted: avgRecent,
-      confidence_high: avgRecent + 1,
+      confidence_high: avgRecent > 0 ? avgRecent + 1 : 0,
       confidence_low: Math.max(0, avgRecent - 1),
     });
   }
 
   const activeDestCount = destinations.filter(d => d.connected).length || 2;
-  const fallbackTimeSavedHours = Math.round(totalClips * 0.25 * 10) / 10;
-  const fallbackSavedDollars = Math.round(fallbackTimeSavedHours * 25);
+  const fallbackTimeSavedHours = totalClips > 0 ? Math.round(totalClips * 0.25 * 10) / 10 : 0;
+  const fallbackSavedDollars = totalClips > 0 ? Math.round(fallbackTimeSavedHours * 25) : 0;
 
   return {
     timeframe: period,
@@ -742,14 +742,14 @@ function generateClientSynthesizedAnalytics(
     kpis: {
       total_clips: {
         value: totalClips,
-        delta_pct: 12.5,
-        is_positive: true,
-        sparkline: [Math.max(0, totalClips - 4), Math.max(0, totalClips - 2), totalClips],
+        delta_pct: totalClips > 0 ? 12.5 : 0,
+        is_positive: totalClips > 0,
+        sparkline: totalClips > 0 ? [Math.max(0, totalClips - 4), Math.max(0, totalClips - 2), totalClips] : [0, 0, 0],
       },
       weekly_velocity: {
         value: historical_trend.slice(-7).reduce((a, b) => a + b.actual, 0),
-        delta_pct: 10,
-        is_positive: true,
+        delta_pct: totalClips > 0 ? 10 : 0,
+        is_positive: totalClips > 0,
         sparkline: historical_trend.slice(-7).map(h => h.actual),
       },
       active_streak: {
@@ -768,7 +768,7 @@ function generateClientSynthesizedAnalytics(
       current_streak_days: currentStreak,
       best_streak_days: Math.max(currentStreak, longestStreak),
       streak_multiplier: currentStreak > 3 ? 1.5 : 1.0,
-      activity_level: currentStreak > 0 ? 'Optimal Momentum 🔥' : 'Start Your Streak 🚀',
+      activity_level: totalClips === 0 ? 'No saves yet — Start Your Streak 🚀' : (currentStreak > 0 ? 'Optimal Momentum 🔥' : 'Start Your Streak 🚀'),
       next_milestone_days: currentStreak < 7 ? 7 : (currentStreak < 14 ? 14 : 30),
     },
     daily_focus: {
@@ -844,10 +844,10 @@ function generateClientSynthesizedAnalytics(
           trend: (idx % 3 === 0 ? 'up' : idx % 3 === 1 ? 'stable' : 'up') as 'up' | 'stable' | 'down',
         }));
       }
-      return [
+      return totalClips > 0 ? [
         { tag: 'knowledge', count: totalClips, trend: 'stable' as const },
         { tag: 'vault', count: totalClips, trend: 'up' as const },
-      ];
+      ] : [];
     })(),
     knowledge_radar: (() => {
       const radarDefinitions = [
@@ -956,8 +956,10 @@ function generateClientSynthesizedAnalytics(
         generatedInsights.push({
           id: 'ins_deadlines_ok',
           type: 'deadline',
-          title: 'All Tracked Deadlines Current',
-          description: 'Zero urgent or overdue deadlines detected across your research and job pipelines.',
+          title: totalClips === 0 ? 'No Tracked Deadlines' : 'All Tracked Deadlines Current',
+          description: totalClips === 0
+            ? 'You have not saved any opportunities or job applications yet.'
+            : 'Zero urgent or overdue deadlines detected across your research and job pipelines.',
           action_text: 'Review Opportunities Funnel',
           confidence: 0.95,
           risk_level: 'low',
@@ -980,9 +982,11 @@ function generateClientSynthesizedAnalytics(
         generatedInsights.push({
           id: 'ins_topic_steady',
           type: 'trend',
-          title: 'Knowledge Base Ready',
-          description: `${totalClips} items curated across your research pipelines. Ingestion velocity steady.`,
-          action_text: 'View Knowledge Matrix',
+          title: totalClips === 0 ? 'You have not saved anything yet' : 'Knowledge Base Ready',
+          description: totalClips === 0
+            ? 'Your vault is currently empty. Clip articles, jobs, or research to build your activity heatmap and topic analytics.'
+            : `${totalClips} items curated across your research pipelines. Ingestion velocity steady.`,
+          action_text: totalClips === 0 ? 'Start Saving Clips' : 'View Knowledge Matrix',
           confidence: 0.91,
           risk_level: 'low',
         });
@@ -994,22 +998,26 @@ function generateClientSynthesizedAnalytics(
       generatedInsights.push({
         id: 'ins_streak_pace',
         type: 'streak',
-        title: currentStreak > 0
-          ? `${currentStreak}-Day Active Streak: ${daysToMilestone} Day${daysToMilestone > 1 ? 's' : ''} to Next Milestone`
-          : 'Start Your Consecutive Saving Streak',
-        description: currentStreak > 0
-          ? `Consistently ingesting knowledge. Save today's articles to maintain your ${currentStreak}-day momentum.`
-          : 'Save your first clip today to initiate a daily learning streak and unlock gamification achievements.',
+        title: totalClips === 0
+          ? 'You have not saved anything yet'
+          : (currentStreak > 0
+            ? `${currentStreak}-Day Active Streak: ${daysToMilestone} Day${daysToMilestone > 1 ? 's' : ''} to Next Milestone`
+            : 'Start Your Consecutive Saving Streak'),
+        description: totalClips === 0
+          ? 'Save your first clip today to initiate a daily learning streak and light up your activity heatmap.'
+          : (currentStreak > 0
+            ? `Consistently ingesting knowledge. Save today's articles to maintain your ${currentStreak}-day momentum.`
+            : 'Save your first clip today to initiate a daily learning streak and unlock gamification achievements.'),
         action_text: 'View Gamification Badges',
         confidence: 0.90,
         risk_level: currentStreak > 0 ? 'low' : 'medium',
       });
 
       // Dynamic Leaderboard
-      const points = Math.max(150, totalClips * 50 + currentStreak * 100 + activeDestCount * 150);
+      const points = totalClips === 0 ? 0 : Math.max(150, totalClips * 50 + currentStreak * 100 + activeDestCount * 150);
       let rank_title = 'Novice Archivist';
       let next_tier_points = 500;
-      let user_percentile = 55;
+      let user_percentile = totalClips === 0 ? 0 : 55;
 
       if (points >= 3000) {
         rank_title = 'Diamond Researcher Tier';
@@ -1032,7 +1040,7 @@ function generateClientSynthesizedAnalytics(
       return {
         historical_trend,
         forecast_days,
-        projected_total_month: Math.max(totalClips, Math.round(recentSavesCount * 4.2)),
+        projected_total_month: totalClips === 0 ? 0 : Math.max(totalClips, Math.round(recentSavesCount * 4.2)),
         insights: generatedInsights,
         leaderboard: {
           user_percentile,

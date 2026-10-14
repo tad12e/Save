@@ -261,51 +261,79 @@ export function generateClientSynthesizedFeed(
 
   const syncRiverClips = clips.filter((c) => c.destination || destinations.length > 0);
 
-  // Daily 5 Review Items
+  // Daily 5 Review Items - Rotates deterministically day-to-day
   const dailyReview: FeedReviewItem[] = [];
   const pickedIds = new Set<string>();
 
+  const daySeed = Math.floor(Date.now() / 86400000);
+
+  const pickRotating = (pool: ClipItem[], multiplier: number): ClipItem | undefined => {
+    const available = pool.filter((c) => !pickedIds.has(c.id));
+    if (available.length === 0) return undefined;
+
+    // Prioritize unreviewed clips (or reviewed > 7 days ago)
+    const cutoff = Date.now() - 7 * 86400000;
+    const unreviewed = available.filter((c) => {
+      const meta = c.extra_metadata || {};
+      const revStr = meta.feed_reviewed_at || (c as any).feed_reviewed_at;
+      if (!revStr) return true;
+      const revTime = new Date(revStr).getTime();
+      return isNaN(revTime) || revTime < cutoff;
+    });
+
+    const candidates = unreviewed.length > 0 ? unreviewed : available;
+    const idx = (daySeed * multiplier) % candidates.length;
+    return candidates[idx];
+  };
+
   // 1. Deadline / High Priority
-  const deadlineClip = clips.find((c) => c.deadline_date && !pickedIds.has(c.id));
+  const deadlinePool = clips.filter((c) => c.deadline_date);
+  const deadlineClip = pickRotating(deadlinePool, 3) || pickRotating(opportunityClips, 3);
   if (deadlineClip) {
     pickedIds.add(deadlineClip.id);
     dailyReview.push(formatReviewItem(deadlineClip, 'deadline', 'Upcoming Deadline', '#EF4444'));
   }
 
   // 2. Recent Clip
-  const recentClip = clips.find((c) => !pickedIds.has(c.id));
+  const recentClip = pickRotating(clips, 5);
   if (recentClip) {
     pickedIds.add(recentClip.id);
     dailyReview.push(formatReviewItem(recentClip, 'recent', 'Recent Gem', '#3FE769'));
   }
 
   // 3. Spaced Repetition (Blast from the past or oldest)
-  const oldClip = [...clips].reverse().find((c) => !pickedIds.has(c.id));
+  const oldestPool = [...clips].reverse();
+  const oldClip = pickRotating(oldestPool, 7);
   if (oldClip) {
     pickedIds.add(oldClip.id);
     dailyReview.push(formatReviewItem(oldClip, 'spaced_repetition', 'Blast from Past', '#A855F7'));
   }
 
   // 4. Research Deep Dive
-  const deepClip = articleClips.find((c) => !pickedIds.has(c.id));
+  const deepClip = pickRotating(articleClips, 11);
   if (deepClip) {
     pickedIds.add(deepClip.id);
     dailyReview.push(formatReviewItem(deepClip, 'deep_dive', 'Deep Dive', '#38BDF8'));
   }
 
   // 5. Action / Opportunity
-  const actionClip = opportunityClips.find((c) => !pickedIds.has(c.id));
+  const actionClip = pickRotating(opportunityClips, 13);
   if (actionClip) {
     pickedIds.add(actionClip.id);
     dailyReview.push(formatReviewItem(actionClip, 'action_gem', 'Action Gem', '#F59E0B'));
   }
 
-  // Fill up to 5 if available
-  for (const c of clips) {
-    if (dailyReview.length >= 5) break;
-    if (!pickedIds.has(c.id)) {
-      pickedIds.add(c.id);
-      dailyReview.push(formatReviewItem(c, 'vault_pick', 'Vault Pick', '#3FE769'));
+  // Fill up to 5 if available with daily rotation
+  const remaining = clips.filter((c) => !pickedIds.has(c.id));
+  if (remaining.length > 0 && dailyReview.length < 5) {
+    const needed = 5 - dailyReview.length;
+    const startIdx = (daySeed * 17) % remaining.length;
+    for (let i = 0; i < Math.min(needed, remaining.length); i++) {
+      const c = remaining[(startIdx + i) % remaining.length];
+      if (!pickedIds.has(c.id)) {
+        pickedIds.add(c.id);
+        dailyReview.push(formatReviewItem(c, 'vault_pick', 'Vault Pick', '#3FE769'));
+      }
     }
   }
 

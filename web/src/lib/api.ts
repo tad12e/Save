@@ -8,6 +8,7 @@ import type {
   BulkImportJobResponse,
   BulkImportJobStatus,
 } from '../types';
+import { parsePlatformMeta } from '../types/clipPlatform';
 
 export interface AuthorizeParams {
   provider: string;
@@ -97,7 +98,7 @@ export function convertBackendClipToItem(b: any): ClipItem {
   const normType = (b.content_type || b.intent || 'general').toLowerCase();
   const validTypes: ClipType[] = [
     'job', 'education', 'research', 'book', 'project',
-    'programming', 'course', 'event', 'scholarship', 'music', 'deal', 'article', 'general'
+    'programming', 'course', 'event', 'scholarship', 'music', 'deal', 'video', 'article', 'general'
   ];
   const clipType: ClipType = validTypes.includes(normType as any) ? (normType as ClipType) : 'article';
 
@@ -128,6 +129,11 @@ export function convertBackendClipToItem(b: any): ClipItem {
     childClipsCount: b.child_clips_count || 0,
     isResourceHub: b.is_resource_hub || false,
     extractedResourceUrl: b.extracted_resource_url || undefined,
+    platformMeta: parsePlatformMeta(
+      b.platform_meta ?? b.extra_metadata?.platform_meta,
+      b.source_platform,
+      b.url,
+    ),
     ...(b.intent ? { intent: b.intent } : {}),
   } as ClipItem;
 }

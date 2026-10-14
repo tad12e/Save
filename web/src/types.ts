@@ -1,10 +1,12 @@
+import type { PlatformMeta } from './types/clipPlatform';
+
 export type DestinationType = 'google_sheets' | 'notion' | 'airtable' | 'webhook' | 'custom_db' | 'spotify' | 'youtube_music';
 
-export type ClipType = 'job' | 'education' | 'research' | 'book' | 'project' | 'programming' | 'course' | 'event' | 'scholarship' | 'music' | 'deal' | 'article' | 'general';
+export type ClipType = 'job' | 'education' | 'research' | 'book' | 'project' | 'programming' | 'course' | 'event' | 'scholarship' | 'music' | 'deal' | 'video' | 'vault' | 'article' | 'general';
 
 export type StorageMode = 'cloud' | 'local';
 
-export type GroupByDimension = 'intent' | 'source' | 'type' | 'custom';
+export type GroupByDimension = 'intent' | 'source' | 'type' | 'deadline' | 'custom';
 
 export interface CustomPageConfig {
   id: string;
@@ -93,7 +95,7 @@ export interface ClipItem {
     [key: string]: any;
   };
   isFavorite?: boolean;
-  sourcePlatform?: 'web' | 'x_twitter' | 'linkedin' | 'reddit' | 'youtube' | 'github';
+  sourcePlatform?: 'web' | 'x_twitter' | 'linkedin' | 'reddit' | 'youtube' | 'github' | 'instagram' | 'tiktok' | 'spotify';
   sourceAuthor?: string;
   sourcePostUrl?: string;
   parentClipId?: string;
@@ -101,6 +103,9 @@ export interface ClipItem {
   childClipsCount?: number;
   isResourceHub?: boolean;
   extractedResourceUrl?: string;
+  /** Native bookmark skin payload (see types/clipPlatform.ts). Always present after convertBackendClipToItem. */
+  platformMeta?: PlatformMeta;
+  intent?: string;
 }
 
 export interface JobCard {
