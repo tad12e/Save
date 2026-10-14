@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
 import '../providers/clips_provider.dart';
+import '../screens/settings/clipper_settings_screen.dart' show ConfirmationMode;
 import '../services/api_service.dart';
 import '../services/sharing_service.dart';
 import 'audio_recognition_dialog.dart';
@@ -15,6 +18,8 @@ class SaveClipBottomSheet extends StatefulWidget {
   final String? initialNote;
   final String? platform;
   final bool isExternalShare;
+  final String? confirmationMode;
+  final String? defaultDestinationId;
 
   const SaveClipBottomSheet({
     super.key,
@@ -22,6 +27,8 @@ class SaveClipBottomSheet extends StatefulWidget {
     this.initialNote,
     this.platform,
     this.isExternalShare = false,
+    this.confirmationMode,
+    this.defaultDestinationId,
   });
 
   static Future<void> show(
@@ -30,6 +37,8 @@ class SaveClipBottomSheet extends StatefulWidget {
     String? initialNote,
     String? platform,
     bool isExternalShare = false,
+    String? confirmationMode,
+    String? defaultDestinationId,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -41,6 +50,8 @@ class SaveClipBottomSheet extends StatefulWidget {
         initialNote: initialNote,
         platform: platform,
         isExternalShare: isExternalShare,
+        confirmationMode: confirmationMode,
+        defaultDestinationId: defaultDestinationId,
       ),
     );
   }
@@ -57,7 +68,8 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
   late final TextEditingController _tagController;
   late final TextEditingController _tableController;
   SaveState _saveState = SaveState.idle;
-  String _selectedDestination = '';
+  String _selectedDestination = 'google_sheets';
+  ConfirmationMode _confirmationMode = ConfirmationMode.confirm;
   String? _statusSubtitle;
   String? _saveError;
   String? _savedDestinationName;
@@ -83,29 +95,91 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
     _noteController = TextEditingController(text: widget.initialNote ?? '');
     _tagController = TextEditingController();
     _tableController = TextEditingController();
-    _statusSubtitle = 'Choose a destination and tap Save';
+
+    if (widget.defaultDestinationId != null && widget.defaultDestinationId!.isNotEmpty) {
+      _selectedDestination = widget.defaultDestinationId!;
+    }
+
+    final modeParam = widget.confirmationMode?.toLowerCase();
+    if (modeParam == 'auto') {
+      _confirmationMode = ConfirmationMode.auto;
+      _saveState = SaveState.saving;
+      _statusSubtitle = '⚡ Auto-saving to Clipper…';
+    } else if (modeParam == 'always_ask') {
+      _confirmationMode = ConfirmationMode.alwaysAsk;
+      _showDestPicker = true;
+      _statusSubtitle = 'Select destination and options';
+    } else {
+      _confirmationMode = ConfirmationMode.confirm;
+      _statusSubtitle = 'Choose a destination and tap Save';
+    }
 
     _badgeAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
 
-    // Manual-save like the browser extension: load destinations, wait for tap.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initDestinations());
+    // Fast-path: initialize mode and destinations, auto-saving immediately if in Auto Mode
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initModeAndDestinations());
   }
 
-  Future<void> _initDestinations() async {
+  Future<void> _initModeAndDestinations() async {
     final provider = Provider.of<ClipsProvider>(context, listen: false);
-    if (provider.destinations.isEmpty) {
-      await provider.loadDestinations();
+
+    // 1. If mode or destination weren't passed synchronously, load from SharedPreferences
+    if (widget.confirmationMode == null || widget.defaultDestinationId == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final modeStr = prefs.getString('clipper_confirmation_mode') ?? 'confirm';
+        final savedDefaultDest = prefs.getString('clipper_default_dest_id');
+
+        if (mounted) {
+          setState(() {
+            if (widget.defaultDestinationId == null && savedDefaultDest != null && savedDefaultDest.isNotEmpty) {
+              _selectedDestination = savedDefaultDest;
+            }
+            if (widget.confirmationMode == null) {
+              if (modeStr == 'auto') {
+                _confirmationMode = ConfirmationMode.auto;
+                _saveState = SaveState.saving;
+                _statusSubtitle = '⚡ Auto-saving to ${_getDestinationLabel(_selectedDestination)}…';
+              } else if (modeStr == 'always_ask') {
+                _confirmationMode = ConfirmationMode.alwaysAsk;
+                _showDestPicker = true;
+                _statusSubtitle = 'Select destination and options';
+              } else {
+                _confirmationMode = ConfirmationMode.confirm;
+              }
+            }
+          });
+        }
+      } catch (_) {}
     }
-    if (!mounted) return;
-    setState(() {
-      _selectedDestination = provider.selectedDestinationId.isNotEmpty
-          ? provider.selectedDestinationId
-          : 'google_sheets';
-      _statusSubtitle = 'Choose a destination and tap Save';
-    });
+
+    // 2. Fall back to provider default if not customized
+    if (widget.defaultDestinationId == null && provider.selectedDestinationId.isNotEmpty && mounted) {
+      if (_selectedDestination == 'google_sheets' && provider.selectedDestinationId != 'google_sheets') {
+        setState(() {
+          _selectedDestination = provider.selectedDestinationId;
+        });
+      }
+    }
+
+    // 3. AUTO MODE: Trigger background save immediately with zero extra clicks!
+    if (_confirmationMode == ConfirmationMode.auto) {
+      _handleSaveClip();
+      return;
+    }
+
+    // 4. Background refresh without stalling the sheet
+    provider.loadDestinations().then((_) {
+      if (!mounted) return;
+      setState(() {
+        if (provider.selectedDestinationId.isNotEmpty && widget.defaultDestinationId == null && _selectedDestination == 'google_sheets') {
+          _selectedDestination = provider.selectedDestinationId;
+        }
+      });
+    }).catchError((_) {});
   }
 
   String _hostOf(String raw) {
@@ -161,7 +235,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
     if (!mounted) return;
     if (_rememberDefault) {
       provider.setDestination(destId);
-      await ApiService.setDefaultDestination(destId);
+      ApiService.setDefaultDestination(destId).catchError((_) => false);
     } else {
       provider.setDestination(destId);
     }
@@ -180,13 +254,19 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
       }
     });
 
-    if ((res.ok) && widget.isExternalShare) {
+    if (res.ok) {
       _autoDismissTimer?.cancel();
-      _autoDismissTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted && !_showNotesField && !_showTagsField && !_showDestPicker && !_showDeadlinePicker) {
-          _handleDismiss();
-        }
-      });
+      final dismissDelay = _confirmationMode == ConfirmationMode.auto
+          ? const Duration(milliseconds: 850)
+          : (widget.isExternalShare ? const Duration(milliseconds: 2000) : null);
+
+      if (dismissDelay != null) {
+        _autoDismissTimer = Timer(dismissDelay, () {
+          if (mounted && !_showNotesField && !_showTagsField && !_showDestPicker && !_showDeadlinePicker) {
+            _handleDismiss();
+          }
+        });
+      }
     }
   }
 
@@ -307,7 +387,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
       onTap: _handleDismiss,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        color: Colors.transparent,
+        color: Colors.black.withValues(alpha: 0.45),
         alignment: Alignment.bottomCenter,
         child: GestureDetector(
           onTap: () {
@@ -317,24 +397,24 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           child: Container(
             width: double.infinity,
             constraints: BoxConstraints(
-              maxHeight: mediaQuery.size.height * 0.76,
+              maxHeight: mediaQuery.size.height * 0.88,
             ),
             padding: EdgeInsets.only(
               left: 24,
               right: 24,
               top: 18,
-              bottom: mediaQuery.viewInsets.bottom + 20,
+              bottom: max(mediaQuery.viewInsets.bottom, mediaQuery.padding.bottom) + 16,
             ),
             decoration: const BoxDecoration(
-              color: Color(0xFF11131E), // Deep luxury dark slate from screenshot
+              color: AppTheme.surface, // Clean crisp white surface
               borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
               border: Border(
-                top: BorderSide(color: Color(0xFF272A3A), width: 1.2),
+                top: BorderSide(color: AppTheme.borderSubtle, width: 1.0),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black54,
-                  blurRadius: 30,
+                  color: Colors.black12,
+                  blurRadius: 28,
                   offset: Offset(0, -6),
                 ),
               ],
@@ -376,14 +456,14 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1C1F2E),
+                            color: AppTheme.surfaceMuted,
                             shape: BoxShape.circle,
-                            border: Border.all(color: const Color(0xFF2A2E44)),
+                            border: Border.all(color: AppTheme.borderSubtle),
                           ),
                           child: const Icon(
                             LucideIcons.x,
                             size: 16,
-                            color: Color(0xFF94A3B8),
+                            color: AppTheme.textMuted,
                           ),
                         ),
                       ),
@@ -391,14 +471,42 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                   ),
                   const SizedBox(height: 10),
 
+                  if (_confirmationMode == ConfirmationMode.auto) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFCD34D)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.zap, size: 13, color: Color(0xFFD97706)),
+                          const SizedBox(width: 5),
+                          Text(
+                            '⚡ AUTO MODE ACTIVE • ZERO-CLICK SAVE',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFB45309),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   // ─── 1-Tap Mode Switcher: [Music Sync / Full Clip] ───
                   Container(
                     margin: const EdgeInsets.only(bottom: 14),
                     padding: const EdgeInsets.all(3.5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF191D2C),
+                      color: AppTheme.surfaceMuted,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF282D42)),
+                      border: Border.all(color: AppTheme.borderSubtle),
                     ),
                     child: Row(
                       children: [
@@ -411,12 +519,12 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(vertical: 7.5),
                               decoration: BoxDecoration(
-                                color: !_isMusicSyncMode ? const Color(0xFF2D6A4F) : Colors.transparent,
+                                color: !_isMusicSyncMode ? AppTheme.primaryGreen : Colors.transparent,
                                 borderRadius: BorderRadius.circular(9),
                                 boxShadow: !_isMusicSyncMode
                                     ? [
                                         BoxShadow(
-                                          color: const Color(0xFF2D6A4F).withValues(alpha: 0.4),
+                                          color: AppTheme.primaryGreen.withValues(alpha: 0.3),
                                           blurRadius: 8,
                                           offset: const Offset(0, 2),
                                         ),
@@ -430,7 +538,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                                   Icon(
                                     LucideIcons.bookmarkCheck,
                                     size: 13,
-                                    color: !_isMusicSyncMode ? Colors.white : const Color(0xFF94A3B8),
+                                    color: !_isMusicSyncMode ? Colors.white : AppTheme.textMuted,
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
@@ -438,7 +546,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
-                                      color: !_isMusicSyncMode ? Colors.white : const Color(0xFF94A3B8),
+                                      color: !_isMusicSyncMode ? Colors.white : AppTheme.textMuted,
                                     ),
                                   ),
                                 ],
@@ -457,12 +565,12 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(vertical: 7.5),
                               decoration: BoxDecoration(
-                                color: _isMusicSyncMode ? const Color(0xFF7C3AED) : Colors.transparent,
+                                color: _isMusicSyncMode ? AppTheme.primaryGreen : Colors.transparent,
                                 borderRadius: BorderRadius.circular(9),
                                 boxShadow: _isMusicSyncMode
                                     ? [
                                         BoxShadow(
-                                          color: const Color(0xFF7C3AED).withValues(alpha: 0.4),
+                                          color: AppTheme.primaryGreen.withValues(alpha: 0.3),
                                           blurRadius: 8,
                                           offset: const Offset(0, 2),
                                         ),
@@ -476,7 +584,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                                   Icon(
                                     LucideIcons.music2,
                                     size: 13,
-                                    color: _isMusicSyncMode ? Colors.white : const Color(0xFF94A3B8),
+                                    color: _isMusicSyncMode ? Colors.white : AppTheme.textMuted,
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
@@ -484,7 +592,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
-                                      color: _isMusicSyncMode ? Colors.white : const Color(0xFF94A3B8),
+                                      color: _isMusicSyncMode ? Colors.white : AppTheme.textMuted,
                                     ),
                                   ),
                                 ],
@@ -512,14 +620,14 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                             gradient: const LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [Color(0xFF7C3AED), Color(0xFFA855F7)],
+                              colors: [AppTheme.primaryGreen, AppTheme.primaryGreenLight],
                             ),
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF7C3AED).withValues(alpha: 0.45),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
+                                color: AppTheme.primaryGreen.withValues(alpha: 0.35),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
                               ),
                             ],
                           ),
@@ -548,7 +656,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                   // ─── Title: Saved to Clipper ───
                   Text(
                     _saveState == SaveState.saving
-                        ? 'Saving…'
+                        ? (_confirmationMode == ConfirmationMode.auto ? '⚡ Auto-saving…' : 'Saving…')
                         : _saveState == SaveState.deleted
                             ? 'Removed'
                             : _saveState == SaveState.duplicate
@@ -561,7 +669,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                     style: GoogleFonts.outfit(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppTheme.textPrimary,
                       letterSpacing: 0.2,
                     ),
                   ),
@@ -573,7 +681,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
-                      color: const Color(0xFF94A3B8),
+                      color: AppTheme.textMuted,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -613,87 +721,91 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                     const SizedBox(height: 16),
                   ],
 
+                  // ─── Action Dock (5 Icon Actions: Trash, Tags, Notes, Reminder, Destination) ───
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        // 1. Delete / Trash
+                        _buildDockIcon(
+                          icon: LucideIcons.trash2,
+                          isActive: _saveState == SaveState.deleted,
+                          onTap: _handleDelete,
+                          tooltip: 'Discard',
+                        ),
+                        // 2. Tag
+                        _buildDockIcon(
+                          icon: LucideIcons.tag,
+                          isActive: _showTagsField || _tags.isNotEmpty,
+                          onTap: () {
+                            setState(() {
+                              _showTagsField = !_showTagsField;
+                              _showNotesField = false;
+                              _showDestPicker = false;
+                              _showDeadlinePicker = false;
+                            });
+                          },
+                          tooltip: 'Add Tags',
+                        ),
+                        // 3. Note / Context
+                        _buildDockIcon(
+                          icon: LucideIcons.messageSquare,
+                          isActive: _showNotesField || _noteController.text.isNotEmpty,
+                          onTap: () {
+                            setState(() {
+                              _showNotesField = !_showNotesField;
+                              _showTagsField = false;
+                              _showDestPicker = false;
+                              _showDeadlinePicker = false;
+                            });
+                          },
+                          tooltip: 'Add Note',
+                        ),
+                        // 4. Deadline / Clock
+                        _buildDockIcon(
+                          icon: LucideIcons.clock,
+                          isActive: _showDeadlinePicker || _selectedDeadline != null,
+                          onTap: () {
+                            setState(() {
+                              _showDeadlinePicker = !_showDeadlinePicker;
+                              _showNotesField = false;
+                              _showTagsField = false;
+                              _showDestPicker = false;
+                            });
+                          },
+                          tooltip: 'Set Reminder',
+                        ),
+                        // 5. Destination Drawer
+                        _buildDockIcon(
+                          icon: LucideIcons.archive,
+                          isActive: _showDestPicker,
+                          onTap: () {
+                            setState(() {
+                              _showDestPicker = !_showDestPicker;
+                              _showNotesField = false;
+                              _showTagsField = false;
+                              _showDeadlinePicker = false;
+                            });
+                          },
+                          tooltip: 'Change Destination',
+                        ),
+                      ],
+                    ),
+                  ),
+
                   // "Tap anywhere to dismiss" label
                   Text(
-                    'Tap anywhere to dismiss',
+                    _confirmationMode == ConfirmationMode.auto && _saveState == SaveState.saved
+                        ? 'Closing automatically… (tap to keep open)'
+                        : 'Tap anywhere to dismiss',
                     style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
-                      color: const Color(0xFF64748B),
+                      color: AppTheme.inactiveGrey,
                     ),
                   ),
-                  const SizedBox(height: 20),
-
-                  // ─── Bottom Dock (5 Icon Actions matching screenshot) ───
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // 1. Delete / Trash
-                      _buildDockIcon(
-                        icon: LucideIcons.trash2,
-                        isActive: _saveState == SaveState.deleted,
-                        onTap: _handleDelete,
-                        tooltip: 'Discard',
-                      ),
-                      // 2. Tag
-                      _buildDockIcon(
-                        icon: LucideIcons.tag,
-                        isActive: _showTagsField || _tags.isNotEmpty,
-                        onTap: () {
-                          setState(() {
-                            _showTagsField = !_showTagsField;
-                            _showNotesField = false;
-                            _showDestPicker = false;
-                            _showDeadlinePicker = false;
-                          });
-                        },
-                        tooltip: 'Add Tags',
-                      ),
-                      // 3. Note / Context
-                      _buildDockIcon(
-                        icon: LucideIcons.messageSquare,
-                        isActive: _showNotesField || _noteController.text.isNotEmpty,
-                        onTap: () {
-                          setState(() {
-                            _showNotesField = !_showNotesField;
-                            _showTagsField = false;
-                            _showDestPicker = false;
-                            _showDeadlinePicker = false;
-                          });
-                        },
-                        tooltip: 'Add Note',
-                      ),
-                      // 4. Deadline / Clock
-                      _buildDockIcon(
-                        icon: LucideIcons.clock,
-                        isActive: _showDeadlinePicker || _selectedDeadline != null,
-                        onTap: () {
-                          setState(() {
-                            _showDeadlinePicker = !_showDeadlinePicker;
-                            _showNotesField = false;
-                            _showTagsField = false;
-                            _showDestPicker = false;
-                          });
-                        },
-                        tooltip: 'Set Reminder',
-                      ),
-                      // 5. Destination Drawer
-                      _buildDockIcon(
-                        icon: LucideIcons.archive,
-                        isActive: _showDestPicker,
-                        onTap: () {
-                          setState(() {
-                            _showDestPicker = !_showDestPicker;
-                            _showNotesField = false;
-                            _showTagsField = false;
-                            _showDeadlinePicker = false;
-                          });
-                        },
-                        tooltip: 'Change Destination',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                 ],
               ),
             ),
@@ -717,18 +829,16 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: isActive
-                ? const Color(0xFF7C3AED).withValues(alpha: 0.25)
-                : const Color(0xFF1C1F2E),
+            color: isActive ? AppTheme.primaryGreenBg : AppTheme.surfaceMuted,
             shape: BoxShape.circle,
             border: Border.all(
-              color: isActive ? const Color(0xFF7C3AED) : const Color(0xFF2A2E44),
+              color: isActive ? AppTheme.primaryGreen : AppTheme.borderSubtle,
             ),
           ),
           child: Icon(
             icon,
             size: 15,
-            color: isActive ? const Color(0xFFA78BFA) : const Color(0xFF94A3B8),
+            color: isActive ? AppTheme.primaryGreen : AppTheme.textMuted,
           ),
         ),
       ),
@@ -743,9 +853,9 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF181B28),
+        color: AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2D3249)),
+        border: Border.all(color: AppTheme.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -757,10 +867,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF7C3AED).withValues(alpha: 0.2),
+                  color: AppTheme.primaryGreenBg,
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: const Icon(LucideIcons.link, size: 15, color: Color(0xFFA78BFA)),
+                child: const Icon(LucideIcons.link, size: 15, color: AppTheme.primaryGreen),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -774,7 +884,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -782,7 +892,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                       url.isEmpty ? 'Share a link to preview it here' : url,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+                      style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
                     ),
                   ],
                 ),
@@ -795,10 +905,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                color: AppTheme.primaryGreenBg.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
                 border: const Border(
-                  left: BorderSide(color: Color(0xFF7C3AED), width: 2.5),
+                  left: BorderSide(color: AppTheme.primaryGreen, width: 2.5),
                 ),
               ),
               child: Text(
@@ -808,7 +918,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontStyle: FontStyle.italic,
-                  color: const Color(0xFFCBD5E1),
+                  color: AppTheme.textPrimary,
                 ),
               ),
             ),
@@ -825,18 +935,18 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFF181B28),
+              color: AppTheme.surfaceMuted,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF2D3249)),
+              border: Border.all(color: AppTheme.borderSubtle),
             ),
             child: Row(
               children: [
-                const Icon(LucideIcons.hardDrive, size: 16, color: Color(0xFF8B5CF6)),
+                const Icon(LucideIcons.hardDrive, size: 16, color: AppTheme.primaryGreen),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Save to Vault (No external destination connected)',
-                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
                   ),
                 ),
               ],
@@ -852,15 +962,15 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: const Color(0xFF181B28),
+            color: AppTheme.surfaceMuted,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF2D3249)),
+            border: Border.all(color: AppTheme.borderSubtle),
           ),
           child: Row(
             children: [
               Text(
                 'Saving to:',
-                style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF94A3B8)),
+                style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -868,14 +978,49 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                   child: DropdownButton<String>(
                     value: value,
                     isExpanded: true,
-                    dropdownColor: const Color(0xFF181B28),
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                    icon: const Icon(LucideIcons.chevronDown, size: 16, color: Color(0xFF94A3B8)),
+                    dropdownColor: AppTheme.surface,
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                    icon: const Icon(LucideIcons.chevronDown, size: 16, color: AppTheme.textMuted),
+                    selectedItemBuilder: (context) {
+                      return items.map((d) {
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              d.name,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildBrandIcon(d.provider, size: 16),
+                          ],
+                        );
+                      }).toList();
+                    },
                     items: items.map((d) {
-                      final label = d.name + (d.provider == 'google_sheets' ? ' 📊' : d.provider == 'notion' ? ' 📝' : '');
                       return DropdownMenuItem<String>(
                         value: d.id,
-                        child: Text(label, overflow: TextOverflow.ellipsis),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildBrandIcon(d.provider, size: 16),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                d.name,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       );
                     }).toList(),
                     onChanged: (v) {
@@ -909,7 +1054,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             height: 50,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7C3AED).withValues(alpha: 0.6),
+                backgroundColor: AppTheme.primaryGreen.withValues(alpha: 0.75),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
@@ -925,7 +1070,9 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'Saving to Clipper…',
+                    _confirmationMode == ConfirmationMode.auto
+                        ? '⚡ Auto-saving to Clipper…'
+                        : 'Saving to Clipper…',
                     style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white),
                   ),
                 ],
@@ -939,14 +1086,14 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 13),
             decoration: BoxDecoration(
-              color: const Color(0xFF065F46).withValues(alpha: 0.35),
+              color: AppTheme.primaryGreenBg,
               borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.5)),
+              border: Border.all(color: const Color(0xFF86EFAC)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(LucideIcons.check, size: 16, color: Color(0xFF6EE7B7)),
+                const Icon(LucideIcons.check, size: 16, color: Color(0xFF166534)),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
@@ -954,7 +1101,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                         ? 'Saved — ${_savedDestinationName!}'
                         : 'Saved — processing in background',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF6EE7B7)),
+                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF166534)),
                   ),
                 ),
               ],
@@ -966,19 +1113,19 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             height: 50,
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Color(0xFF2E334D)),
+                foregroundColor: AppTheme.textPrimary,
+                side: const BorderSide(color: AppTheme.borderSubtle),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
               ),
               onPressed: _handleOpenInApp,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(LucideIcons.externalLink, size: 15, color: Colors.white),
+                  const Icon(LucideIcons.externalLink, size: 15, color: AppTheme.textPrimary),
                   const SizedBox(width: 8),
                   Text(
                     'Open in Clipper',
-                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                    style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
                   ),
                 ],
               ),
@@ -991,18 +1138,18 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 13),
             decoration: BoxDecoration(
-              color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+              color: AppTheme.amberAlertBg,
               borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+              border: Border.all(color: AppTheme.borderAmber),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(LucideIcons.circleAlert, size: 16, color: Color(0xFFFBBF24)),
+                const Icon(LucideIcons.circleAlert, size: 16, color: AppTheme.amberAlert),
                 const SizedBox(width: 8),
                 Text(
                   'Already saved previously',
-                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFFFBBF24)),
+                  style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.amberAlert),
                 ),
               ],
             ),
@@ -1013,14 +1160,14 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             height: 50,
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Color(0xFF2E334D)),
+                foregroundColor: AppTheme.textPrimary,
+                side: const BorderSide(color: AppTheme.borderSubtle),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
               ),
               onPressed: _handleOpenInApp,
               child: Text(
                 'Open in Clipper',
-                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
+                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
               ),
             ),
           ),
@@ -1031,20 +1178,20 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
             decoration: BoxDecoration(
-              color: const Color(0xFFDC2626).withValues(alpha: 0.15),
+              color: AppTheme.urgencyRedBg,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.5)),
+              border: Border.all(color: const Color(0xFFFCA5A5)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(LucideIcons.circleAlert, size: 16, color: Color(0xFFFCA5A5)),
+                const Icon(LucideIcons.circleAlert, size: 16, color: AppTheme.urgencyRed),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     _saveError ?? 'Failed to save',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFFFCA5A5)),
+                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.urgencyRed),
                   ),
                 ),
               ],
@@ -1056,7 +1203,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             height: 50,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7C3AED),
+                backgroundColor: AppTheme.primaryGreen,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
@@ -1088,12 +1235,12 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             height: 50,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7C3AED),
+                backgroundColor: AppTheme.primaryGreen,
                 foregroundColor: Colors.white,
                 elevation: 0,
+                shadowColor: AppTheme.primaryGreen.withValues(alpha: 0.3),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(26),
-                  side: const BorderSide(color: Color(0xFF8B5CF6), width: 1.0),
                 ),
               ),
               onPressed: () => _handleSaveClip(),
@@ -1114,14 +1261,29 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             const SizedBox(height: 10),
             Row(
               children: quickDests.take(2).map((d) {
-                final isSheets = d.provider == 'google_sheets';
+                final isSheets = d.provider == 'google_sheets' || d.id == 'google_sheets';
+                final isSpotify = d.provider == 'spotify' || d.id == 'spotify';
                 return Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4.0),
                     child: _buildQuickProviderButton(
                       label: d.name,
-                      emoji: isSheets ? '📊' : '📝',
-                      color: isSheets ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                      iconWidget: _buildBrandIcon(d.provider, size: 16),
+                      bgColor: isSheets
+                          ? AppTheme.primaryGreenBg
+                          : isSpotify
+                              ? const Color(0xFFDCFCE7)
+                              : AppTheme.amberAlertBg,
+                      borderColor: isSheets
+                          ? const Color(0xFF86EFAC)
+                          : isSpotify
+                              ? const Color(0xFF4ADE80)
+                              : AppTheme.borderAmber,
+                      textColor: isSheets
+                          ? const Color(0xFF166534)
+                          : isSpotify
+                              ? const Color(0xFF15803D)
+                              : const Color(0xFF92400E),
                       onTap: () => _handleQuickSaveToProvider(d.provider),
                     ),
                   ),
@@ -1136,7 +1298,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
               height: 48,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF10B981),
+                  backgroundColor: AppTheme.trendGreen,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
@@ -1160,7 +1322,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           Text(
             '💡 Tip: add a note before saving to attach AI context.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B)),
+            style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted),
           ),
         ];
     }
@@ -1168,27 +1330,33 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
 
   Widget _buildQuickProviderButton({
     required String label,
-    required String emoji,
-    required Color color,
+    required Widget iconWidget,
+    required Color bgColor,
+    required Color borderColor,
+    required Color textColor,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
+          color: bgColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
+          border: Border.all(color: borderColor),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 14)),
-            const SizedBox(width: 6),
-            Text(
-              'Save to $label',
-              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+            iconWidget,
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                'Save to $label',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+              ),
             ),
           ],
         ),
@@ -1205,10 +1373,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             width: 20,
             height: 20,
             decoration: BoxDecoration(
-              color: _rememberDefault ? const Color(0xFF7C3AED) : Colors.transparent,
+              color: _rememberDefault ? AppTheme.primaryGreen : AppTheme.surface,
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: _rememberDefault ? const Color(0xFF7C3AED) : const Color(0xFF475569),
+                color: _rememberDefault ? AppTheme.primaryGreen : AppTheme.borderSubtle,
               ),
             ),
             child: _rememberDefault
@@ -1218,7 +1386,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           const SizedBox(width: 8),
           Text(
             'Remember as default destination',
-            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+            style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
           ),
         ],
       ),
@@ -1240,19 +1408,17 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-            color: isActive
-                ? const Color(0xFF7C3AED).withValues(alpha: 0.25)
-                : const Color(0xFF181B28),
+            color: isActive ? AppTheme.primaryGreenBg : AppTheme.surfaceMuted,
             shape: BoxShape.circle,
             border: Border.all(
-              color: isActive ? const Color(0xFF7C3AED) : const Color(0xFF282C40),
-              width: 1.3,
+              color: isActive ? AppTheme.primaryGreen : AppTheme.borderSubtle,
+              width: 1.2,
             ),
           ),
           child: Icon(
             icon,
             size: 19,
-            color: isActive ? const Color(0xFFA78BFA) : const Color(0xFF94A3B8),
+            color: isActive ? AppTheme.primaryGreen : AppTheme.textMuted,
           ),
         ),
       ),
@@ -1263,17 +1429,17 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF181B28),
+        color: AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2D3249)),
+        border: Border.all(color: AppTheme.borderSubtle),
       ),
       child: TextField(
         controller: _noteController,
         autofocus: true,
-        style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+        style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13),
         decoration: InputDecoration(
           hintText: 'Add a thought, highlight, or note…',
-          hintStyle: GoogleFonts.inter(color: const Color(0xFF64748B)),
+          hintStyle: GoogleFonts.inter(color: AppTheme.inactiveGrey),
           border: InputBorder.none,
           isDense: true,
         ),
@@ -1285,9 +1451,9 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF181B28),
+        color: AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2D3249)),
+        border: Border.all(color: AppTheme.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1298,9 +1464,9 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             children: [
               ..._tags.map(
                 (tag) => Chip(
-                  label: Text('#$tag', style: const TextStyle(fontSize: 11, color: Colors.white)),
-                  backgroundColor: const Color(0xFF7C3AED).withValues(alpha: 0.3),
-                  deleteIcon: const Icon(LucideIcons.x, size: 12, color: Colors.white70),
+                  label: Text('#$tag', style: const TextStyle(fontSize: 11, color: Color(0xFF166534))),
+                  backgroundColor: AppTheme.primaryGreenBg,
+                  deleteIcon: const Icon(LucideIcons.x, size: 12, color: Color(0xFF166534)),
                   onDeleted: () => setState(() => _tags.remove(tag)),
                   padding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
@@ -1310,10 +1476,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           ),
           TextField(
             controller: _tagController,
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+            style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13),
             decoration: InputDecoration(
               hintText: 'Type tag and press enter (e.g. ai, jobs)…',
-              hintStyle: GoogleFonts.inter(color: const Color(0xFF64748B)),
+              hintStyle: GoogleFonts.inter(color: AppTheme.inactiveGrey),
               border: InputBorder.none,
               isDense: true,
             ),
@@ -1336,9 +1502,9 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF181B28),
+        color: AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2D3249)),
+        border: Border.all(color: AppTheme.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1350,7 +1516,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Text(
                     'No connected destinations. Clips will save directly to your Vault.',
-                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                    style: GoogleFonts.inter(fontSize: 12, color: AppTheme.textMuted),
                   ),
                 );
               }
@@ -1360,10 +1526,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                 runSpacing: 8,
                 children: items.map((d) {
                   final color = d.provider == 'google_sheets' || d.id == 'google_sheets'
-                      ? const Color(0xFF10B981)
+                      ? const Color(0xFF166534)
                       : d.provider == 'notion' || d.id == 'notion'
-                          ? const Color(0xFFF59E0B)
-                          : const Color(0xFF8B5CF6);
+                          ? const Color(0xFF92400E)
+                          : AppTheme.primaryGreen;
                   final icon = d.provider == 'google_sheets' || d.id == 'google_sheets'
                       ? LucideIcons.table
                       : d.provider == 'notion' || d.id == 'notion'
@@ -1377,10 +1543,10 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
           const SizedBox(height: 10),
           TextField(
             controller: _tableController,
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+            style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13),
             decoration: InputDecoration(
               hintText: 'Target sheet / tab / table (optional)…',
-              hintStyle: GoogleFonts.inter(color: const Color(0xFF64748B)),
+              hintStyle: GoogleFonts.inter(color: AppTheme.inactiveGrey),
               border: InputBorder.none,
               isDense: true,
             ),
@@ -1409,20 +1575,20 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSel ? color.withValues(alpha: 0.2) : Colors.transparent,
+          color: isSel ? AppTheme.primaryGreenBg : AppTheme.surface,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSel ? color : Colors.transparent),
+          border: Border.all(color: isSel ? AppTheme.primaryGreen : AppTheme.borderSubtle),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 14, color: isSel ? color : const Color(0xFF94A3B8)),
+            Icon(icon, size: 14, color: isSel ? AppTheme.primaryGreen : AppTheme.textMuted),
             const SizedBox(width: 6),
             Text(
               label,
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                color: isSel ? color : const Color(0xFF94A3B8),
+                color: isSel ? AppTheme.primaryGreen : AppTheme.textMuted,
               ),
             ),
           ],
@@ -1435,9 +1601,9 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF181B28),
+        color: AppTheme.surfaceMuted,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2D3249)),
+        border: Border.all(color: AppTheme.borderSubtle),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1446,7 +1612,7 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
             _selectedDeadline == null
                 ? 'No deadline set'
                 : 'Deadline: ${_selectedDeadline!.year}-${_selectedDeadline!.month.toString().padLeft(2, '0')}-${_selectedDeadline!.day.toString().padLeft(2, '0')}',
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+            style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13),
           ),
           TextButton(
             onPressed: () async {
@@ -1460,9 +1626,171 @@ class _SaveClipBottomSheetState extends State<SaveClipBottomSheet>
                 setState(() => _selectedDeadline = picked);
               }
             },
-            child: const Text('Pick Date', style: TextStyle(color: Color(0xFFA78BFA))),
+            child: const Text('Pick Date', style: TextStyle(color: AppTheme.primaryGreen, fontWeight: FontWeight.w600)),
           ),
         ],
+      ),
+    );
+  }
+
+  static Widget _buildBrandIcon(String provider, {double size = 18}) {
+    final p = provider.toLowerCase();
+    if (p.contains('sheets') || p.contains('google')) {
+      return GoogleSheetsBrandIcon(size: size);
+    }
+    if (p.contains('spotify')) {
+      return SpotifyBrandIcon(size: size);
+    }
+    if (p.contains('notion')) {
+      return NotionBrandIcon(size: size);
+    }
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: AppTheme.primaryGreen,
+        borderRadius: BorderRadius.circular(size * 0.22),
+      ),
+      child: Icon(LucideIcons.hardDrive, size: size * 0.6, color: Colors.white),
+    );
+  }
+}
+
+/// Authentic Google Sheets brand icon: emerald green document with white spreadsheet cells grid
+class GoogleSheetsBrandIcon extends StatelessWidget {
+  final double size;
+  const GoogleSheetsBrandIcon({super.key, this.size = 18});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F9D58), // Official Google Sheets Green
+        borderRadius: BorderRadius.circular(size * 0.22),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F9D58).withValues(alpha: 0.35),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(size * 0.16),
+      child: CustomPaint(
+        painter: _GoogleSheetsPainter(),
+      ),
+    );
+  }
+}
+
+class _GoogleSheetsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    // Draw spreadsheet grid cells (2 columns x 3 rows)
+    final cellW = (size.width - 1.5) / 2.0;
+    final cellH = (size.height - 2.0) / 3.0;
+
+    for (int r = 0; r < 3; r++) {
+      for (int c = 0; c < 2; c++) {
+        final rect = Rect.fromLTWH(
+          c * (cellW + 1.5),
+          r * (cellH + 1.0),
+          cellW,
+          cellH,
+        );
+        canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(0.8)), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Authentic Spotify brand icon: Spotify green circle with curved wave arcs
+class SpotifyBrandIcon extends StatelessWidget {
+  final double size;
+  const SpotifyBrandIcon({super.key, this.size = 18});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1DB954), // Spotify Green
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1DB954).withValues(alpha: 0.35),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(size * 0.18),
+      child: CustomPaint(
+        painter: _SpotifyWavesPainter(),
+      ),
+    );
+  }
+}
+
+class _SpotifyWavesPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF121212)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = size.width * 0.16;
+
+    final cx = size.width * 0.46;
+    final r1 = Rect.fromCircle(center: Offset(cx, size.height * 1.05), radius: size.width * 0.72);
+    final r2 = Rect.fromCircle(center: Offset(cx, size.height * 1.05), radius: size.width * 0.52);
+    final r3 = Rect.fromCircle(center: Offset(cx, size.height * 1.05), radius: size.width * 0.32);
+
+    canvas.drawArc(r1, -pi * 0.78, pi * 0.44, false, paint);
+    paint.strokeWidth = size.width * 0.14;
+    canvas.drawArc(r2, -pi * 0.78, pi * 0.40, false, paint);
+    paint.strokeWidth = size.width * 0.12;
+    canvas.drawArc(r3, -pi * 0.78, pi * 0.36, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Authentic Notion brand icon: Clean white tile with stylized 'N'
+class NotionBrandIcon extends StatelessWidget {
+  final double size;
+  const NotionBrandIcon({super.key, this.size = 18});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(size * 0.22),
+        border: Border.all(color: Colors.black12, width: 0.8),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        'N',
+        style: GoogleFonts.outfit(
+          fontSize: size * 0.65,
+          fontWeight: FontWeight.w900,
+          color: Colors.black,
+          height: 1.0,
+        ),
       ),
     );
   }
