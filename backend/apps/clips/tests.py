@@ -254,3 +254,76 @@ class ClipDeadlineHierarchyAndMetadataTestCase(TestCase):
         self.assertEqual(created_clip.extra_metadata.get('target_table_name'), 'My Clips')
 
 
+class VectorSimilarityEngineTestCase(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email='vector_tester@save.app',
+            name='Vector Tester',
+            password='password123'
+        )
+        # Create 768-dimensional test vectors
+        self.vec1 = [1.0 if i == 0 else 0.0 for i in range(768)]
+        self.vec2 = [0.8 if i == 0 else (0.6 if i == 1 else 0.0) for i in range(768)]
+        self.vec_orthogonal = [1.0 if i == 100 else 0.0 for i in range(768)]
+
+        self.clip1 = Clip.objects.create(
+            user=self.user,
+            url='https://example.com/ai-vector-1',
+            url_hash='hash_ai_1',
+            title='AI Vector Search',
+            summary='Database vector indexing with pgvector',
+            embedding=self.vec1,
+            status=Clip.STATUS_DONE,
+        )
+        self.clip2 = Clip.objects.create(
+            user=self.user,
+            url='https://example.com/ai-vector-2',
+            url_hash='hash_ai_2',
+            title='Orthogonal Topic',
+            summary='Something completely different',
+            embedding=self.vec_orthogonal,
+            status=Clip.STATUS_DONE,
+        )
+
+    def test_search_similar_clips_empty_query(self):
+        from apps.clips.services.similarity import VectorSimilarityEngine
+        results = VectorSimilarityEngine.search_similar_clips(self.user, [])
+        self.assertEqual(results, [])
+
+    def test_search_similar_clips_finds_match(self):
+        from apps.clips.services.similarity import VectorSimilarityEngine
+        results = VectorSimilarityEngine.search_similar_clips(
+            self.user,
+            query_vector=self.vec1,
+            threshold=0.5,
+            limit=5,
+        )
+        self.assertTrue(len(results) >= 1)
+        # The top result should be clip1 with high similarity
+        top = results[0]
+        self.assertEqual(top['id'], str(self.clip1.id))
+        self.assertGreaterEqual(top['similarity_score'], 0.9)
+
+    def test_find_best_match(self):
+        from apps.clips.services.similarity import VectorSimilarityEngine
+        best_clip, score = VectorSimilarityEngine.find_best_match(
+            self.user,
+            query_vector=self.vec1,
+            threshold=0.7,
+        )
+        self.assertIsNotNone(best_clip)
+        self.assertEqual(best_clip['id'], str(self.clip1.id))
+        self.assertGreaterEqual(score, 0.9)
+
+    def test_find_best_match_below_threshold(self):
+        from apps.clips.services.similarity import VectorSimilarityEngine
+        # Querying with a vector very different and requiring threshold 0.99
+        best_clip, score = VectorSimilarityEngine.find_best_match(
+            self.user,
+            query_vector=self.vec2,
+            threshold=0.99,
+        )
+        self.assertIsNone(best_clip)
+
+
+
