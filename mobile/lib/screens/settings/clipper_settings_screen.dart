@@ -191,6 +191,11 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       _confirmationMode = ConfirmationMode.confirm;
     }
 
+    final savedDestId = prefs.getString('clipper_default_dest_id');
+    if (savedDestId != null && savedDestId.isNotEmpty) {
+      _defaultDestId = savedDestId;
+    }
+
     _isPrivacyMode = prefs.getBool('clipper_privacy_mode') ?? false;
     _musicProvider = prefs.getString('clipper_music_provider') ?? 'spotify';
     _musicPlaylist = prefs.getString('clipper_music_playlist') ?? 'default';
@@ -227,6 +232,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
           _confirmationMode = m == 'auto'
               ? ConfirmationMode.auto
               : (m == 'always_ask' ? ConfirmationMode.alwaysAsk : ConfirmationMode.confirm);
+          await prefs.setString('clipper_confirmation_mode', m);
         }
         if (backendSettings['privacy_mode'] != null) {
           _isPrivacyMode = backendSettings['privacy_mode'] == true;
@@ -265,6 +271,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
         }
         if (backendSettings['default_destination'] != null && backendSettings['default_destination'].toString().isNotEmpty) {
           _defaultDestId = backendSettings['default_destination'].toString();
+          await prefs.setString('clipper_default_dest_id', _defaultDestId);
         }
         if (backendSettings['category_rules'] is Map) {
           final loadedRules = (backendSettings['category_rules'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()));
@@ -299,7 +306,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       }
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api/destinations/'), headers: headers)
+          .get(Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/'), headers: headers)
           .timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
@@ -311,18 +318,22 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
               .toList();
 
           _destinations = loaded;
-          final defaultItem = loaded.firstWhere(
-            (d) => d.isDefault,
-            orElse: () => loaded.first,
-          );
-          _defaultDestId = defaultItem.id;
+          if (_defaultDestId.isEmpty || !loaded.any((d) => d.id == _defaultDestId)) {
+            final defaultItem = loaded.firstWhere(
+              (d) => d.isDefault,
+              orElse: () => loaded.first,
+            );
+            _defaultDestId = defaultItem.id;
+          }
           return;
         }
       }
     } catch (_) {}
 
     _destinations = [];
-    _defaultDestId = '';
+    if (_defaultDestId.isEmpty) {
+      _defaultDestId = 'google_sheets';
+    }
   }
 
   Future<void> _fetchCategoryRulesFromBackend() async {
@@ -335,7 +346,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       }
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api/destinations/category-rules/'), headers: headers)
+          .get(Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/category-rules/'), headers: headers)
           .timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
@@ -361,7 +372,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       }
 
       final response = await http
-          .get(Uri.parse('$baseUrl/api/destinations/spotify/playlists/'), headers: headers)
+          .get(Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/spotify/playlists/'), headers: headers)
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
@@ -405,7 +416,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
 
       final response = await http
           .get(
-            Uri.parse('$baseUrl/api/destinations/spotify/search/?q=${Uri.encodeComponent(clean)}&limit=6'),
+            Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/spotify/search/?q=${Uri.encodeComponent(clean)}&limit=6'),
             headers: headers,
           )
           .timeout(const Duration(seconds: 6));
@@ -448,7 +459,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
 
       await http
           .post(
-            Uri.parse('$baseUrl/api/destinations/spotify/add-track/'),
+            Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/spotify/add-track/'),
             headers: headers,
             body: jsonEncode({
               'playlist_id': _musicPlaylist,
@@ -576,7 +587,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                         }
 
                         final res = await http.post(
-                          Uri.parse('$baseUrl/api/destinations/spotify/playlists/'),
+                          Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/spotify/playlists/'),
                           headers: headers,
                           body: jsonEncode({
                             'name': name,
@@ -719,7 +730,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                   headers['Authorization'] = 'Bearer $token';
                 }
                 await http.post(
-                  Uri.parse('$baseUrl/api/destinations/set-music-provider/'),
+                  Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/set-music-provider/'),
                   headers: headers,
                   body: jsonEncode({'provider': target}),
                 );
@@ -758,7 +769,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
       }
 
       final res = await http.post(
-        Uri.parse('$baseUrl/api/destinations/authorize/'),
+        Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/authorize/'),
         headers: headers,
         body: jsonEncode({
           'provider': 'spotify',
@@ -861,17 +872,17 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     try {
       if (_defaultDestId.isNotEmpty && _defaultDestId != 'vault') {
         http.post(
-          Uri.parse('$baseUrl/api/destinations/$_defaultDestId/set-default/'),
+          Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/$_defaultDestId/set-default/'),
           headers: headers,
         );
       }
       http.post(
-        Uri.parse('$baseUrl/api/destinations/category-rules/'),
+        Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/category-rules/'),
         headers: headers,
         body: jsonEncode({'rules': _categoryRules}),
       );
       http.post(
-        Uri.parse('$baseUrl/api/destinations/set-music-provider/'),
+        Uri.parse('$baseUrl${ApiService.apiVersion}/destinations/set-music-provider/'),
         headers: headers,
         body: jsonEncode({'provider': _musicProvider}),
       );
@@ -1435,6 +1446,25 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
     );
   }
 
+  void _setConfirmationMode(ConfirmationMode mode) {
+    setState(() => _confirmationMode = mode);
+    final modeStr = mode == ConfirmationMode.auto
+        ? 'auto'
+        : (mode == ConfirmationMode.alwaysAsk ? 'always_ask' : 'confirm');
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('clipper_confirmation_mode', modeStr);
+    }).catchError((_) {});
+    ApiService.updateUserSettings({'confirmation_mode': modeStr}).catchError((_) => null);
+  }
+
+  void _setDefaultDestination(String id) {
+    setState(() => _defaultDestId = id);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('clipper_default_dest_id', id);
+    }).catchError((_) {});
+    ApiService.updateUserSettings({'default_destination': id}).catchError((_) => null);
+  }
+
   Widget _buildModeOption({
     required ConfirmationMode mode,
     required String title,
@@ -1444,7 +1474,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
   }) {
     final isSelected = _confirmationMode == mode;
     return GestureDetector(
-      onTap: () => setState(() => _confirmationMode = mode),
+      onTap: () => _setConfirmationMode(mode),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -1465,7 +1495,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                 groupValue: _confirmationMode,
                 activeColor: tagColor,
                 onChanged: (val) {
-                  if (val != null) setState(() => _confirmationMode = val);
+                  if (val != null) _setConfirmationMode(val);
                 },
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
@@ -1578,7 +1608,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
           return Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
             child: GestureDetector(
-              onTap: () => setState(() => _defaultDestId = dest.id),
+              onTap: () => _setDefaultDestination(dest.id),
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -1596,7 +1626,7 @@ class _ClipperSettingsScreenState extends State<ClipperSettingsScreen> {
                       groupValue: _defaultDestId,
                       activeColor: const Color(0xFF2D6A4F),
                       onChanged: (val) {
-                        if (val != null) setState(() => _defaultDestId = val);
+                        if (val != null) _setDefaultDestination(val);
                       },
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),

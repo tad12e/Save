@@ -1194,6 +1194,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
     // 1. Available intents for the toolbar
     const intentTabs = [
       {'id': 'all', 'label': 'All'},
+      {'id': 'watch', 'label': 'Watch'},
       {'id': 'apply', 'label': 'Apply'},
       {'id': 'learn', 'label': 'Learn'},
       {'id': 'track', 'label': 'Track'},

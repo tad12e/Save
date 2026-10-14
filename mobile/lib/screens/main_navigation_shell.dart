@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/theme.dart';
+import '../providers/clips_provider.dart';
 import '../widgets/custom_bottom_nav_bar.dart';
 import '../widgets/floating_audio_bubble.dart';
 import '../widgets/save_clip_bottom_sheet.dart';
@@ -25,6 +27,14 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   void initState() {
     super.initState();
     _loadBubblePreference();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final provider = Provider.of<ClipsProvider>(context, listen: false);
+        if (provider.allClips.isEmpty && !provider.isLoading) {
+          provider.loadClips();
+        }
+      }
+    });
   }
 
   Future<void> _loadBubblePreference() async {
@@ -40,6 +50,12 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     setState(() {
       _selectedIndex = index;
     });
+    if (index == 0 || index == 2) {
+      final provider = Provider.of<ClipsProvider>(context, listen: false);
+      if (provider.allClips.isEmpty && !provider.isLoading) {
+        provider.loadClips();
+      }
+    }
   }
 
   void _openSaveBottomSheet() {

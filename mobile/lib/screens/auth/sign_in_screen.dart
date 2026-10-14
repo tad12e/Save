@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/clips_provider.dart';
 import '../main_navigation_shell.dart';
 import '../settings/server_settings_modal.dart';
 import 'otp_verification_screen.dart';
@@ -44,6 +45,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
     if (mounted) {
       if (success) {
+        Provider.of<ClipsProvider>(context, listen: false).loadClips();
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const MainNavigationShell()),
           (route) => false,
