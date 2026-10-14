@@ -31,6 +31,7 @@ urlpatterns = [
     path('spotify/search/', SpotifySearchTrackView.as_view(), name='spotify-search-track'),
     path('<uuid:destination_id>/', DestinationDetailView.as_view(), name='destination-detail'),
     path('<uuid:destination_id>/set-default/', DestinationSetDefaultView.as_view(), name='destination-set-default'),
+    path('<uuid:destination_id>/set_default/', DestinationSetDefaultView.as_view(), name='destination-set-default-underscore'),
     path('<uuid:destination_id>/test/', DestinationTestPingView.as_view(), name='destination-test-ping'),
     path('<uuid:destination_id>/beautify/', DestinationBeautifySheetView.as_view(), name='destination-beautify'),
 ]

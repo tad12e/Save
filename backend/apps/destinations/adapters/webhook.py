@@ -16,6 +16,7 @@ import uuid
 from django.utils import timezone
 
 from .base import BaseDestinationAdapter, ExportResult
+from apps.clips.services.url import is_safe_public_url
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,13 @@ class WebhookAdapter(BaseDestinationAdapter):
             return ExportResult(
                 success=False,
                 error="Webhook destination is missing a valid HTTP/HTTPS endpoint_url in its configuration.",
+            )
+
+        if not is_safe_public_url(endpoint_url):
+            logger.warning("SSRF protection: Webhook export blocked for restricted internal endpoint: %s", endpoint_url)
+            return ExportResult(
+                success=False,
+                error="Webhook destination endpoint URL points to a restricted or non-public address.",
             )
 
         config = destination.config or {}
@@ -142,6 +150,13 @@ class WebhookAdapter(BaseDestinationAdapter):
             return {
                 'success': False,
                 'error': 'Missing or invalid endpoint URL in destination configuration.',
+            }
+
+        if not is_safe_public_url(endpoint_url):
+            logger.warning("SSRF protection: Webhook ping blocked for restricted internal endpoint: %s", endpoint_url)
+            return {
+                'success': False,
+                'error': 'Webhook destination endpoint URL points to a restricted or non-public address.',
             }
 
         config = destination.config or {}

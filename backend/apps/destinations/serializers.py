@@ -1,5 +1,8 @@
+import logging
 from rest_framework import serializers
 from .models import Destination, DestinationSyncLog
+
+logger = logging.getLogger(__name__)
 
 
 class DestinationSerializer(serializers.ModelSerializer):
@@ -127,8 +130,8 @@ class DestinationSyncLogSerializer(serializers.ModelSerializer):
                     validated_data['destination'] = dest
                     if not validated_data.get('destination_name'):
                         validated_data['destination_name'] = dest.name
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("DestinationSyncLog: failed to lookup destination by ID %r: %s", dest_id, exc)
 
         # Support clipId or clip_id
         clip_id = validated_data.pop('clip_id', None) or initial.get('clipId') or initial.get('clip_id')
@@ -139,8 +142,8 @@ class DestinationSyncLogSerializer(serializers.ModelSerializer):
                     validated_data['clip'] = clip
                     if not validated_data.get('clip_title'):
                         validated_data['clip_title'] = getattr(clip, 'title', '')
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("DestinationSyncLog: failed to lookup clip by ID %r: %s", clip_id, exc)
 
         if 'clipTitle' in initial and not validated_data.get('clip_title'):
             validated_data['clip_title'] = str(initial['clipTitle'])
@@ -149,8 +152,8 @@ class DestinationSyncLogSerializer(serializers.ModelSerializer):
         if 'durationMs' in initial and 'duration_ms' not in validated_data:
             try:
                 validated_data['duration_ms'] = int(initial['durationMs'])
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as exc:
+                logger.warning("DestinationSyncLog: invalid durationMs %r: %s", initial.get('durationMs'), exc)
         if 'payloadSize' in initial and not validated_data.get('payload_size'):
             validated_data['payload_size'] = str(initial['payloadSize'])
 

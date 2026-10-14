@@ -1,7 +1,9 @@
 import logging
 import os
+import secrets
 import urllib.parse
 from django.conf import settings
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -174,7 +176,15 @@ class DestinationAuthorizeView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         user = request.user
-        state_str = urllib.parse.quote(f"user_{user.id}:{access_type}")
+        
+        # Generate cryptographically secure single-use state nonce stored in Redis/cache
+        oauth_nonce = secrets.token_urlsafe(32)
+        cache.set(f"oauth_state:{oauth_nonce}", {
+            'user_id': str(user.id),
+            'access_type': access_type,
+            'provider': provider,
+        }, timeout=600)
+        state_str = urllib.parse.quote(oauth_nonce)
 
         if provider == 'google_sheets':
             client_id = os.getenv('GOOGLE_CLIENT_ID', getattr(settings, 'GOOGLE_CLIENT_ID', ''))
@@ -474,21 +484,22 @@ class GoogleOAuthCallbackView(APIView):
                 refresh_token = tokens.get('refresh_token')
                 expires_in = tokens.get('expires_in')
 
-                user = request.user if (request.user and request.user.is_authenticated) else None
-                state = request.query_params.get('state', '')
-                if not user and state and state.startswith('user_'):
-                    try:
-                        uid = state.split(':')[0].replace('user_', '')
-                        user = User.objects.filter(pk=uid).first()
-                        if not user:
-                            logger.warning("Google Sheets OAuth with unknown user state %r", state)
-                            return self.frontend_redirect('oauth_error=invalid_state')
-                    except Exception as exc:
-                        logger.warning("Google Sheets OAuth with invalid state %r: %s", state, exc)
-                        return self.frontend_redirect('oauth_error=invalid_state')
+                state = request.query_params.get('state', '').strip()
+                cached_state = cache.get(f"oauth_state:{state}") if state else None
+                if cached_state and state:
+                    cache.delete(f"oauth_state:{state}")
 
-                dest_filter = {'user': user, 'provider': 'google_sheets'} if user else {'provider': 'google_sheets'}
-                dest = Destination.objects.filter(**dest_filter).first()
+                user = request.user if (request.user and request.user.is_authenticated) else None
+                if not user and cached_state:
+                    uid = cached_state.get('user_id')
+                    if uid:
+                        user = User.objects.filter(pk=uid).first()
+
+                if not user:
+                    logger.warning("Google Sheets OAuth callback with invalid, expired, or missing state nonce %r", state)
+                    return self.frontend_redirect('oauth_error=invalid_or_expired_state')
+
+                dest = Destination.objects.filter(user=user, provider='google_sheets').first()
                 if not dest:
                     dest = Destination.objects.create(
                         user=user,
@@ -582,9 +593,22 @@ class SpotifyOAuthCallbackView(APIView):
                     logger.warning("Spotify profile fetch failed, saving tokens without profile: %s", p_err)
                     profile_error = 'profile_fetch_failed'
 
+                state = request.query_params.get('state', '').strip()
+                cached_state = cache.get(f"oauth_state:{state}") if state else None
+                if cached_state and state:
+                    cache.delete(f"oauth_state:{state}")
+
                 user = request.user if (request.user and request.user.is_authenticated) else None
-                dest_filter = {'user': user, 'provider': 'spotify'} if user else {'provider': 'spotify'}
-                dest = Destination.objects.filter(**dest_filter).first()
+                if not user and cached_state:
+                    uid = cached_state.get('user_id')
+                    if uid:
+                        user = User.objects.filter(pk=uid).first()
+
+                if not user:
+                    logger.warning("Spotify OAuth callback with invalid, expired, or missing state nonce %r", state)
+                    return self.frontend_redirect('oauth_error=invalid_or_expired_state')
+
+                dest = Destination.objects.filter(user=user, provider='spotify').first()
                 if not dest:
                     dest = Destination.objects.create(
                         user=user,

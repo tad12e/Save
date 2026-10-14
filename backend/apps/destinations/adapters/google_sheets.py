@@ -311,8 +311,8 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                 rows = data.get('values', [])
                 if rows and len(rows[0]) > 0:
                     return [clean_text(str(h)) for h in rows[0]]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Google Sheets: failed to read tab headers for %s (%s): %s", spreadsheet_id, tab_name, exc)
         return []
 
     def _ensure_category_tab(
@@ -353,8 +353,8 @@ class GoogleSheetsAdapter(BaseDestinationAdapter):
                     if tab_name in titles:
                         existing_headers = self._get_existing_tab_headers(spreadsheet_id, tok, tab_name)
                         return True, tok, existing_headers or headers_to_write
-                except Exception:
-                    pass
+                except Exception as retry_exc:
+                    logger.warning("Google Sheets: failed to query sheet titles after token refresh for %s: %s", spreadsheet_id, retry_exc)
 
         # Tab does not exist -> Create tab via batchUpdate
         add_sheet_payload = {
