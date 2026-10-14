@@ -137,6 +137,15 @@ def process_clip(self, clip_id: str):
             'source_type': 'github_repo',
         })
         clip.extra_metadata = extra
+        clip.set_platform_meta({
+            'owner': repo_info['owner'],
+            'repo': repo_info['repo'],
+            'stars': repo_meta.get('stars', 0),
+            'language': repo_meta.get('language', 'Code'),
+            'forks': repo_meta.get('forks', 0),
+            'license': repo_meta.get('license', 'Open Source'),
+            'topics': repo_meta.get('topics', []),
+        })
         clip.status = Clip.STATUS_DONE
 
         # Generate embedding for repository BEFORE the save, so metadata +
@@ -164,6 +173,11 @@ def process_clip(self, clip_id: str):
             logger.warning('Embedding generation for repo clip %s failed: %s', clip.id, embed_exc)
 
         clip.save(update_fields=repo_update_fields)
+        try:
+            from apps.clips.views import invalidate_user_clips_feed_cache
+            invalidate_user_clips_feed_cache(clip.user_id)
+        except Exception as exc:
+            logger.warning('Failed to invalidate feed cache for repo clip %s (user %s): %s', clip.id, clip.user_id, exc)
 
         # Export normal repo clip
         destination = clip.destination or get_user_destination(clip.user)
@@ -175,8 +189,10 @@ def process_clip(self, clip_id: str):
         metadata = extract_clip_metadata(clip)
         clip.title = metadata.get('title') or clip.url
         clip.summary = metadata.get('summary') or ''
-        clip.content_type = metadata.get('content_type') or 'webpage'
-        if not clip.intent or clip.intent == 'other':
+        clip.content_type = metadata.get('content_type') or clip.content_type or 'webpage'
+        if metadata.get('intent') and metadata['intent'] != 'other':
+            clip.intent = metadata['intent']
+        elif not clip.intent or clip.intent == 'other':
             clip.intent = metadata.get('intent') or 'other'
         # Preserve and merge user tags with AI extracted tags
         user_tags = clip.tags or []
@@ -202,6 +218,18 @@ def process_clip(self, clip_id: str):
         if metadata.get('dynamic_row'):
             extra['dynamic_row'] = metadata['dynamic_row']
         clip.extra_metadata = extra
+
+        if metadata.get('platform_meta'):
+            clip.set_platform_meta(metadata['platform_meta'])
+        elif not (clip.extra_metadata or {}).get('platform_meta'):
+            from apps.clips.services.platform_enrich import enrich_platform_meta
+            meta = enrich_platform_meta(
+                url=clip.url,
+                source_platform=clip.source_platform,
+                text=clip.raw_content or clip.selected_text or '',
+            )
+            clip.set_platform_meta(meta)
+
         clip.raw_content = metadata.get('raw_content') or clip.raw_content or ''
 
         # Save AI-extracted deadline and music embed URL
@@ -245,8 +273,8 @@ def process_clip(self, clip_id: str):
                     parts = deadline_str.split('-')
                     clip.deadline_date = date_type(int(parts[0]), int(parts[1]), int(parts[2]))
                     update_fields.append('deadline_date')
-                except (ValueError, IndexError):
-                    pass
+                except (ValueError, IndexError) as parse_err:
+                    logger.warning("Failed parsing deadline string %r for clip %s: %s", deadline_str, clip.id, parse_err)
 
         music_url = metadata.get('music_embed_url')
         if music_url:
@@ -269,6 +297,11 @@ def process_clip(self, clip_id: str):
 
         clip.status = Clip.STATUS_DONE
         clip.save(update_fields=update_fields)
+        try:
+            from apps.clips.views import invalidate_user_clips_feed_cache
+            invalidate_user_clips_feed_cache(clip.user_id)
+        except Exception as exc:
+            logger.warning('Failed to invalidate feed cache for clip %s (user %s): %s', clip.id, clip.user_id, exc)
         logger.info(
             'Clip %s processed successfully (platform=%s, author=%s, type=%s).',
             clip.id,
@@ -414,37 +447,48 @@ def process_github_list_repo(self, clip_id: str):
             clip.save(update_fields=['status', 'title', 'summary', 'extra_metadata'])
             return
 
-        # STEP 4: Save each resource as a separate Clip record
-        saved_count = 0
-        skipped_count = 0
-
-        for idx, r in enumerate(resources):
-            # url_hash incorporates normalized tool URL + child clip marker
+        # STEP 4: Save each resource as a separate Clip record in batch
+        candidate_hashes = []
+        resource_map = {}
+        for r in resources:
             norm_tool_url = normalise_url(r['url'])
             u_hash = hash_url(f"{norm_tool_url}||child_{clip.id}_{r['position']}")
+            candidate_hashes.append(u_hash)
+            resource_map[u_hash] = r
 
-            child_clip, created = Clip.objects.get_or_create(
-                user=clip.user,
-                url_hash=u_hash,
-                defaults={
-                    'parent_clip': clip,
-                    'url': r['url'],  # Actual tool website URL (NOT GitHub URL)
-                    'title': r['name'][:512],
-                    'summary': r['description'],
-                    'selected_text': r['description'],
-                    'content_type': r['content_type'],  # Usually 'tool'
-                    'intent': 'build',
-                    'tags': [
+        # 1 Single Query: Find existing hashes
+        existing_hashes = set(
+            Clip.objects.filter(user=clip.user, url_hash__in=candidate_hashes)
+            .values_list('url_hash', flat=True)
+        )
+
+        # Prepare new Clip models in memory
+        new_clips = []
+        for u_hash, r in resource_map.items():
+            if u_hash in existing_hashes:
+                continue
+            new_clips.append(
+                Clip(
+                    user=clip.user,
+                    url_hash=u_hash,
+                    parent_clip=clip,
+                    url=r['url'],
+                    title=r['name'][:512],
+                    summary=r['description'],
+                    selected_text=r['description'],
+                    content_type=r['content_type'],
+                    intent='build',
+                    tags=[
                         r['content_type'],
                         r['pricing'],
                         clean_text(r['section']).lower()[:30],
                     ],
-                    'status': Clip.STATUS_DONE,
-                    'source_platform': Clip.PLATFORM_GITHUB,
-                    'source_author': r['source_repo'],
-                    'source_post_url': r['source_url'],  # Original GitHub URL
-                    'destination': clip.destination,
-                    'extra_metadata': {
+                    status=Clip.STATUS_DONE,
+                    source_platform=Clip.PLATFORM_GITHUB,
+                    source_author=r['source_repo'],
+                    source_post_url=r['source_url'],
+                    destination=clip.destination,
+                    extra_metadata={
                         'section': r['section'],
                         'pricing': r['pricing'],
                         'position': r['position'],
@@ -452,19 +496,19 @@ def process_github_list_repo(self, clip_id: str):
                         'source_url': r['source_url'],
                         'source_type': 'github_list',
                     },
-                },
+                )
             )
 
-            if created:
-                saved_count += 1
-            else:
-                skipped_count += 1
+        # 1 Single Query: Batch insert all new tools
+        if new_clips:
+            Clip.objects.bulk_create(new_clips)
 
-            # Update progress periodically so frontend can display status
-            if (idx + 1) % 25 == 0 or (idx + 1) == total_found:
-                clip.extra_metadata['processed'] = idx + 1
-                clip.extra_metadata['current'] = f'Saving tools ({idx + 1}/{total_found})...'
-                clip.save(update_fields=['extra_metadata'])
+        saved_count = len(new_clips)
+        skipped_count = len(resources) - saved_count
+
+        clip.extra_metadata['processed'] = total_found
+        clip.extra_metadata['current'] = f'Saved {saved_count} tools.'
+        clip.save(update_fields=['extra_metadata'])
 
         # STEP 5: Batch export all resources to Google Sheets (Tools tab)
         destination = clip.destination or get_user_destination(clip.user)

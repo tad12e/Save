@@ -38,10 +38,36 @@ if DEBUG:
             ALLOWED_HOSTS.append(dev_host)
 
 # ---------------------------------------------------------------------------
-# CORS Configuration
+# CORS & CSRF Configuration
 # ---------------------------------------------------------------------------
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
+
+raw_cors = os.getenv('CORS_ALLOWED_ORIGINS', '')
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in raw_cors.split(',') if origin.strip()]
+
+frontend_url = os.getenv('FRONTEND_URL', '').strip()
+if frontend_url and frontend_url not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(frontend_url)
+
+if DEBUG:
+    for default_origin in [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3001',
+        'http://localhost:3005',
+    ]:
+        if default_origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(default_origin)
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^chrome-extension://.*$',
+    r'^moz-extension://.*$',
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin for origin in CORS_ALLOWED_ORIGINS if origin.startswith(('http://', 'https://'))
+]
 
 
 # Application definition
@@ -132,6 +158,7 @@ DATABASES = {
         'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
         'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
         'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        'CONN_MAX_AGE': int(os.getenv('CONN_MAX_AGE', '600')),
     }
 }
 

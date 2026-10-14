@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/v1/clips/', include('apps.clips.urls')),
     path('api/v1/destinations/', include('apps.destinations.urls')),
     path('api/v1/analytics/', include('apps.analytics.urls')),
+    path('api/v1/dashboard/', include(('apps.analytics.urls', 'dashboard-v1'), namespace='dashboard-v1')),
     # Legacy aliases
     path('api/auth/', include(('apps.users.urls', 'users-legacy'), namespace='users-legacy')),
     path('api/users/', include(('apps.users.urls', 'users-legacy-2'), namespace='users-legacy-2')),
