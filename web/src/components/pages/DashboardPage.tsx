@@ -245,7 +245,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
   const reduceMotion = useReducedMotion();
   const enter = reduceMotion ? { duration: 0 } : { ...SPRING };
 
-  const userName = currentUser?.name?.split(' ')[0] || dashboardData?.user?.name?.split(' ')[0] || 'there';
+  const userName = currentUser?.name?.split(' ')[0] || dashboardData?.user?.name?.split(' ')[0] || 'Guest';
 
   // Dynamic clips strictly from live backend (empty array if no clips yet)
   const dynamicClips: StaticClip[] = useMemo(() => {
@@ -296,6 +296,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
       }
     }).length;
   }, [clips, dashboardData?.stats?.saved_this_week]);
+
+  // Right Rail: Live top story title from latest clip
+  const topStoryTitle = useMemo(() => {
+    if (dynamicClips.length > 0 && dynamicClips[0].title) {
+      return dynamicClips[0].title.slice(0, 48) + (dynamicClips[0].title.length > 48 ? '...' : '');
+    }
+    return 'No saved opportunities yet';
+  }, [dynamicClips]);
 
   // Live weekly digest summary from backend AI highlight or synthesized from latest clips
   const weekDigestSummary = useMemo(() => {
@@ -389,14 +397,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
       .map(([tag, count]) => ({ tag, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 6);
-  }, [dynamicClips]);
-
-  // Right Rail: Live top story title from latest clip
-  const topStoryTitle = useMemo(() => {
-    if (dynamicClips.length > 0 && dynamicClips[0].title) {
-      return dynamicClips[0].title.slice(0, 48) + (dynamicClips[0].title.length > 48 ? '...' : '');
-    }
-    return 'No saved opportunities yet';
   }, [dynamicClips]);
 
   // Right Rail: Live Urgent Deadlines from dynamicClips or backend upcoming_deadlines
@@ -1138,7 +1138,38 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 </button>
               </div>
 
-              {!showEmpty && (
+              {!showEmpty && visibleClips.length === 0 ? (
+                <div className={`${cardClass} p-12 flex flex-col items-center justify-center text-center`}>
+                  <div
+                    className={`w-14 h-14 rounded-2xl border flex items-center justify-center mb-4 shadow-sm ${
+                      isDark ? 'bg-[#141414] border-[#262626] text-[#3FE769]' : 'bg-slate-50 border-slate-100 text-[#2D6A4F]'
+                    }`}
+                  >
+                    <Bookmark className="w-7 h-7" />
+                  </div>
+                  <h3
+                    className={`text-[20px] leading-[26px] font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}
+                    style={{ fontFamily: FONT_GAMBETTA }}
+                  >
+                    {dynamicClips.length === 0 ? 'You do not have anything saved yet' : 'No clips match this filter'}
+                  </h3>
+                  <p className={`text-[13px] leading-[18px] max-w-sm mb-5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                    {dynamicClips.length === 0
+                      ? 'Your vault is completely empty. Clip articles, links, or notes to get started.'
+                      : 'Try resetting your filter or searching for another topic.'}
+                  </p>
+                  {dynamicClips.length === 0 && (
+                    <button
+                      onClick={onOpenManualAddModal}
+                      className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                        isDark ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A] hover:bg-[#222222]' : 'bg-[#2D6A4F] text-white hover:bg-[#245640]'
+                      }`}
+                    >
+                      + Save Your First Clip
+                    </button>
+                  )}
+                </div>
+              ) : !showEmpty && (
                 <div className={`${cardClass} overflow-hidden flex flex-col`}>
                   {visibleClips.map((clip) => (
                     <article
@@ -1305,11 +1336,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     }`}
                     style={{ fontFamily: FONT_GAMBETTA }}
                   >
-                    Vault Preview Mode: Clean Slate
+                    You do not have anything saved yet
                   </h3>
                   <p className={`text-[14px] leading-[20px] max-w-md mb-6 ${isDark ? 'text-[#A1A1A1]' : 'text-slate-600'}`}>
-                    No clips in this view. Test out the starter template or sync your bookmarks directly
-                    from your browser.
+                    Your vault is completely empty. Save articles, links, or notes using the browser extension or manual add.
                   </p>
                   <div
                     className={`p-5 border rounded-xl w-full max-w-sm text-left mb-6 ${

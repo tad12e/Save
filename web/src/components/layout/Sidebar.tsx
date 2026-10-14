@@ -140,8 +140,8 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
   const pillSpring = { type: 'spring', stiffness: 380, damping: 30 } as const;
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const userName = currentUser?.name || 'Guest User';
-  const userEmail = currentUser?.email || 'Not signed in';
+  const userName = currentUser?.name || 'Guest';
+  const userEmail = currentUser?.email || 'You did not sign in';
   const userInitials = currentUser?.name
     ? currentUser.name
         .split(' ')
@@ -149,7 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
         .map((p) => p[0].toUpperCase())
         .slice(0, 2)
         .join('')
-    : 'GU';
+    : 'G';
 
   const navItems: { id: string; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'dashboard', label: 'Home', icon: <HomeIcon className="w-[18px] h-[18px]" /> },
@@ -513,7 +513,7 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                 }
               }}
               className="flex items-center gap-2 min-w-0 cursor-pointer flex-1 group"
-              title={currentUser ? `${userName} (${userEmail})` : 'Click to Sign In'}
+              title={currentUser ? `${userName} (${userEmail})` : 'Guest • You did not sign in (Click to Sign In)'}
             >
               <div
                 className={`w-8 h-8 rounded-full text-[11px] font-sans font-bold flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
@@ -537,7 +537,7 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                     isDark ? 'text-[#878787]' : 'text-slate-500'
                   }`}
                 >
-                  {currentUser ? userEmail : 'Click to sign in'}
+                  {currentUser ? userEmail : 'You did not sign in'}
                 </span>
               </div>
             </div>

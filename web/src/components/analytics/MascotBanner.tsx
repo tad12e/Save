@@ -38,14 +38,25 @@ export const MascotBanner: React.FC<MascotBannerProps> = ({
             isDark ? 'text-[#EDEDED]' : 'text-slate-800'
           }`}
         >
-          {totalInPeriod} clips saved {periodLabel.toLowerCase()} across connected vaults.{' '}
-          <span
-            className={`font-bold ${
-              isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'
-            }`}
-          >
-            Elite Researcher ({velocityLabel}).
-          </span>
+          {totalInPeriod === 0 ? (
+            <>
+              You have not saved anything yet.{' '}
+              <span className={`font-bold ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`}>
+                Clip articles, links, or notes to populate your analytics heatmap and charts.
+              </span>
+            </>
+          ) : (
+            <>
+              {totalInPeriod} clips saved {periodLabel.toLowerCase()} across connected vaults.{' '}
+              <span
+                className={`font-bold ${
+                  isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'
+                }`}
+              >
+                Elite Researcher ({velocityLabel}).
+              </span>
+            </>
+          )}
         </p>
       </div>
 

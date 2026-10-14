@@ -4,6 +4,7 @@ import { ClipItem, ClipType, DestinationConfig, CustomPageConfig, CustomCategory
 import { CreateCustomCategoryModal } from '../modals/CreateCustomCategoryModal';
 import { fetchCustomCategoriesBackend, createCustomCategoryBackend, deleteCustomCategoryBackend, updateClipBackend } from '../../lib/api';
 import { getStoredCustomCategories, saveStoredCustomCategories } from '../../lib/storage';
+import { PolymorphicClipCard } from '../cards/PolymorphicClipCard';
 import { 
   Bookmark, 
   Search, 
@@ -51,9 +52,29 @@ import {
 } from 'lucide-react';
 import { BrandIcon } from '../BrandIcons';
 
-export type ClipIntent = 'all' | 'apply' | 'learn' | 'track' | 'hire' | 'attend' | 'buy' | string;
+export type ClipIntent = 'all' | 'watch' | 'apply' | 'learn' | 'track' | 'hire' | 'attend' | 'buy' | string;
 
 export function getClipIntent(clip: ClipItem, customCategories?: CustomCategoryConfig[]): string {
+  const url = (clip.url || '').toLowerCase();
+  const type = (clip.type || 'general').toLowerCase();
+
+  // 0. Deterministic Video / Reel override
+  if (
+    type === 'video' ||
+    type === 'reel' ||
+    url.includes('instagram.com/reel') ||
+    url.includes('instagram.com/reels') ||
+    url.includes('instagram.com/tv') ||
+    url.includes('youtube.com/watch') ||
+    url.includes('youtube.com/shorts') ||
+    url.includes('youtu.be/') ||
+    url.includes('tiktok.com') ||
+    url.includes('vimeo.com') ||
+    url.includes('twitch.tv')
+  ) {
+    return 'watch';
+  }
+
   if ((clip as any).intent) {
     const raw = String((clip as any).intent).toLowerCase().trim();
     if (customCategories && customCategories.length > 0) {
@@ -62,6 +83,8 @@ export function getClipIntent(clip: ClipItem, customCategories?: CustomCategoryC
       );
       if (customMatch) return customMatch.slug;
     }
+    if (['watch', 'stream', 'play'].includes(raw)) return 'watch';
+    if (['view'].includes(raw)) return 'watch';
     if (['apply', 'submit', 'pitch'].includes(raw)) return 'apply';
     if (['hire', 'recruit', 'contact'].includes(raw)) return 'hire';
     if (['track', 'build', 'code', 'deploy', 'monitor', 'compare', 'benchmark'].includes(raw)) return 'track';
@@ -71,11 +94,9 @@ export function getClipIntent(clip: ClipItem, customCategories?: CustomCategoryC
     if (raw && raw !== 'other' && raw !== 'all') return raw;
   }
 
-  const url = (clip.url || '').toLowerCase();
   const title = (clip.title || '').toLowerCase();
   const summary = (clip.summary || '').toLowerCase();
   const tags = (clip.tags || []).map(t => t.toLowerCase());
-  const type = (clip.type || 'general').toLowerCase();
   const text = `${title} ${summary} ${url} ${tags.join(' ')}`;
 
   // 1. Hire (talent, candidates, recruiters, freelance, portfolios)
@@ -256,13 +277,14 @@ interface IntentFilterItem {
 }
 
 export const INTENT_FILTERS: IntentFilterItem[] = [
-  { id: 'all', label: 'All', defaultCount: 148 },
-  { id: 'apply', label: 'Apply', defaultCount: 18, dotColor: '#B45309', dotBg: '#FEF3C7' },
-  { id: 'learn', label: 'Learn', defaultCount: 74, dotColor: '#047857', dotBg: '#ECFDF5' },
-  { id: 'track', label: 'Track', defaultCount: 29, dotColor: '#475569', dotBg: '#F1F5F9' },
-  { id: 'hire', label: 'Hire', defaultCount: 12, dotColor: '#6D28D9', dotBg: '#F5F3FF' },
-  { id: 'attend', label: 'Attend', defaultCount: 9, dotColor: '#BE185D', dotBg: '#FDF2F8' },
-  { id: 'buy', label: 'Buy', defaultCount: 6, dotColor: '#1D4ED8', dotBg: '#EFF6FF' },
+  { id: 'all', label: 'All', defaultCount: 0 },
+  { id: 'watch', label: 'Watch', defaultCount: 0, dotColor: '#DC2626', dotBg: '#FEE2E2' },
+  { id: 'apply', label: 'Apply', defaultCount: 0, dotColor: '#B45309', dotBg: '#FEF3C7' },
+  { id: 'learn', label: 'Learn', defaultCount: 0, dotColor: '#047857', dotBg: '#ECFDF5' },
+  { id: 'track', label: 'Track', defaultCount: 0, dotColor: '#475569', dotBg: '#F1F5F9' },
+  { id: 'hire', label: 'Hire', defaultCount: 0, dotColor: '#6D28D9', dotBg: '#F5F3FF' },
+  { id: 'attend', label: 'Attend', defaultCount: 0, dotColor: '#BE185D', dotBg: '#FDF2F8' },
+  { id: 'buy', label: 'Buy', defaultCount: 0, dotColor: '#1D4ED8', dotBg: '#EFF6FF' },
 ];
 
 export function getDomainFromUrl(urlStr: string): string {
@@ -276,6 +298,12 @@ export function getDomainFromUrl(urlStr: string): string {
 
 export function getSourceFormatLabel(clip: ClipItem): string {
   const domain = getDomainFromUrl(clip.url);
+  const url = (clip.url || '').toLowerCase();
+  if (domain.includes('instagram.com')) {
+    return url.includes('/reel') ? 'Reel' : 'Post';
+  }
+  if (domain.includes('tiktok.com')) return 'Video';
+  if (clip.type === 'video') return 'Video';
   if (domain.includes('arxiv.org')) return 'Paper';
   if (domain.includes('github.com')) return 'Repo';
   if (domain.includes('linkedin.com')) return 'Post';
@@ -293,11 +321,13 @@ export function getSourceFormatLabel(clip: ClipItem): string {
 // -------------------------------------------------------------
 // Source Classification Helpers
 // -------------------------------------------------------------
-export type ClipSourceKey = 'all' | 'youtube' | 'github' | 'x_twitter' | 'linkedin' | 'reddit' | 'arxiv' | 'substack' | 'medium' | 'other';
+export type ClipSourceKey = 'all' | 'youtube' | 'instagram' | 'tiktok' | 'github' | 'x_twitter' | 'linkedin' | 'reddit' | 'arxiv' | 'substack' | 'medium' | 'other';
 
 export function getClipSourceKey(clip: ClipItem): ClipSourceKey {
   const url = (clip.url || '').toLowerCase();
   const platform = (clip.sourcePlatform || '').toLowerCase();
+  if (url.includes('instagram.com') || platform === 'instagram') return 'instagram';
+  if (url.includes('tiktok.com') || platform === 'tiktok') return 'tiktok';
   if (url.includes('youtube.com') || url.includes('youtu.be') || platform === 'youtube') return 'youtube';
   if (url.includes('github.com') || url.includes('gist.github.com') || platform === 'github') return 'github';
   if (url.includes('twitter.com') || url.includes('x.com') || platform === 'x_twitter' || platform === 'twitter') return 'x_twitter';
@@ -311,6 +341,10 @@ export function getClipSourceKey(clip: ClipItem): ClipSourceKey {
 
 export function getClipSourceMeta(sourceKey: ClipSourceKey): { label: string; brandIcon: string; color: string; bg: string } {
   switch (sourceKey) {
+    case 'instagram':
+      return { label: 'Instagram', brandIcon: 'instagram', color: '#E1306C', bg: 'rgba(225, 48, 108, 0.12)' };
+    case 'tiktok':
+      return { label: 'TikTok', brandIcon: 'tiktok', color: '#000000', bg: 'rgba(0, 0, 0, 0.08)' };
     case 'youtube':
       return { label: 'YouTube', brandIcon: 'youtube', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' };
     case 'github':
@@ -343,7 +377,7 @@ export function getClipContentTypeKey(clip: ClipItem): ClipContentTypeKey {
   const format = getSourceFormatLabel(clip).toLowerCase();
   const tags = (clip.tags || []).map(t => t.toLowerCase());
 
-  if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com') || url.includes('tiktok.com') || format === 'video' || tags.includes('video')) {
+  if (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('vimeo.com') || url.includes('tiktok.com') || url.includes('instagram.com/reel') || url.includes('instagram.com/reels') || type === 'video' || format === 'video' || format === 'reel' || tags.includes('video')) {
     return 'video';
   }
   if (type === 'job' || type === 'scholarship' || format === 'opportunity' || format === 'grant') {
@@ -430,6 +464,13 @@ export function getIntentBadgeStyle(intent: ClipIntent, isDark: boolean, customC
   }
 
   switch (intent) {
+    case 'watch':
+      return {
+        bg: isDark ? 'bg-red-950/40' : 'bg-red-50',
+        text: isDark ? 'text-red-400' : 'text-red-800',
+        border: isDark ? 'border-red-800/50' : 'border-red-200',
+        dot: '#DC2626'
+      };
     case 'apply':
       return {
         bg: isDark ? 'bg-amber-950/40' : 'bg-amber-50',
@@ -506,6 +547,11 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   const isDark = theme === 'dark' || theme === 'terminal';
   const [groupBy, setGroupBy] = useState<GroupByDimension>('intent');
   const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>('all');
+  // Parallel Multi-Dimensional Filter States
+  const [selectedIntentFilter, setSelectedIntentFilter] = useState<string>('all');
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>('all');
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
+  const [selectedDeadlineFilter, setSelectedDeadlineFilter] = useState<string>('all');
   const [isGroupedView, setIsGroupedView] = useState<boolean>(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -538,7 +584,13 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
     const updated = [...customCategories, newCat];
     setCustomCategories(updated);
     saveStoredCustomCategories(updated);
-    setSelectedGroupFilter(newCat.slug);
+    if (newCat.dimension === 'intent') {
+      setSelectedIntentFilter(newCat.slug);
+    } else if (newCat.dimension === 'type') {
+      setSelectedTypeFilter(newCat.slug);
+    } else {
+      setSelectedGroupFilter(newCat.slug);
+    }
     const saved = await createCustomCategoryBackend(newCat);
     if (saved && saved.id) {
       setCustomCategories(prev => prev.map(c => c.id === newCat.id ? saved : c));
@@ -546,11 +598,27 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   };
 
   const handleDeleteCustomCategory = async (catId: string) => {
+    const target = customCategories.find(c => c.id === catId);
     const updated = customCategories.filter(c => c.id !== catId);
     setCustomCategories(updated);
     saveStoredCustomCategories(updated);
-    setSelectedGroupFilter('all');
+    if (target) {
+      if (selectedIntentFilter === target.slug) setSelectedIntentFilter('all');
+      if (selectedTypeFilter === target.slug) setSelectedTypeFilter('all');
+      if (selectedGroupFilter === target.slug) setSelectedGroupFilter('all');
+    }
     await deleteCustomCategoryBackend(catId);
+  };
+
+  const resetAllParallelFilters = () => {
+    setSelectedIntentFilter('all');
+    setSelectedTypeFilter('all');
+    setSelectedSourceFilter('all');
+    setSelectedDeadlineFilter('all');
+    setSelectedGroupFilter('all');
+    setSelectedCategory('all');
+    setLocalSearch('');
+    setCurrentPage(1);
   };
 
   const handleUpdateClip = async (clipId: string, updates: Partial<ClipItem>) => {
@@ -573,7 +641,6 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
 
   const handleGroupByChange = (dim: GroupByDimension) => {
     setGroupBy(dim);
-    setSelectedGroupFilter('all');
     setCurrentPage(1);
   };
 
@@ -600,6 +667,7 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   const intentCounts = useMemo(() => {
     const counts: Record<string, number> = {
       all: clips.length,
+      watch: clips.filter(c => getClipIntent(c, customCategories) === 'watch').length,
       apply: clips.filter(c => getClipIntent(c, customCategories) === 'apply').length,
       learn: clips.filter(c => getClipIntent(c, customCategories) === 'learn').length,
       track: clips.filter(c => getClipIntent(c, customCategories) === 'track').length,
@@ -684,6 +752,36 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
     ];
   }, [clips, customPages]);
 
+  const deadlineOptions = useMemo(() => {
+    const now = new Date();
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const hasDeadlineCount = clips.filter(c => !!c.deadline && !isNaN(new Date(c.deadline).getTime())).length;
+    const thisWeekCount = clips.filter(c => {
+      if (!c.deadline) return false;
+      const d = new Date(c.deadline);
+      return !isNaN(d.getTime()) && d >= now && d <= nextWeek;
+    }).length;
+    const overdueCount = clips.filter(c => {
+      if (!c.deadline) return false;
+      const d = new Date(c.deadline);
+      return !isNaN(d.getTime()) && d < now;
+    }).length;
+    const upcomingCount = clips.filter(c => {
+      if (!c.deadline) return false;
+      const d = new Date(c.deadline);
+      return !isNaN(d.getTime()) && d > now;
+    }).length;
+
+    return [
+      { id: 'all', label: 'All Dates', icon: Clock, count: clips.length, color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' },
+      { id: 'has_deadline', label: 'Has Deadline', icon: Calendar, count: hasDeadlineCount, color: '#6366F1', bg: 'rgba(99, 102, 241, 0.12)' },
+      { id: 'this_week', label: 'Due This Week', icon: Clock, count: thisWeekCount, color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
+      { id: 'overdue', label: 'Overdue', icon: X, count: overdueCount, color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
+      { id: 'upcoming', label: 'Upcoming', icon: Calendar, count: upcomingCount, color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' },
+    ];
+  }, [clips]);
+
   const categories = [
     { id: 'all', label: 'All', count: clips.length },
     { id: 'job', label: 'Jobs', count: clips.filter(c => c.type === 'job').length },
@@ -694,22 +792,67 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
     { id: 'article', label: 'Articles & Notes', count: clips.filter(c => c.type === 'article' || c.type === 'general').length },
   ];
 
-  // Filtering & Sorting with Multi-Dimensional Group Filter
+  // Filtering & Sorting with Parallel Multi-Dimensional Filters
   const filteredClips = clips
     .filter(clip => {
-      // Multi-dimensional Group By Filter
-      if (selectedGroupFilter !== 'all') {
-        if (groupBy === 'intent') {
-          if (getClipIntent(clip, customCategories) !== selectedGroupFilter) return false;
-        } else if (groupBy === 'source') {
-          if (getClipSourceKey(clip) !== selectedGroupFilter) return false;
-        } else if (groupBy === 'type') {
-          const typeKey = getClipContentTypeKey(clip);
-          const clipType = (clip.type || '').toLowerCase();
-          if (typeKey !== selectedGroupFilter && clipType !== selectedGroupFilter) return false;
-        } else if (groupBy === 'custom') {
-          if (getClipCustomKey(clip, customPages) !== selectedGroupFilter) return false;
+      // 1. Parallel Intent Filter
+      if (selectedIntentFilter !== 'all') {
+        const detected = getClipIntent(clip, customCategories).toLowerCase();
+        const target = selectedIntentFilter.toLowerCase();
+        const rawIntent = (clip.intent || '').toLowerCase();
+        const title = clip.title.toLowerCase();
+        const summary = (clip.summary || '').toLowerCase();
+        const tags = clip.tags.map(t => t.toLowerCase());
+        const matches = detected === target || rawIntent === target || tags.includes(target) || title.includes(target) || summary.includes(target);
+        if (!matches) return false;
+      }
+
+      // 2. Parallel Content Type Filter
+      if (selectedTypeFilter !== 'all') {
+        const typeKey = getClipContentTypeKey(clip);
+        const clipType = (clip.type || '').toLowerCase();
+        const target = selectedTypeFilter.toLowerCase();
+        const tags = clip.tags.map(t => t.toLowerCase());
+        const url = (clip.url || '').toLowerCase();
+        const matches = typeKey === target || clipType === target || tags.includes(target) ||
+          (target === 'video' && (url.includes('youtube.com') || url.includes('youtu.be') || url.includes('tiktok.com'))) ||
+          (target === 'audio' && (url.includes('spotify.com') || url.includes('soundcloud.com'))) ||
+          (target === 'code' && (url.includes('github.com') || url.includes('gist.github.com'))) ||
+          (target === 'job' && (url.includes('greenhouse.io') || url.includes('lever.co') || url.includes('/jobs')));
+        if (!matches) return false;
+      }
+
+      // 3. Parallel Source / Platform Filter
+      if (selectedSourceFilter !== 'all') {
+        const sourceKey = getClipSourceKey(clip);
+        const target = selectedSourceFilter.toLowerCase();
+        const url = (clip.url || '').toLowerCase();
+        const platform = (clip.sourcePlatform || '').toLowerCase();
+        const matches = sourceKey === target || platform === target || url.includes(target);
+        if (!matches) return false;
+      }
+
+      // 4. Parallel Deadline Filter
+      if (selectedDeadlineFilter !== 'all') {
+        if (!clip.deadline) return false;
+        const d = new Date(clip.deadline);
+        if (isNaN(d.getTime())) return false;
+        const now = new Date();
+        if (selectedDeadlineFilter === 'has_deadline') {
+          // Has valid deadline, matched
+        } else if (selectedDeadlineFilter === 'this_week') {
+          const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+          if (d < now || d > nextWeek) return false;
+        } else if (selectedDeadlineFilter === 'overdue') {
+          if (d >= now) return false;
+        } else if (selectedDeadlineFilter === 'upcoming') {
+          if (d <= now) return false;
         }
+      }
+
+      // 5. Custom Page / Collection Filter (when custom pages dimension selected)
+      if (selectedGroupFilter !== 'all' && groupBy === 'custom') {
+        if (getClipCustomKey(clip, customPages) !== selectedGroupFilter) return false;
       }
 
       const matchesCategory = selectedCategory === 'all' || clip.type === selectedCategory;
@@ -749,17 +892,14 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   // Reset pagination to page 1 on filter or search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [groupBy, selectedGroupFilter, selectedCategory, storageFilter, selectedPageFilter, destinationFilter, localSearch, sortBy]);
+  }, [groupBy, selectedGroupFilter, selectedIntentFilter, selectedTypeFilter, selectedSourceFilter, selectedDeadlineFilter, selectedCategory, storageFilter, selectedPageFilter, destinationFilter, localSearch, sortBy]);
 
   const totalCount = useMemo(() => {
-    if (localSearch.trim() || destinationFilter !== 'all' || selectedCategory !== 'all' || selectedGroupFilter !== 'all') {
+    if (localSearch.trim() || destinationFilter !== 'all' || selectedCategory !== 'all' || selectedGroupFilter !== 'all' || selectedIntentFilter !== 'all' || selectedTypeFilter !== 'all' || selectedSourceFilter !== 'all' || selectedDeadlineFilter !== 'all') {
       return filteredClips.length;
     }
-    if (groupBy === 'intent' && selectedGroupFilter === 'all') {
-      return Math.max(148, filteredClips.length);
-    }
-    return filteredClips.length;
-  }, [filteredClips.length, groupBy, selectedGroupFilter, destinationFilter, selectedCategory, localSearch]);
+    return Math.max(148, filteredClips.length);
+  }, [filteredClips.length, groupBy, selectedGroupFilter, selectedIntentFilter, selectedTypeFilter, selectedSourceFilter, selectedDeadlineFilter, destinationFilter, selectedCategory, localSearch]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
 
@@ -839,6 +979,35 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
           color = meta.color;
           bg = meta.bg;
         }
+      } else if (groupBy === 'deadline') {
+        if (!clip.deadline) {
+          key = 'no_deadline';
+          label = 'No Deadline';
+          icon = Clock;
+          color = '#64748B';
+        } else {
+          const d = new Date(clip.deadline);
+          const now = new Date();
+          if (d < now) {
+            key = 'overdue';
+            label = 'Overdue';
+            icon = X;
+            color = '#EF4444';
+          } else {
+            const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+            if (d <= nextWeek) {
+              key = 'this_week';
+              label = 'Due This Week';
+              icon = Clock;
+              color = '#F59E0B';
+            } else {
+              key = 'upcoming';
+              label = 'Upcoming';
+              icon = Calendar;
+              color = '#10B981';
+            }
+          }
+        }
       } else if (groupBy === 'custom') {
         key = getClipCustomKey(clip, customPages);
         if (key === 'unassigned') {
@@ -893,228 +1062,20 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
   };
 
   const renderClipCard = (clip: ClipItem) => {
-    const intent = getClipIntent(clip, customCategories);
-    const intentStyle = getIntentBadgeStyle(intent, isDark, customCategories);
-    const domain = getDomainFromUrl(clip.url);
-    const formatLabel = getSourceFormatLabel(clip);
-    const sourceKey = getClipSourceKey(clip);
-    const sourceMeta = getClipSourceMeta(sourceKey);
-    const typeKey = getClipContentTypeKey(clip);
-    const typeMeta = getClipContentTypeMeta(typeKey);
-    const TypeIcon = typeMeta.icon;
-    const customPage = customPages.find(p => p.id === clip.pageId || p.slug === clip.pageId);
-
     return (
-      <motion.div
-        key={clip.id}
-        layout
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96 }}
-        transition={{ duration: 0.2 }}
-        className={`group rounded-2xl border transition-all duration-200 flex flex-col justify-between p-5 relative shadow-sm hover:shadow-md ${
-          isDark 
-            ? 'bg-[#0D0D0D] border-[#222222] hover:border-[#383838] hover:bg-[#121212]' 
-            : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-md'
-        }`}
-      >
-        <div className="flex flex-col gap-3">
-          {/* Top Bar: Source Favicon/BrandIcon, Domain Pill & Star Favorite Toggle */}
-          <div className="flex items-center justify-between gap-2">
-            {/* Domain & Source Pill with Authentic BrandIcon */}
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono shrink-0 max-w-[220px] truncate ${
-              isDark ? 'bg-[#181818] border-[#2B2B2B] text-[#A1A1A1]' : 'bg-slate-100 border-slate-200 text-slate-700'
-            }`}>
-              {sourceKey !== 'other' ? (
-                <div className="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
-                  <BrandIcon name={sourceMeta.brandIcon} className="w-3.5 h-3.5" />
-                </div>
-              ) : clip.faviconUrl ? (
-                <img 
-                  src={clip.faviconUrl} 
-                  alt="" 
-                  className="w-3.5 h-3.5 rounded-sm shrink-0" 
-                  onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} 
-                />
-              ) : (
-                <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              )}
-              <span className="truncate">{domain}</span>
-              <span className="opacity-40">•</span>
-              <span className="text-[10px] uppercase font-semibold text-slate-400">{formatLabel}</span>
-            </div>
-
-            {/* Star Favorite Toggle */}
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => toggleFavorite(clip.id)}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
-                  clip.isFavorite
-                    ? 'text-amber-400 bg-amber-400/10'
-                    : isDark
-                      ? 'text-[#666666] hover:text-amber-400 hover:bg-[#1C1B1B]'
-                      : 'text-slate-400 hover:text-amber-500 hover:bg-slate-100'
-                }`}
-                title={clip.isFavorite ? 'Remove from favorites' : 'Mark as favorite'}
-              >
-                <Star className={`w-3.5 h-3.5 transition-transform ${clip.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
-              </button>
-            </div>
-          </div>
-
-          {/* Title: 2-line clamp */}
-          <h3
-            onClick={() => setDetailModalClip(clip)}
-            className={`font-semibold text-[15px] leading-[22px] line-clamp-2 cursor-pointer transition-colors pt-1 ${
-              isDark ? 'text-white hover:text-[#3FE769]' : 'text-slate-900 hover:text-[#2D6A4F]'
-            }`}
-            style={{ fontFamily: 'Outfit, sans-serif' }}
-            title={clip.title}
-          >
-            {clip.title}
-          </h3>
-
-          {/* Excerpt / Summary: 2-line clamp */}
-          <p className={`text-xs leading-[18px] line-clamp-2 ${isDark ? 'text-[#888888]' : 'text-slate-600'}`}>
-            {clip.summary}
-          </p>
-
-          {/* Intent Badge, Content Type & Extracted Metrics */}
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            {/* Intent Pill */}
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-semibold uppercase tracking-wider border ${intentStyle.bg} ${intentStyle.text} ${intentStyle.border}`}>
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: intentStyle.dot }} />
-              <span>{intent}</span>
-            </span>
-
-            {/* Content Type Pill */}
-            <span 
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border"
-              style={{ backgroundColor: typeMeta.bg, color: typeMeta.color, borderColor: `${typeMeta.color}35` }}
-            >
-              <TypeIcon className="w-2.5 h-2.5 shrink-0" />
-              <span>{typeMeta.label}</span>
-            </span>
-
-            {/* Custom Page Pill (if assigned) */}
-            {customPage && (
-              <span 
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border truncate max-w-[140px]"
-                style={{ backgroundColor: `${customPage.color}18`, color: customPage.color, borderColor: `${customPage.color}40` }}
-                title={customPage.name}
-              >
-                <Folder className="w-2.5 h-2.5 shrink-0" />
-                <span className="truncate">{customPage.name}</span>
-              </span>
-            )}
-
-            {/* Salary / Price / Deadline metric if present */}
-            {clip.extractedData?.salary && (
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">
-                {clip.extractedData.salary}
-              </span>
-            )}
-            {clip.extractedData?.price && !clip.extractedData?.salary && (
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold">
-                {clip.extractedData.price}
-              </span>
-            )}
-            {clip.extractedData?.company && (
-              <span className={`px-2 py-0.5 rounded text-[10px] font-mono truncate max-w-[130px] border ${
-                isDark ? 'bg-[#181818] border-[#262626] text-[#A1A1A1]' : 'bg-slate-100 border-slate-200 text-slate-600'
-              }`}>
-                {clip.extractedData.company}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Bottom Card Footer: Capture Source, Timestamp, Destination Badge & Actions */}
-        <div className="pt-4 mt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
-          {/* Capture Source & Timestamp */}
-          <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#777777] min-w-0 truncate">
-            {clip.sourceApp.includes('Mobile') ? (
-              <Smartphone className="w-3.5 h-3.5 shrink-0" />
-            ) : (
-              <Laptop className="w-3.5 h-3.5 shrink-0" />
-            )}
-            <span className="truncate">{clip.sourceApp.replace('Chrome Extension', 'Chrome').replace('Mobile Share Sheet', 'Mobile')}</span>
-            <span>•</span>
-            <span className="shrink-0">{formatClipDate(clip.createdAt)}</span>
-          </div>
-
-          {/* Destination Badges & Quick Sync */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            {clip.syncedTo && clip.syncedTo.length > 0 ? (
-              <div className="flex items-center gap-1">
-                {clip.syncedTo.slice(0, 2).map(dest => (
-                  <span
-                    key={dest}
-                    className="px-2 py-0.5 rounded-full text-[10px] font-mono flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    <span>{dest === 'google_sheets' ? 'Sheets' : dest === 'notion' ? 'Notion' : dest}</span>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); handleExportClick(clip, 'notion'); }}
-                className={`px-2 py-0.5 rounded-full text-[10px] font-mono border transition-all cursor-pointer flex items-center gap-1 ${
-                  syncedState[`${clip.id}_notion`]
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold'
-                    : isDark
-                      ? 'bg-[#181818] border-[#2B2B2B] text-[#888888] hover:text-white hover:border-[#3FE769]/50'
-                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-                title="1-Tap Sync to Notion"
-              >
-                {syncedState[`${clip.id}_notion`] ? <Check className="w-2.5 h-2.5" /> : <Send className="w-2.5 h-2.5" />}
-                <span>{syncedState[`${clip.id}_notion`] ? 'Synced!' : 'Sync'}</span>
-              </button>
-            )}
-
-            {/* Open Drawer Modal Trigger */}
-            <button
-              type="button"
-              onClick={() => setDetailModalClip(clip)}
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-              title="Open Clip Drawer"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-
-            {/* External Link */}
-            <a
-              href={clip.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`p-1.5 rounded-lg transition-colors ${
-                isDark ? 'text-[#888888] hover:text-white hover:bg-[#1C1B1B]' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-              title="Open Source Link"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-
-            {/* Delete */}
-            <button
-              type="button"
-              onClick={() => deleteClip(clip.id)}
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                isDark ? 'text-[#888888] hover:text-red-400 hover:bg-[#1C1B1B]' : 'text-slate-400 hover:text-red-600 hover:bg-slate-100'
-              }`}
-              title="Delete Clip"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </motion.div>
+      <div key={clip.id} className="break-inside-avoid mb-5 block w-full">
+        <PolymorphicClipCard
+          clip={clip}
+          isDark={isDark}
+          onToggleFavorite={toggleFavorite}
+          onOpenDetail={setDetailModalClip}
+          onDelete={deleteClip}
+          onSync={(c) => handleExportClick(c, 'notion')}
+          isSynced={Boolean(syncedState[`${clip.id}_notion`])}
+          customCategories={customCategories}
+          customPages={customPages}
+        />
+      </div>
     );
   };
 
@@ -1457,9 +1418,9 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-3 border-t border-black/5 dark:border-[#222222]">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-[11px] font-mono uppercase tracking-wider font-semibold ${isDark ? 'text-[#777777]' : 'text-slate-500'}`}>
-              Group By:
+              Filter Dimension:
             </span>
-            <div className={`flex items-center p-0.5 rounded-xl border ${isDark ? 'bg-[#121212] border-[#262626]' : 'bg-slate-100 border-slate-200'}`}>
+            <div className={`flex flex-wrap items-center p-0.5 rounded-xl border ${isDark ? 'bg-[#121212] border-[#262626]' : 'bg-slate-100 border-slate-200'}`}>
               <button
                 id="group-by-intent-btn"
                 type="button"
@@ -1472,6 +1433,9 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
               >
                 <Target className="w-3.5 h-3.5" />
                 <span>Intent</span>
+                {selectedIntentFilter !== 'all' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-0.5" />
+                )}
               </button>
               <button
                 id="group-by-source-btn"
@@ -1485,6 +1449,9 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
               >
                 <Globe className="w-3.5 h-3.5" />
                 <span>Source</span>
+                {selectedSourceFilter !== 'all' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 ml-0.5" />
+                )}
               </button>
               <button
                 id="group-by-type-btn"
@@ -1498,6 +1465,25 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>Content Type</span>
+                {selectedTypeFilter !== 'all' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 ml-0.5" />
+                )}
+              </button>
+              <button
+                id="group-by-deadline-btn"
+                type="button"
+                onClick={() => handleGroupByChange('deadline')}
+                className={`h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold cursor-pointer transition-all ${
+                  groupBy === 'deadline'
+                    ? isDark ? 'bg-[#222222] text-[#3FE769] shadow-sm' : 'bg-white text-[#2D6A4F] shadow-sm'
+                    : isDark ? 'text-[#888888] hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Deadline</span>
+                {selectedDeadlineFilter !== 'all' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 ml-0.5" />
+                )}
               </button>
               <button
                 id="group-by-custom-btn"
@@ -1511,6 +1497,9 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
               >
                 <FolderKanban className="w-3.5 h-3.5" />
                 <span>Custom / Pages</span>
+                {selectedGroupFilter !== 'all' && groupBy === 'custom' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 ml-0.5" />
+                )}
               </button>
             </div>
           </div>
@@ -1539,17 +1528,17 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
         </div>
 
         {/* ----------------------------------------------------------- */}
-        {/* Dynamic Group Pills Switcher                                */}
+        {/* Dynamic Group Pills Switcher (Parallel Filtering)           */}
         {/* ----------------------------------------------------------- */}
         <div className="flex items-center gap-2 overflow-x-auto pt-2 pb-1 scrollbar-none">
           {groupBy === 'intent' && dynamicIntentFilters.map((intent) => {
-            const isActive = selectedGroupFilter === intent.id;
+            const isActive = selectedIntentFilter === intent.id;
             const count = intentCounts[intent.id] ?? (intent as any).defaultCount ?? 0;
             return (
               <motion.button
                 key={intent.id}
                 id={`intent-pill-${intent.id}`}
-                onClick={() => setSelectedGroupFilter(intent.id)}
+                onClick={() => setSelectedIntentFilter(intent.id)}
                 whileTap={{ scale: 0.95 }}
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs shrink-0 cursor-pointer border transition-all duration-200 select-none ${
                   isActive
@@ -1600,12 +1589,12 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
           })}
 
           {groupBy === 'source' && sourceOptions.map((source) => {
-            const isActive = selectedGroupFilter === source.id;
+            const isActive = selectedSourceFilter === source.id;
             return (
               <motion.button
                 key={source.id}
                 id={`source-pill-${source.id}`}
-                onClick={() => setSelectedGroupFilter(source.id)}
+                onClick={() => setSelectedSourceFilter(source.id)}
                 whileTap={{ scale: 0.95 }}
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs shrink-0 cursor-pointer border transition-all duration-200 select-none ${
                   isActive
@@ -1639,13 +1628,13 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
           })}
 
           {groupBy === 'type' && typeOptions.map((typeItem) => {
-            const isActive = selectedGroupFilter === typeItem.id;
+            const isActive = selectedTypeFilter === typeItem.id;
             const IconComp = typeItem.icon;
             return (
               <motion.button
                 key={typeItem.id}
                 id={`type-pill-${typeItem.id}`}
-                onClick={() => setSelectedGroupFilter(typeItem.id)}
+                onClick={() => setSelectedTypeFilter(typeItem.id)}
                 whileTap={{ scale: 0.95 }}
                 className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs shrink-0 cursor-pointer border transition-all duration-200 select-none ${
                   isActive
@@ -1681,6 +1670,40 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
                     <X className="w-3 h-3" />
                   </span>
                 )}
+              </motion.button>
+            );
+          })}
+
+          {groupBy === 'deadline' && deadlineOptions.map((deadItem) => {
+            const isActive = selectedDeadlineFilter === deadItem.id;
+            const IconComp = deadItem.icon;
+            return (
+              <motion.button
+                key={deadItem.id}
+                id={`deadline-pill-${deadItem.id}`}
+                onClick={() => setSelectedDeadlineFilter(deadItem.id)}
+                whileTap={{ scale: 0.95 }}
+                className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs shrink-0 cursor-pointer border transition-all duration-200 select-none ${
+                  isActive
+                    ? isDark
+                      ? 'bg-[#222222] text-white border-[#3A3A3A] shadow-sm font-semibold'
+                      : 'bg-[#2D6A4F] text-white border-[#2D6A4F] shadow-sm font-semibold'
+                    : isDark
+                      ? 'bg-[#121212] text-[#888888] hover:text-white hover:bg-[#181818] border-[#262626] font-medium'
+                      : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-slate-200 font-medium'
+                }`}
+              >
+                <IconComp className="w-3.5 h-3.5 shrink-0" style={{ color: isActive ? undefined : deadItem.color }} />
+                <span>{deadItem.label}</span>
+                <span
+                  className={`text-[11px] font-mono transition-colors ${
+                    isActive
+                      ? isDark ? 'text-[#3FE769]' : 'text-emerald-100'
+                      : isDark ? 'text-[#666666]' : 'text-slate-400'
+                  }`}
+                >
+                  ({deadItem.count})
+                </span>
               </motion.button>
             );
           })}
@@ -1725,7 +1748,7 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
             id="add-custom-category-pill-btn"
             whileTap={{ scale: 0.95 }}
             onClick={() => {
-              setCreateCatDimension(groupBy === 'custom' ? 'intent' : groupBy);
+              setCreateCatDimension(groupBy === 'type' ? 'type' : 'intent');
               setIsCreateCatModalOpen(true);
             }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 cursor-pointer border border-dashed transition-all duration-200 select-none ${
@@ -1735,9 +1758,73 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
             }`}
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ Add {groupBy === 'intent' ? 'Intent' : groupBy === 'type' ? 'Content Type' : 'Category'}</span>
+            <span>+ Add {groupBy === 'type' ? 'Content Type' : 'Intent'}</span>
           </motion.button>
         </div>
+
+        {/* ----------------------------------------------------------- */}
+        {/* Active Parallel Multi-Filters Summary Bar                   */}
+        {/* ----------------------------------------------------------- */}
+        {(selectedIntentFilter !== 'all' || selectedTypeFilter !== 'all' || selectedSourceFilter !== 'all' || selectedDeadlineFilter !== 'all' || (selectedGroupFilter !== 'all' && groupBy === 'custom')) && (
+          <div className="flex flex-wrap items-center gap-2 pt-2.5 pb-0.5 border-t border-black/5 dark:border-[#222222]">
+            <span className={`text-[11px] font-mono uppercase tracking-wider font-semibold ${isDark ? 'text-[#777777]' : 'text-slate-500'}`}>
+              Active Filters ({[
+                selectedIntentFilter !== 'all',
+                selectedTypeFilter !== 'all',
+                selectedSourceFilter !== 'all',
+                selectedDeadlineFilter !== 'all',
+                selectedGroupFilter !== 'all' && groupBy === 'custom'
+              ].filter(Boolean).length}):
+            </span>
+            {selectedIntentFilter !== 'all' && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                isDark ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/50' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              }`}>
+                <span>Intent: {selectedIntentFilter.toUpperCase()}</span>
+                <X className="w-3 h-3 cursor-pointer hover:opacity-80" onClick={() => setSelectedIntentFilter('all')} />
+              </span>
+            )}
+            {selectedTypeFilter !== 'all' && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                isDark ? 'bg-blue-950/40 text-blue-400 border-blue-800/50' : 'bg-blue-50 text-blue-700 border-blue-200'
+              }`}>
+                <span>Type: {selectedTypeFilter.toUpperCase()}</span>
+                <X className="w-3 h-3 cursor-pointer hover:opacity-80" onClick={() => setSelectedTypeFilter('all')} />
+              </span>
+            )}
+            {selectedSourceFilter !== 'all' && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                isDark ? 'bg-purple-950/40 text-purple-400 border-purple-800/50' : 'bg-purple-50 text-purple-700 border-purple-200'
+              }`}>
+                <span>Source: {selectedSourceFilter.toUpperCase()}</span>
+                <X className="w-3 h-3 cursor-pointer hover:opacity-80" onClick={() => setSelectedSourceFilter('all')} />
+              </span>
+            )}
+            {selectedDeadlineFilter !== 'all' && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                isDark ? 'bg-amber-950/40 text-amber-400 border-amber-800/50' : 'bg-amber-50 text-amber-700 border-amber-200'
+              }`}>
+                <span>Deadline: {selectedDeadlineFilter.replace('_', ' ').toUpperCase()}</span>
+                <X className="w-3 h-3 cursor-pointer hover:opacity-80" onClick={() => setSelectedDeadlineFilter('all')} />
+              </span>
+            )}
+            {selectedGroupFilter !== 'all' && groupBy === 'custom' && (
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-slate-100 text-slate-700 border-slate-300'
+              }`}>
+                <span>Page: {selectedGroupFilter}</span>
+                <X className="w-3 h-3 cursor-pointer hover:opacity-80" onClick={() => setSelectedGroupFilter('all')} />
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={resetAllParallelFilters}
+              className="text-xs font-semibold text-red-500 hover:text-red-400 ml-1 cursor-pointer transition-colors"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ------------------------------------------------------------- */}
@@ -1753,10 +1840,12 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
             <Bookmark className="w-6 h-6" />
           </div>
           <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-            No clips found in this view
+            {clips.length === 0 ? 'You do not have anything saved yet' : 'No clips found in this view'}
           </h3>
           <p className={`text-xs max-w-sm text-center leading-relaxed ${isDark ? 'text-[#888888]' : 'text-slate-500'}`}>
-            Try adjusting your search keywords, switching your destination or intent filters, or capture new items using the extension.
+            {clips.length === 0
+              ? 'Your vault is completely empty. Save articles, web pages, or notes using the clipper extension or manual add.'
+              : 'Try adjusting your search keywords, switching your destination or intent filters, or capture new items using the extension.'}
           </p>
           <div className="flex items-center gap-2 pt-2">
             {selectedGroupFilter !== 'all' && (
@@ -1866,7 +1955,7 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
                 {!isCollapsed && (
                   <div className="p-4 sm:p-5">
                     {viewMode === 'grid' ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      <div className="columns-1 sm:columns-2 lg:columns-3 gap-5 [column-fill:_balance]">
                         {section.clips.map(clip => renderClipCard(clip))}
                       </div>
                     ) : (
@@ -1886,7 +1975,7 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
         /* ------------------------------------------------------------- */
         /* Grid View: 3-Column Responsive Cards matching Stitch          */
         /* ------------------------------------------------------------- */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="columns-1 sm:columns-2 lg:columns-3 gap-5 [column-fill:_balance]">
           {paginatedClips.map(clip => renderClipCard(clip))}
         </div>
       ) : (

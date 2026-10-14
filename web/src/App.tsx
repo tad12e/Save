@@ -103,7 +103,7 @@ export default function App() {
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(() => {
     const storedUser = localStorage.getItem('clipper_user');
-    return storedUser ? JSON.parse(storedUser) : { name: 'Tadiwos User', email: 'tadiwos@save.app' };
+    return storedUser ? JSON.parse(storedUser) : null;
   });
   const [selectedPageForNewClip, setSelectedPageForNewClip] = useState<string | undefined>(undefined);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

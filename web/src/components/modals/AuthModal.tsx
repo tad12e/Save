@@ -154,7 +154,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tadiwos@save.app"
+                  placeholder="name@example.com"
                   className="w-full pl-9 pr-3 py-2.5 bg-[#050505] border border-white/10 rounded-sm text-xs text-stone-200 font-mono focus:border-amber-500 outline-none"
                 />
               </div>
@@ -211,7 +211,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Tadiwos Alemu"
+                  placeholder="Your Name"
                   className="w-full pl-9 pr-3 py-2.5 bg-[#050505] border border-white/10 rounded-sm text-xs text-stone-200 font-mono focus:border-amber-500 outline-none"
                 />
               </div>
@@ -226,7 +226,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tadiwos@save.app"
+                  placeholder="name@example.com"
                   className="w-full pl-9 pr-3 py-2.5 bg-[#050505] border border-white/10 rounded-sm text-xs text-stone-200 font-mono focus:border-amber-500 outline-none"
                 />
               </div>

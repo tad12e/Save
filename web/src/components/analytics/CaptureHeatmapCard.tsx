@@ -197,7 +197,9 @@ export const CaptureHeatmapCard: React.FC<CaptureHeatmapCardProps> = ({
             </span>
           </div>
           <p className={`text-xs font-['Inter',sans-serif] mt-0.5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-            Daily ingestion volume across the last 16 calendar weeks.
+            {totalActiveDays === 0
+              ? 'No saves recorded yet. Save clips to light up your activity heatmap.'
+              : 'Daily ingestion volume across the last 16 calendar weeks.'}
           </p>
         </div>
       </div>
