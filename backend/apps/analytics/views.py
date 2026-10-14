@@ -21,28 +21,13 @@ class FullAnalyticsView(APIView):
     - Content distribution donut & popular tags ranking
     - Executive KPIs, active streak & momentum velocity
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         timeframe = request.query_params.get('period', 'this_week')
         force_refresh = request.query_params.get('refresh', 'false').lower() == 'true'
         intent = request.query_params.get('intent', 'all')
         destination = request.query_params.get('destination', 'all')
-
-        if not request.user or not request.user.is_authenticated:
-            # Fallback demo analytics for guest users
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            demo_user = User.objects.first()
-            if demo_user:
-                data = DuckDBAnalyticsEngine.get_full_analytics(
-                    demo_user, timeframe, force_refresh, intent=intent, destination=destination
-                )
-                return Response(data, status=status.HTTP_200_OK)
-            return Response(
-                {"error": "Authentication required to view analytics."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
 
         data = DuckDBAnalyticsEngine.get_full_analytics(
             request.user, timeframe, force_refresh, intent=intent, destination=destination
@@ -58,7 +43,7 @@ class DashboardCardsView(APIView):
     3. Expiring soon (next 7 days)
     4. Destinations active (of 8 available)
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         if not request.user or not request.user.is_authenticated:
@@ -75,7 +60,7 @@ class NotificationListView(APIView):
     """
     Lists notifications for the authenticated user.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         if not request.user or not request.user.is_authenticated:
@@ -93,7 +78,7 @@ class NotificationMarkReadView(APIView):
     """
     Marks a specific notification as read.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         if not request.user or not request.user.is_authenticated:
@@ -120,7 +105,7 @@ class ExtractDeadlineView(APIView):
     Uses Gemini 1.5 Flash (Free Tier) with constrained Pydantic schema
     and zero-network Regex Quota Fallback.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         title = str(request.data.get('title', '')).strip()

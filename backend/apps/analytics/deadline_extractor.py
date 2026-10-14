@@ -326,8 +326,10 @@ class AIDeadlineExtractor:
             for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y"):
                 try:
                     return datetime.strptime(clean, fmt).date()
-                except ValueError:
+                except ValueError as fmt_err:
+                    logger.debug("Date format %s did not match for %r: %s", fmt, clean, fmt_err)
                     continue
+            logger.debug("Date normalization: value %r did not match any standard date format", value)
         return None
 
     @classmethod
@@ -371,7 +373,7 @@ class AIDeadlineExtractor:
                 if candidate < today and found_year == today.year:
                     candidate = date(today.year + 1, found_month, found_day)
                 return candidate
-            except ValueError:
-                pass
+            except ValueError as err:
+                logger.warning("Invalid date parsed from %r (year=%s, month=%s, day=%s): %s", date_str, found_year, found_month, found_day, err)
 
         return cls._normalize_date(clean)

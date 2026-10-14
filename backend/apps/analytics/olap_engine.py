@@ -529,8 +529,8 @@ class DuckDBAnalyticsEngine:
                 try:
                     d_key = dt.strftime('%Y-%m-%d')
                     daily_counts_map[d_key] = daily_counts_map.get(d_key, 0) + 1
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("OLAP Engine: failed to format created_at %r: %s", dt, exc)
 
         historical_trend = []
         for i in range(13, -1, -1):
@@ -852,8 +852,8 @@ class DuckDBAnalyticsEngine:
                         netloc = netloc[4:]
                     if netloc:
                         domain_map[netloc] = domain_map.get(netloc, 0) + 1
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("OLAP Engine: failed to parse clip URL %r: %s", url, exc)
 
         total_sourced = sum(domain_map.values()) or 1
         sorted_domains = sorted(domain_map.items(), key=lambda x: x[1], reverse=True)[:10]
