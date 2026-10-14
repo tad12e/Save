@@ -1,9 +1,12 @@
 import csv
 import io
 import json
+import logging
 from typing import Any
 
 from .base import BaseImporter, ParsedBookmark
+
+logger = logging.getLogger(__name__)
 
 
 class RedditImporter(BaseImporter):
@@ -18,8 +21,8 @@ class RedditImporter(BaseImporter):
             try:
                 data = json.loads(text)
                 return self._parse_json(data)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Reddit importer: JSON parse failed, falling back to CSV parser: %s", exc)
 
         # Fallback to CSV
         return self._parse_csv(text)

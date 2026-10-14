@@ -12,10 +12,20 @@ from typing import List, Optional
 from urllib.parse import urlparse
 
 # Canonical categories for dashboard analytics & top-level UI filters
-CANONICAL_INTENTS = ['apply', 'learn', 'buy', 'attend', 'hire', 'track', 'other']
+CANONICAL_INTENTS = ['apply', 'learn', 'watch', 'buy', 'attend', 'hire', 'track', 'other']
 
 # Domain-specific and path heuristic rules
 HEURISTIC_RULES = [
+    # 0. WATCH (Videos, Reels, Shorts, Streaming)
+    (
+        r'(?i)(?:instagram\.com/(?:reel|reels|tv)/|tiktok\.com|youtube\.com/(?:watch|shorts)|youtu\.be/|vimeo\.com|twitch\.tv)',
+        'watch',
+    ),
+    # VIEW (Social Posts, Photos)
+    (
+        r'(?i)(?:instagram\.com/p/|pinterest\.com/pin/)',
+        'view',
+    ),
     # 1. APPLY (Jobs, Grants, Scholarships, Fellowships, Admissions)
     (
         r'(?i)(?:greenhouse\.io|lever\.co|workday\.com|ashbyhq\.com|smartrecruiters\.com|wellfound\.com|jobs\.lever\.co|ycombinator\.com/companies/.+/jobs|grants\.gov)',
@@ -72,6 +82,7 @@ HEURISTIC_RULES = [
 
 # Keyword signals in page text or selected excerpt
 KEYWORD_RULES = [
+    (r'(?i)\b(?:watch now|subscribe to channel|full video|views|duration|shorts|reel|reels|tiktok video)\b', 'watch'),
     (r'(?i)\b(?:apply now|submit application|application deadline|we are hiring|view open roles|eligible batch|internship opportunity|seed grant|grant proposal|scholarship|fellowship|yc w\d+|y combinator)\b', 'apply'),
     (r'(?i)\b(?:hire me|freelance availability|my portfolio|design portfolio|candidate profile|looking for work|open to work|resume|cv)\b', 'hire'),
     (r'(?i)\b(?:repository|release v\d+|cuda graph|tokens/sec|benchmark|benchmarks|framework|orchestrator|github\.com|open source|metrics)\b', 'track'),
@@ -118,10 +129,13 @@ CANONICAL_MAPPING = {
     'join': 'attend',
     # Lifestyle / Media
     'cook': 'learn',
+    'watch': 'watch',
+    'view': 'watch',
+    'stream': 'watch',
+    'play': 'watch',
     'listen': 'other',
     'workout': 'other',
     'travel': 'other',
-    'watch': 'other',
     'other': 'other',
 }
 
@@ -145,8 +159,8 @@ def clean_action_intent(raw_intent: str) -> str:
 
 def normalize_canonical_intent(intent: str) -> str:
     """
-    Maps any dynamic single-word intent verb into one of the 7 canonical
-    buckets ('apply', 'learn', 'buy', 'attend', 'hire', 'track', 'other')
+    Maps any dynamic single-word intent verb into one of the canonical
+    buckets ('apply', 'learn', 'watch', 'buy', 'attend', 'hire', 'track', 'other')
     for high-level analytics and donut chart slices.
     """
     clean = clean_action_intent(intent)
@@ -176,7 +190,11 @@ class IntentDetector:
         # 2. Check content-type shortcuts
         if content_type:
             c_type = content_type.lower()
-            if c_type in ('job', 'scholarship', 'grant'):
+            if c_type in ('video', 'reel', 'movie'):
+                return 'watch'
+            elif c_type in ('image', 'photo', 'post'):
+                return 'view'
+            elif c_type in ('job', 'scholarship', 'grant'):
                 return 'apply'
             elif c_type in ('event', 'webinar', 'hackathon'):
                 return 'attend'

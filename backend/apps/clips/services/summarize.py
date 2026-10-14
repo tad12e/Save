@@ -60,14 +60,14 @@ class CategoryFields(BaseModel):
 class ClipAnalysisResponse(BaseModel):
     title: str = Field(description="Clean, concise title without boilerplate (max 120 chars)")
     summary: str = Field(description="1-2 clean single-line sentences without newlines (max 350 chars)")
-    category_name: str = Field(description="Capitalized category tab name (e.g. 'Jobs', 'Articles', 'Scholarships', 'Recipes', 'Real Estate', 'Podcasts', 'Tools')")
-    content_type: str = Field(description="lowercase slug e.g. job, scholarship, article, event, tool, real_estate, recipe, podcast, webpage")
+    category_name: str = Field(description="Capitalized category tab name (e.g. 'Videos', 'Jobs', 'Articles', 'Scholarships', 'Recipes', 'Real Estate', 'Podcasts', 'Tools')")
+    content_type: str = Field(description="lowercase slug e.g. video, reel, job, scholarship, article, event, tool, real_estate, recipe, podcast, post, webpage")
     action_intent: str = Field(
         default="other",
         description=(
             "Exactly ONE lowercase action verb representing what the user can DO with this clip. "
-            "Examples: 'apply' (jobs/grants), 'learn' (guides/papers), 'buy' (products/deals), "
-            "'attend' (events/webinars), 'cook' (recipes), 'listen' (music/podcast), "
+            "Examples: 'watch' (reels/videos/shorts/youtube), 'apply' (jobs/grants), 'learn' (guides/papers), 'buy' (products/deals), "
+            "'attend' (events/webinars), 'cook' (recipes), 'listen' (music/podcast), 'view' (posts/photos), "
             "'deploy' (devops/code), 'hire' (recruiting), 'invest' (stocks/pitch), 'read' (essays). "
             "MUST be a single word, maximum 20 characters, lowercase, no spaces."
         )
@@ -94,18 +94,18 @@ _GEMINI_RESPONSE_SCHEMA = {
         },
         "category_name": {
             "type": "STRING",
-            "description": "Capitalized category tab name e.g. Jobs, Articles, Scholarships, Recipes, Real Estate, Podcasts, Tools, Research Papers"
+            "description": "Capitalized category tab name e.g. Videos, Jobs, Articles, Scholarships, Recipes, Real Estate, Podcasts, Tools, Research Papers"
         },
         "content_type": {
             "type": "STRING",
-            "description": "lowercase slug e.g. job, scholarship, article, event, tool, real_estate, recipe, podcast, webpage"
+            "description": "lowercase slug e.g. video, reel, job, scholarship, article, event, tool, real_estate, recipe, podcast, post, webpage"
         },
         "action_intent": {
             "type": "STRING",
             "description": (
                 "Exactly ONE lowercase action verb representing what the user can DO with this clip. "
-                "Examples: 'apply' (jobs/grants), 'learn' (guides/papers), 'buy' (products/deals), "
-                "'attend' (events/webinars), 'cook' (recipes), 'listen' (music/podcast), "
+                "Examples: 'watch' (reels/videos/shorts/youtube), 'apply' (jobs/grants), 'learn' (guides/papers), 'buy' (products/deals), "
+                "'attend' (events/webinars), 'cook' (recipes), 'listen' (music/podcast), 'view' (posts/photos), "
                 "'deploy' (devops/code), 'hire' (recruiting), 'invest' (stocks/pitch), 'read' (essays). "
                 "MUST be a single word, maximum 20 characters, lowercase, no spaces."
             )
@@ -290,6 +290,19 @@ def ai_summarize(url: str, page_text: str, selected_text: str = '', ai_goal_prom
 
     # Sanitize and assign dynamic action intent (1 lowercase verb)
     from apps.clips.services.intent_detector import clean_action_intent
-    result['intent'] = clean_action_intent(result.get('action_intent') or 'other')
+    from apps.clips.services.extract import _detect_content_type
+
+    # Deterministic fallback guard: ensure video URLs are always classified as video & watch
+    detected_type = _detect_content_type(url, clean_page)
+    if detected_type == 'video':
+        result['content_type'] = 'video'
+        if not result.get('category_name') or result['category_name'].lower() in ('articles', 'webpages', 'webpage', 'article'):
+            result['category_name'] = 'Videos'
+
+    cleaned_intent = clean_action_intent(result.get('action_intent') or 'other')
+    if result['content_type'] == 'video' and (cleaned_intent in ('learn', 'read', 'other', 'all') or not cleaned_intent):
+        result['intent'] = 'watch'
+    else:
+        result['intent'] = cleaned_intent
 
     return result

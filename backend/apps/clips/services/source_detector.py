@@ -1,5 +1,8 @@
+import logging
 import re
 from urllib.parse import parse_qs, urlparse
+
+logger = logging.getLogger(__name__)
 
 
 def detect_source_platform(url: str) -> tuple[str, str, str]:
@@ -49,9 +52,33 @@ def detect_source_platform(url: str) -> tuple[str, str, str]:
     if 'reddit.com' in domain:
         sub_match = re.search(r'/r/([^/]+)', path)
         subreddit = f'r/{sub_match.group(1)}' if sub_match else ''
-        post_match = re.search(r'/r/([^/]+)/comments/([a-zA-Z0-9]+)', path)
-        canonical_url = f'https://www.reddit.com/r/{post_match.group(1)}/comments/{post_match.group(2)}/' if post_match else url
-        return 'reddit', subreddit, canonical_url
+        post_match = re.search(r'/r/([^/]+)/comments/([a-zA-Z0-9]+)(?:/([^/?#]+))?', path)
+        if post_match:
+            slug_part = f"{post_match.group(3)}/" if post_match.group(3) else ''
+            canonical_url = f'https://www.reddit.com/r/{post_match.group(1)}/comments/{post_match.group(2)}/{slug_part}'
+            return 'reddit', subreddit, canonical_url
+
+        # Check Reddit short share link: /r/<subId>/s/<shareId>
+        if '/s/' in path:
+            try:
+                import urllib.request
+                req = urllib.request.Request(
+                    url,
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}
+                )
+                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                    resolved = resp.geturl()
+                    if resolved and '/comments/' in resolved:
+                        resolved_path = urlparse(resolved).path
+                        rmatch = re.search(r'/r/([^/]+)/comments/([a-zA-Z0-9]+)(?:/([^/?#]+))?', resolved_path)
+                        if rmatch:
+                            sub = f'r/{rmatch.group(1)}'
+                            slug_part = f"{rmatch.group(3)}/" if rmatch.group(3) else ''
+                            return 'reddit', sub, f'https://www.reddit.com/r/{rmatch.group(1)}/comments/{rmatch.group(2)}/{slug_part}'
+            except Exception as exc:
+                logger.debug("Source detector: Reddit shortlink redirect resolution failed for %s: %s", url, exc)
+
+        return 'reddit', subreddit, url
 
     # 4. YouTube (youtube.com or youtu.be)
     if domain in ('youtube.com', 'm.youtube.com', 'youtu.be'):
@@ -71,7 +98,9 @@ def detect_source_platform(url: str) -> tuple[str, str, str]:
     if 'instagram.com' in domain:
         post_match = re.search(r'/(?:p|reel|reels)/([a-zA-Z0-9-_]+)', path)
         if post_match:
-            canonical_url = f'https://www.instagram.com/p/{post_match.group(1)}/'
+            is_reel = '/reel/' in path or '/reels/' in path
+            sub_path = 'reel' if is_reel else 'p'
+            canonical_url = f'https://www.instagram.com/{sub_path}/{post_match.group(1)}/'
             author_match = re.search(r'^/([^/]+)', path)
             author = f'@{author_match.group(1)}' if author_match and author_match.group(1) not in ('p', 'reel', 'reels', 'stories', 'explore', 'direct') else ''
             return 'instagram', author, canonical_url
@@ -87,6 +116,12 @@ def detect_source_platform(url: str) -> tuple[str, str, str]:
         video_match = re.search(r'/@([^/?]+)/video/(\d+)', path)
         canonical_url = f'https://www.tiktok.com/@{video_match.group(1)}/video/{video_match.group(2)}' if video_match else url
         return 'tiktok', author, canonical_url
+
+    # 8. Spotify (spotify.com)
+    if 'spotify.com' in domain:
+        author_match = re.search(r'/(?:artist|show)/([^/?]+)', path)
+        author = author_match.group(1).replace('-', ' ').title() if author_match else ''
+        return 'spotify', author, url
 
     # Default general web
     host_clean = domain.split(':')[0]
