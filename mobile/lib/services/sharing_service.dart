@@ -28,6 +28,7 @@ class SharingService {
   static Stream<void> get onAudioRecognitionTrigger => _audioRecognitionController.stream;
 
   static SharedPayload? initialPayload;
+  static bool initialAudioTrigger = false;
   static bool _initialized = false;
 
   static Future<void> initialize() async {
@@ -51,7 +52,7 @@ class SharingService {
 
     // Check if app was launched via Share Sheet or Quick Settings
     initialPayload = await checkInitialShare();
-    checkPendingAudioRecognition();
+    initialAudioTrigger = await checkPendingAudioRecognition();
   }
 
   static Future<SharedPayload?> checkInitialShare() async {
@@ -69,12 +70,22 @@ class SharingService {
     return null;
   }
 
-  static Future<void> checkPendingAudioRecognition() async {
+  static Future<bool> checkPendingAudioRecognition() async {
     try {
       final bool? isPending = await _channel.invokeMethod<bool>('checkPendingAudioRecognition');
       if (isPending == true) {
+        initialAudioTrigger = true;
         _audioRecognitionController.add(null);
+        return true;
       }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Displays a native OS Toast that floats over whatever app the user is in.
+  static Future<void> showToast(String message) async {
+    try {
+      await _channel.invokeMethod('showToast', {'message': message});
     } catch (_) {}
   }
 

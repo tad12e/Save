@@ -11,6 +11,7 @@ class ApiService {
   static const String _keyAccessToken = 'auth_access_token';
   static const String _keyRefreshToken = 'auth_refresh_token';
   static const String _keyUserJson = 'auth_user_data';
+  static const String apiVersion = '/api/v1';
 
   static String get defaultBaseUrl {
     if (kIsWeb) return 'http://localhost:8000';
@@ -143,7 +144,7 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/signin/'),
+        Uri.parse('$baseUrl$apiVersion/auth/signin/'),
         headers: await _getHeaders(requireAuth: false),
         body: jsonEncode({
           'email': email.trim().toLowerCase(),
@@ -205,7 +206,7 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/signup/'),
+        Uri.parse('$baseUrl$apiVersion/auth/signup/'),
         headers: await _getHeaders(requireAuth: false),
         body: jsonEncode({
           'name': name.trim(),
@@ -248,7 +249,7 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/verify-otp/'),
+        Uri.parse('$baseUrl$apiVersion/auth/verify-otp/'),
         headers: await _getHeaders(requireAuth: false),
         body: jsonEncode({
           'email': email.trim().toLowerCase(),
@@ -301,7 +302,7 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/auth/resend-otp/'),
+        Uri.parse('$baseUrl$apiVersion/auth/resend-otp/'),
         headers: await _getHeaders(requireAuth: false),
         body: jsonEncode({
           'email': email.trim().toLowerCase(),
@@ -338,7 +339,7 @@ class ApiService {
 
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/auth/me/'),
+        Uri.parse('$baseUrl$apiVersion/auth/me/'),
         headers: await _getHeaders(),
       );
 
@@ -371,7 +372,7 @@ class ApiService {
 
       final response = await http
           .patch(
-            Uri.parse('$baseUrl/api/auth/me/'),
+            Uri.parse('$baseUrl$apiVersion/auth/me/'),
             headers: await _getHeaders(),
             body: jsonEncode(payload),
           )
@@ -409,20 +410,22 @@ class ApiService {
 
       // 1. Fetch from /api/clips/ (complete feed ordered by newest first)
       final response = await http.get(
-        Uri.parse('$baseUrl/api/clips/'),
+        Uri.parse('$baseUrl$apiVersion/clips/'),
         headers: headers,
       );
 
       if (response.statusCode == 200) {
         final dynamic data = jsonDecode(utf8.decode(response.bodyBytes));
-        if (data is List && data.isNotEmpty) {
+        if (data is List) {
           return data.map((json) => ClipModel.fromJson(json as Map<String, dynamic>)).toList();
         }
+      } else {
+        debugPrint('[ApiService.fetchClips] /clips/ returned ${response.statusCode}: ${response.body}');
       }
 
       // 2. Fallback to /api/clips/dashboard/ (recent_clips list)
       final dashboardResponse = await http.get(
-        Uri.parse('$baseUrl/api/clips/dashboard/'),
+        Uri.parse('$baseUrl$apiVersion/clips/dashboard/'),
         headers: headers,
       );
 
@@ -432,10 +435,12 @@ class ApiService {
           final List<dynamic> list = data['recent_clips'] ?? [];
           return list.map((json) => ClipModel.fromJson(json as Map<String, dynamic>)).toList();
         }
+      } else {
+        debugPrint('[ApiService.fetchClips] /dashboard/ returned ${dashboardResponse.statusCode}: ${dashboardResponse.body}');
       }
       return [];
     } catch (e) {
-      if (kDebugMode) print('ApiService.fetchClips error: $e');
+      debugPrint('[ApiService.fetchClips] Exception: $e');
       return [];
     }
   }
@@ -492,7 +497,7 @@ class ApiService {
 
       final response = await http
           .post(
-            Uri.parse('$baseUrl/api/clips/'),
+            Uri.parse('$baseUrl$apiVersion/clips/'),
             headers: headers,
             body: jsonEncode(payload),
           )
@@ -542,7 +547,7 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/api/destinations/'), headers: await _getHeaders())
+          .get(Uri.parse('$baseUrl$apiVersion/destinations/'), headers: await _getHeaders())
           .timeout(const Duration(seconds: 8));
       if (response.statusCode != 200) return [];
       final dynamic data = jsonDecode(utf8.decode(response.bodyBytes));
@@ -567,7 +572,7 @@ class ApiService {
     final baseUrl = await getBaseUrl();
     try {
       final response = await http
-          .post(Uri.parse('$baseUrl/api/destinations/$id/set_default/'), headers: await _getHeaders())
+          .post(Uri.parse('$baseUrl$apiVersion/destinations/$id/set-default/'), headers: await _getHeaders())
           .timeout(const Duration(seconds: 8));
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (_) {
@@ -599,7 +604,7 @@ class ApiService {
 
       final response = await http
           .patch(
-            Uri.parse('$baseUrl/api/clips/$clipId/'),
+            Uri.parse('$baseUrl$apiVersion/clips/$clipId/'),
             headers: await _getHeaders(),
             body: jsonEncode(payload),
           )
@@ -616,7 +621,7 @@ class ApiService {
     try {
       final response = await http
           .delete(
-            Uri.parse('$baseUrl/api/clips/$clipId/'),
+            Uri.parse('$baseUrl$apiVersion/clips/$clipId/'),
             headers: await _getHeaders(),
           )
           .timeout(const Duration(seconds: 8));
@@ -633,7 +638,7 @@ class ApiService {
     try {
       final response = await http
           .delete(
-            Uri.parse('$baseUrl/api/clips/'),
+            Uri.parse('$baseUrl$apiVersion/clips/'),
             headers: await _getHeaders(),
             body: jsonEncode({'ids': clipIds}),
           )
@@ -650,7 +655,7 @@ class ApiService {
     try {
       final response = await http
           .patch(
-            Uri.parse('$baseUrl/api/clips/$clipId/'),
+            Uri.parse('$baseUrl$apiVersion/clips/$clipId/'),
             headers: await _getHeaders(),
             body: jsonEncode({'is_favorite': isFavorite, 'is_starred': isFavorite}),
           )
@@ -672,7 +677,7 @@ class ApiService {
     try {
       final response = await http
           .post(
-            Uri.parse('$baseUrl/api/clips/recognize-audio/'),
+            Uri.parse('$baseUrl$apiVersion/clips/recognize-audio/'),
             headers: await _getHeaders(requireAuth: false),
             body: jsonEncode({
               'audio': audioBase64,
@@ -715,7 +720,7 @@ class ApiService {
       final headers = <String, String>{'Content-Type': 'application/json'};
       if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
       final response = await http
-          .get(Uri.parse('$baseUrl/api/destinations/spotify/playlists/'), headers: headers)
+          .get(Uri.parse('$baseUrl$apiVersion/destinations/spotify/playlists/'), headers: headers)
           .timeout(const Duration(seconds: 8));
       if (response.statusCode != 200) return [];
       final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -746,7 +751,7 @@ class ApiService {
       if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
       final response = await http
           .post(
-            Uri.parse('$baseUrl/api/destinations/spotify/add-track/'),
+            Uri.parse('$baseUrl$apiVersion/destinations/spotify/add-track/'),
             headers: headers,
             body: jsonEncode({
               'playlist_id': playlistId,
@@ -774,7 +779,7 @@ class ApiService {
   }) async {
     final baseUrl = await getBaseUrl();
     try {
-      final uri = Uri.parse('$baseUrl/api/clips/feed/').replace(
+      final uri = Uri.parse('$baseUrl$apiVersion/clips/feed/').replace(
         queryParameters: {
           'timeframe': timeframe,
           'category': category,
@@ -809,7 +814,7 @@ class ApiService {
     try {
       final response = await http
           .post(
-            Uri.parse('$baseUrl/api/clips/feed/$clipId/action/'),
+            Uri.parse('$baseUrl$apiVersion/clips/feed/$clipId/action/'),
             headers: await _getHeaders(),
             body: jsonEncode({'action': action, 'note': note}),
           )
@@ -846,7 +851,7 @@ class ApiService {
     try {
       final headers = await _getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/clips/dashboard/'),
+        Uri.parse('$baseUrl$apiVersion/clips/dashboard/'),
         headers: headers,
       );
 
@@ -873,7 +878,7 @@ class ApiService {
         _ => 'this_week',
       };
 
-      final uri = Uri.parse('$baseUrl/api/analytics/full/').replace(
+      final uri = Uri.parse('$baseUrl$apiVersion/analytics/full/').replace(
         queryParameters: {
           'period': queryParamPeriod,
           if (refresh) 'refresh': 'true',
@@ -899,7 +904,7 @@ class ApiService {
     try {
       final headers = await _getHeaders(requireAuth: false);
       final response = await http
-          .get(Uri.parse('$baseUrl/api/users/settings/'), headers: headers)
+          .get(Uri.parse('$baseUrl$apiVersion/users/settings/'), headers: headers)
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
@@ -918,7 +923,7 @@ class ApiService {
       final headers = await _getHeaders(requireAuth: false);
       final response = await http
           .patch(
-            Uri.parse('$baseUrl/api/users/settings/'),
+            Uri.parse('$baseUrl$apiVersion/users/settings/'),
             headers: headers,
             body: jsonEncode(data),
           )
