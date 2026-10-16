@@ -1037,6 +1037,8 @@ function generateClientSynthesizedAnalytics(
         user_percentile = 65;
       }
 
+      const recentSavesCount = historical_trend.slice(-7).reduce((a, b) => a + (b.actual || 0), 0);
+
       return {
         historical_trend,
         forecast_days,

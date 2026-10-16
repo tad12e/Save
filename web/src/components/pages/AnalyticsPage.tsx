@@ -421,12 +421,29 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ clips = [], destin
           </div>
         </div>
 
-        {isLoading || !data ? (
+        {isLoading && !data ? (
           <div className="min-h-[400px] flex flex-col items-center justify-center gap-3">
-            <RefreshCw className="w-8 h-8 text-emerald-700 animate-spin" />
+            <RefreshCw className="w-8 h-8 text-emerald-500 animate-spin" />
             <p className="text-xs font-mono text-slate-500">
               Loading DuckDB OLAP analytics &amp; generating widgets...
             </p>
+          </div>
+        ) : !data ? (
+          <div className="min-h-[300px] flex flex-col items-center justify-center gap-4 text-center p-6 rounded-2xl border border-rose-500/20 bg-rose-500/5">
+            <AlertTriangle className="w-10 h-10 text-amber-500" />
+            <div>
+              <h3 className="text-sm font-semibold">Analytics Telemetry Paused</h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-md">
+                Could not generate the OLAP dimensional widgets. Please click below to refresh the telemetry cache.
+              </p>
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#3FE769] text-black hover:bg-[#34c759] transition-all cursor-pointer flex items-center gap-2"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Retry Analytics Query
+            </button>
           </div>
         ) : (
           <>

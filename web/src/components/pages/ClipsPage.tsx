@@ -5,6 +5,8 @@ import { CreateCustomCategoryModal } from '../modals/CreateCustomCategoryModal';
 import { fetchCustomCategoriesBackend, createCustomCategoryBackend, deleteCustomCategoryBackend, updateClipBackend } from '../../lib/api';
 import { getStoredCustomCategories, saveStoredCustomCategories } from '../../lib/storage';
 import { PolymorphicClipCard } from '../cards/PolymorphicClipCard';
+import { ClipMediaPreview } from '../cards/ClipMediaPreview';
+import { ClipCinemaViewer } from '../cards/ClipCinemaViewer';
 import { 
   Bookmark, 
   Search, 
@@ -2114,9 +2116,11 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
       {/* ------------------------------------------------------------- */}
       <AnimatePresence>
         {detailModalClip && (
-          <ClipDetailDrawer
+          <ClipCinemaViewer
             clip={detailModalClip}
+            allClips={filteredClips}
             onClose={() => setDetailModalClip(null)}
+            onNavigate={(c) => setDetailModalClip(c)}
             destinations={destinations}
             onSendToDestination={onSendToDestination}
             onToggleStorage={handleToggleStorage}
@@ -2125,10 +2129,6 @@ export const ClipsPage: React.FC<ClipsPageProps> = ({
             isDark={isDark}
             customCategories={customCategories}
             onUpdateClip={handleUpdateClip}
-            onOpenAddCustomCategory={() => {
-              setCreateCatDimension('intent');
-              setIsCreateCatModalOpen(true);
-            }}
           />
         )}
       </AnimatePresence>
@@ -2382,6 +2382,9 @@ const ClipDetailDrawer: React.FC<{
               </a>
             </div>
           </div>
+
+          {/* Interactive In-App Media & Live Embed Preview (Option A) */}
+          <ClipMediaPreview clip={clip} isDark={isDark} />
 
           {/* Storage Mode Toggle Component */}
           <div className={`p-4 rounded-xl border space-y-3 ${

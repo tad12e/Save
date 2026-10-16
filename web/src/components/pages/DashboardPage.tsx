@@ -35,6 +35,7 @@ import {
 } from '../../types';
 import { TabType } from '../layout/Sidebar';
 import { getClipIntent } from './ClipsPage';
+import { ClipCinemaViewer } from '../cards/ClipCinemaViewer';
 
 interface DashboardPageProps {
   clips: ClipItem[];
@@ -237,7 +238,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
   });
   const [gridView, setGridView] = useState(false);
   const [showEmpty, setShowEmpty] = useState(false);
-  const [openClip, setOpenClip] = useState<StaticClip | null>(null);
+  const [cinemaClip, setCinemaClip] = useState<ClipItem | null>(null);
   const [activeDonut, setActiveDonut] = useState<number | null>(null);
   const [doneDeadlines, setDoneDeadlines] = useState<Set<string>>(new Set());
   const [snoozed, setSnoozed] = useState<Record<string, number>>({});
@@ -563,7 +564,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (document.activeElement?.tagName || '').toUpperCase();
       if (e.key === 'Escape') {
-        setOpenClip(null);
+        setCinemaClip(null);
         return;
       }
       if ((e.key === 'n' || e.key === 'N') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
@@ -638,126 +639,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
     >
       <div className="w-full px-8 py-8">
         <AnimatePresence>
-          {openClip && (
-            <>
-              <motion.div
-                key="reader-backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={reduceMotion ? { duration: 0 } : { duration: 0.2 }}
-                onClick={() => setOpenClip(null)}
-                className={`fixed inset-0 z-40 ${isDark ? 'bg-black/75 backdrop-blur-xs' : 'bg-slate-900/30'}`}
-              />
-              <motion.aside
-                key="reader-panel"
-                initial={reduceMotion ? { opacity: 0 } : { x: '100%' }}
-                animate={reduceMotion ? { opacity: 1 } : { x: 0 }}
-                exit={reduceMotion ? { opacity: 0 } : { x: '100%' }}
-                transition={reduceMotion ? { duration: 0 } : { ...SPRING }}
-                className={`fixed right-0 top-0 bottom-0 z-50 w-full max-w-md shadow-2xl flex flex-col border-l ${
-                  isDark ? 'bg-[#0E0E0E] border-[#1F1F1F] text-[#EDEDED]' : 'bg-white border-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-2 p-6 pb-0">
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full border text-[11px] leading-[14px] font-semibold tracking-wide ${badgeClass(
-                      openClip.badge,
-                      openClip.amber,
-                      isDark
-                    )}`}
-                  >
-                    {openClip.badge}
-                    {openClip.badgeExtra ? ` • ${openClip.badgeExtra}` : ''}
-                  </span>
-                  <button
-                    onClick={() => setOpenClip(null)}
-                    className={`ml-auto h-9 w-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer ${
-                      isDark
-                        ? 'text-[#878787] hover:text-white hover:bg-[#181818]'
-                        : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                    title="Close (Esc)"
-                  >
-                    <X className="w-[18px] h-[18px]" />
-                  </button>
-                </div>
-                <div className="p-6 pt-3 overflow-y-auto">
-                  <div className={`text-[11px] leading-[14px] font-mono ${isDark ? 'text-[#878787]' : 'text-slate-400'}`}>
-                    {openClip.domain} · {openClip.time}
-                  </div>
-                  <h2
-                    className={`text-[22px] leading-[30px] font-semibold mt-2 ${isDark ? 'text-white' : 'text-slate-900'}`}
-                    style={{ fontFamily: FONT_GAMBETTA }}
-                  >
-                    {openClip.title}
-                  </h2>
-                  <p className={`text-[14px] leading-[22px] mt-3 ${isDark ? 'text-[#A1A1A1]' : 'text-slate-600'}`}>
-                    {openClip.excerpt}
-                  </p>
-                  <div className="flex items-center flex-wrap gap-1.5 mt-4">
-                    {openClip.tags.map((t) => (
-                      <span
-                        key={t}
-                        className={`px-2 py-1 rounded-full font-medium text-[11px] leading-[14px] ${
-                          isDark ? 'bg-[#181818] text-[#A1A1A1]' : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {t}
-                      </span>
-                    ))}
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] leading-[14px] font-medium ${
-                        isDark ? 'bg-[#1C1B1B] text-[#3FE769]' : 'bg-emerald-50 text-emerald-600'
-                      }`}
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      {openClip.sync}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-6">
-                    <motion.button
-                      onClick={() => copyClipLink(openClip)}
-                      whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                      className={`flex-1 h-10 rounded-xl transition-colors font-medium text-[13px] leading-[20px] flex items-center justify-center gap-2 cursor-pointer ${
-                        isDark
-                          ? 'bg-[#1C1B1B] border border-[#2A2A2A] text-[#3FE769] hover:bg-[#222222]'
-                          : 'bg-[#2D6A4F] text-white hover:bg-[#245640]'
-                      }`}
-                    >
-                      {copied ? (
-                        <Check className="w-4 h-4" />
-                      ) : (
-                        <Copy className="w-4 h-4" />
-                      )}
-                      {copied ? 'Link copied' : 'Copy link'}
-                    </motion.button>
-                    <motion.button
-                      onClick={() => toggleStar(openClip.id)}
-                      whileTap={reduceMotion ? undefined : { scale: 0.9 }}
-                      className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors cursor-pointer ${
-                        starred.has(openClip.id)
-                          ? isDark
-                            ? 'text-amber-400 border-amber-500/40 bg-[#261E14]'
-                            : 'text-amber-500 border-amber-200 bg-amber-50'
-                          : isDark
-                          ? 'text-[#878787] border-[#262626] hover:text-amber-400 hover:border-amber-500/40'
-                          : 'text-slate-400 border-slate-200 hover:text-amber-500 hover:border-amber-200'
-                      }`}
-                      title="Star clip"
-                    >
-                      <Star
-                        className="w-[18px] h-[18px]"
-                        fill={starred.has(openClip.id) ? 'currentColor' : 'none'}
-                      />
-                    </motion.button>
-                  </div>
-                  <p className={`text-[11px] leading-[14px] mt-4 ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>
-                    Press Esc or click outside to close
-                  </p>
-                </div>
-              </motion.aside>
-            </>
+          {cinemaClip && (
+            <ClipCinemaViewer
+              clip={cinemaClip}
+              allClips={clips}
+              onClose={() => setCinemaClip(null)}
+              onNavigate={(c) => setCinemaClip(c)}
+              destinations={destinations}
+              onSendToDestination={() => {}}
+              onToggleStorage={() => {}}
+              onToggleFavorite={(id) => toggleStar(id)}
+              onDeleteClip={(id) => {
+                setClips(prev => prev.filter(c => c.id !== id));
+                setCinemaClip(null);
+              }}
+              isDark={isDark}
+            />
           )}
         </AnimatePresence>
         <div className="flex flex-col w-full gap-6">
@@ -1174,7 +1071,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   {visibleClips.map((clip) => (
                     <article
                       key={clip.id}
-                      onClick={() => setOpenClip(clip)}
+                      onClick={() => {
+                        const full = clips.find(c => c.id === clip.id);
+                        if (full) {
+                          setCinemaClip(full);
+                        } else {
+                          setCinemaClip({
+                            id: clip.id,
+                            title: clip.title,
+                            url: `https://${clip.domain}`,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            tags: clip.tags,
+                            summary: clip.excerpt,
+                          });
+                        }
+                      }}
                       className={`p-6 transition-colors group flex flex-col sm:flex-row gap-4 justify-between items-start border-b last:border-b-0 cursor-pointer ${
                         clip.amber
                           ? isDark
