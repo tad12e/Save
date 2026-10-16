@@ -158,18 +158,37 @@ SIMPLE_JWT = {
 ssl_mode = os.getenv('POSTGRES_SSLMODE', 'prefer')
 db_options = {'sslmode': ssl_mode} if ssl_mode else {}
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'save'),
-        'USER': os.getenv('POSTGRES_USER', 'postgres'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
-        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-        'PORT': os.getenv('POSTGRES_PORT', '5432'),
-        'CONN_MAX_AGE': int(os.getenv('CONN_MAX_AGE', '600')),
-        'OPTIONS': db_options,
+DATABASE_URL = os.getenv('DATABASE_URL')
+if DATABASE_URL:
+    from urllib.parse import urlparse, parse_qs
+    _parsed = urlparse(DATABASE_URL)
+    _qs = parse_qs(_parsed.query)
+    _ssl_mode = _qs.get('sslmode', [ssl_mode])[0]
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': _parsed.path.lstrip('/') or 'neondb',
+            'USER': _parsed.username or '',
+            'PASSWORD': _parsed.password or '',
+            'HOST': _parsed.hostname or '',
+            'PORT': str(_parsed.port or '5432'),
+            'CONN_MAX_AGE': int(os.getenv('CONN_MAX_AGE', '0' if 'pooler' in (_parsed.hostname or '') else '600')),
+            'OPTIONS': {'sslmode': _ssl_mode},
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('POSTGRES_DB', 'save'),
+            'USER': os.getenv('POSTGRES_USER', 'postgres'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
+            'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+            'PORT': os.getenv('POSTGRES_PORT', '5432'),
+            'CONN_MAX_AGE': int(os.getenv('CONN_MAX_AGE', '600')),
+            'OPTIONS': db_options,
+        }
+    }
 
 
 # Password validation
