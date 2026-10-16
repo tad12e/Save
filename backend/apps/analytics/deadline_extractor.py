@@ -139,9 +139,10 @@ class AIDeadlineExtractor:
         Calls Google Gemini 1.5 Flash via REST API with constrained Pydantic responseSchema.
         Handles rate limits (HTTP 429), timeouts, and network failures gracefully.
         """
+        enable_ai = getattr(settings, 'ENABLE_AI', False)
         api_key = getattr(settings, 'GEMINI_API_KEY', '')
-        if not api_key or api_key.startswith('your-gemini-api-key'):
-            logger.debug("[AIDeadlineExtractor] GEMINI_API_KEY is not configured.")
+        if not enable_ai or not api_key or api_key.startswith('your-gemini-api-key'):
+            logger.debug("[AIDeadlineExtractor] AI is disabled or GEMINI_API_KEY not configured — routing straight to fallback.")
             return None
 
         model_name = getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')

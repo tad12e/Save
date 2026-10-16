@@ -135,7 +135,11 @@ class DuckDBAnalyticsEngine:
                 tf_clips = all_clips_list
 
             if DUCKDB_AVAILABLE and total_all_time > 0:
-                engine_results = cls._run_duckdb_aggregations(all_clips_list, tf_clips, now, today, timeframe)
+                try:
+                    engine_results = cls._run_duckdb_aggregations(all_clips_list, tf_clips, now, today, timeframe)
+                except Exception as e:
+                    logger.warning(f"DuckDB aggregation failed; falling back to vectorized python: {e}")
+                    engine_results = cls._run_vectorized_python_aggregations(all_clips_list, tf_clips, now, today, timeframe)
             else:
                 engine_results = cls._run_vectorized_python_aggregations(all_clips_list, tf_clips, now, today, timeframe)
 
@@ -336,8 +340,40 @@ class DuckDBAnalyticsEngine:
                 'day_of_week': dt.strftime('%A') if dt else 'Monday',
             })
 
-        # Register dataset directly into DuckDB's catalog as a zero-copy virtual table
-        con.register('clips_data', table_rows)
+        # Create and populate DuckDB in-memory table
+        con.execute("""
+            CREATE TABLE clips_data (
+                id VARCHAR,
+                content_type VARCHAR,
+                status VARCHAR,
+                platform VARCHAR,
+                tags_json VARCHAR,
+                has_deadline INTEGER,
+                created_at VARCHAR,
+                created_date VARCHAR,
+                created_hour INTEGER,
+                day_of_week VARCHAR
+            )
+        """)
+        if table_rows:
+            con.executemany(
+                "INSERT INTO clips_data VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        r['id'],
+                        r['content_type'],
+                        r['status'],
+                        r['platform'],
+                        r['tags_json'],
+                        r['has_deadline'],
+                        r['created_at'],
+                        r['created_date'],
+                        r['created_hour'],
+                        r['day_of_week'],
+                    )
+                    for r in table_rows
+                ]
+            )
 
         # 1. KPIs
         total_all_time = len(all_clips)
