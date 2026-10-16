@@ -32,10 +32,11 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-default-dev-key')
 DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',') if host.strip()]
-if DEBUG:
-    for dev_host in ['10.0.2.2', '127.0.0.1', 'localhost', '*']:
-        if dev_host not in ALLOWED_HOSTS:
-            ALLOWED_HOSTS.append(dev_host)
+for default_host in ['.azurewebsites.net', '10.0.2.2', '127.0.0.1', 'localhost']:
+    if default_host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(default_host)
+if DEBUG and '*' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('*')
 
 # ---------------------------------------------------------------------------
 # CORS & CSRF Configuration
@@ -68,6 +69,9 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 CSRF_TRUSTED_ORIGINS = [
     origin for origin in CORS_ALLOWED_ORIGINS if origin.startswith(('http://', 'https://'))
 ]
+for azure_origin in ['https://*.azurewebsites.net', 'https://127.0.0.1:8000', 'http://127.0.0.1:8000']:
+    if azure_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(azure_origin)
 
 
 # Application definition
@@ -92,6 +96,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -150,6 +155,9 @@ SIMPLE_JWT = {
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+ssl_mode = os.getenv('POSTGRES_SSLMODE', 'prefer')
+db_options = {'sslmode': ssl_mode} if ssl_mode else {}
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -159,6 +167,7 @@ DATABASES = {
         'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
         'PORT': os.getenv('POSTGRES_PORT', '5432'),
         'CONN_MAX_AGE': int(os.getenv('CONN_MAX_AGE', '600')),
+        'OPTIONS': db_options,
     }
 }
 
@@ -197,14 +206,16 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # ---------------------------------------------------------------------------
 # Third-Party API Keys & AI Models
 # ---------------------------------------------------------------------------
+ENABLE_AI = os.getenv('ENABLE_AI', 'False').lower() in ('true', '1', 't')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-flash-latest')
-GEMINI_EMBEDDING_MODEL = os.getenv('GEMINI_EMBEDDING_MODEL', 'gemini-embedding-001')
 
 AUDD_API_TOKEN = os.getenv('AUDD_API_TOKEN', '')
 
