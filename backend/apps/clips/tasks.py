@@ -147,9 +147,6 @@ def process_clip(self, clip_id: str):
             'topics': repo_meta.get('topics', []),
         })
         clip.status = Clip.STATUS_DONE
-
-        # Generate embedding for repository BEFORE the save, so metadata +
-        # embedding persist in a single UPDATE instead of two.
         repo_update_fields = [
             'title',
             'summary',
@@ -162,16 +159,6 @@ def process_clip(self, clip_id: str):
             'extra_metadata',
             'status',
         ]
-        try:
-            from apps.clips.services.embed import generate_embedding
-            text_to_embed = f"{clip.title} {clip.summary} {repo_meta.get('language', '')}"
-            embedding_vector = generate_embedding(text_to_embed)
-            if embedding_vector:
-                clip.embedding = embedding_vector
-                repo_update_fields.append('embedding')
-        except Exception as embed_exc:
-            logger.warning('Embedding generation for repo clip %s failed: %s', clip.id, embed_exc)
-
         clip.save(update_fields=repo_update_fields)
         try:
             from apps.clips.views import invalidate_user_clips_feed_cache
@@ -280,20 +267,6 @@ def process_clip(self, clip_id: str):
         if music_url:
             clip.music_embed_url = music_url
             update_fields.append('music_embed_url')
-
-        # Generate embedding for vector semantic search BEFORE the save, so
-        # metadata + embedding persist in a single UPDATE instead of two.
-        # Failure path unchanged: warning logged, save proceeds without it.
-        try:
-            from apps.clips.services.embed import generate_embedding
-            text_to_embed = f"{clip.title} {clip.summary} {clip.selected_text}"
-            embedding_vector = generate_embedding(text_to_embed)
-            if embedding_vector:
-                clip.embedding = embedding_vector
-                update_fields.append('embedding')
-                logger.info('Clip %s embedding generated successfully.', clip.id)
-        except Exception as embed_exc:
-            logger.warning('Embedding generation for clip %s failed: %s', clip.id, embed_exc)
 
         clip.status = Clip.STATUS_DONE
         clip.save(update_fields=update_fields)

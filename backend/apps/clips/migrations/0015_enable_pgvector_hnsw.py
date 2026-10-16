@@ -1,7 +1,12 @@
 # Generated migration for pgvector extension, VectorField conversion, and HNSW cosine index
 
 from django.db import migrations, models
-from pgvector.django import VectorExtension, VectorField, HnswIndex
+try:
+    from pgvector.django import VectorExtension, VectorField, HnswIndex
+except ImportError:
+    VectorExtension = None
+    VectorField = models.JSONField
+    HnswIndex = None
 
 
 class Migration(migrations.Migration):
@@ -29,9 +34,9 @@ class Migration(migrations.Migration):
                 migrations.AlterField(
                     model_name='clip',
                     name='embedding',
-                    field=VectorField(blank=True, dimensions=768, null=True),
+                    field=VectorField(blank=True, dimensions=768, null=True) if (VectorField and VectorField != models.JSONField) else models.JSONField(blank=True, default=list, null=True),
                 ),
-                migrations.AddIndex(
+                *([migrations.AddIndex(
                     model_name='clip',
                     index=HnswIndex(
                         fields=['embedding'],
@@ -40,7 +45,7 @@ class Migration(migrations.Migration):
                         name='clips_clip_emb_hnsw_idx',
                         opclasses=['vector_cosine_ops'],
                     ),
-                ),
+                )] if HnswIndex else []),
             ],
             database_operations=[
                 migrations.RunSQL(

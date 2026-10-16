@@ -94,7 +94,7 @@ class SerializerAndQueryAuditTests(TestCase):
         with self.assertNumQueries(1):
             qs = list(
                 Clip.objects.filter(user=self.user)
-                .defer('raw_content', 'embedding')
+                .defer('raw_content')
                 .select_related('destination', 'custom_page', 'parent_clip')
                 .annotate(prefetched_child_count=Count('child_clips'))
                 .order_by('-created_at')

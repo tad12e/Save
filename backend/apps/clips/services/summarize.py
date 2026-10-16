@@ -190,11 +190,12 @@ def ai_summarize(url: str, page_text: str, selected_text: str = '', ai_goal_prom
     Call Google Gemini using Schema-Enforced Structured Outputs (responseSchema).
     Validates output via Pydantic model and returns a clean dictionary.
     """
+    enable_ai = getattr(settings, 'ENABLE_AI', False)
     api_key = getattr(settings, 'GEMINI_API_KEY', '')
     model = getattr(settings, 'GEMINI_MODEL', 'gemini-flash-latest')
 
-    if not api_key:
-        logger.info('GEMINI_API_KEY not configured — skipping AI summarization.')
+    if not enable_ai or not api_key:
+        logger.info('AI summarization disabled or API key missing — routing straight to fallback.')
         return None
 
     # Clean text inputs before sending to Gemini

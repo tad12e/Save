@@ -48,18 +48,14 @@ class ClipClusterEngine:
         clips_qs = (
             Clip.objects.filter(user=user)
             .order_by('-created_at')[:80]
-            .values('id', 'title', 'summary', 'content_type', 'intent', 'url', 'embedding', 'created_at')
+            .values('id', 'title', 'summary', 'content_type', 'intent', 'url', 'created_at')
         )
         clips_list = list(clips_qs)
         if len(clips_list) < min_cluster_size:
             return []
 
-        # 1. Try Vector Clustering first (Fast, Local Math)
-        clusters = cls._cluster_by_vector_embeddings(clips_list, similarity_threshold, min_cluster_size)
-
-        # 2. Fallback: If clips lack embeddings, cluster by keyword & domain overlap
-        if not clusters:
-            clusters = cls._cluster_by_keyword_overlap(clips_list, min_cluster_size)
+        # 1. Cluster by keyword & domain overlap (Zero-AI, Zero-Vector Math)
+        clusters = cls._cluster_by_keyword_overlap(clips_list, min_cluster_size)
 
         # 3. Generate human-readable names for each cluster in a single batch call
         cluster_names = cls._generate_cluster_names_batch(clusters)
@@ -239,7 +235,8 @@ class ClipClusterEngine:
         Falls back to pure Python frequency analysis for any missing clusters.
         """
         results: Dict[int, str] = {}
-        api_key = os.getenv('GEMINI_API_KEY') or getattr(settings, 'GEMINI_API_KEY', '')
+        enable_ai = getattr(settings, 'ENABLE_AI', False)
+        api_key = (os.getenv('GEMINI_API_KEY') or getattr(settings, 'GEMINI_API_KEY', '')) if enable_ai else ''
 
         # Gather titles per cluster
         cluster_data: Dict[int, tuple[List[str], List[Dict]]] = {}
@@ -247,7 +244,7 @@ class ClipClusterEngine:
             titles = [c.get('title') or '' for c in cluster_clips if c.get('title')]
             cluster_data[idx] = (titles, cluster_clips)
 
-        if api_key and cluster_data:
+        if enable_ai and api_key and cluster_data:
             try:
                 # Prepare a single prompt with all clusters
                 cluster_prompt_blocks = []

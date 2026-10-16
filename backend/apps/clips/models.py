@@ -3,11 +3,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 
-try:
-    from pgvector.django import VectorField, HnswIndex
-    PGVECTOR_SUPPORT = True
-except ImportError:
-    PGVECTOR_SUPPORT = False
+
 
 
 class CustomPage(models.Model):
@@ -178,7 +174,6 @@ class Clip(models.Model):
         help_text="Dynamic 1-word action verb (e.g. 'apply', 'cook', 'listen', 'deploy', 'learn')",
     )
     tags = models.JSONField(default=list, blank=True)
-    embedding = VectorField(dimensions=768, null=True, blank=True) if PGVECTOR_SUPPORT else models.JSONField(default=list, blank=True, null=True)
 
     # --- AI-extracted metadata ---
     deadline_date = models.DateField(null=True, blank=True)
@@ -221,16 +216,6 @@ class Clip(models.Model):
             models.Index(fields=['user', 'intent', '-created_at'], name='clips_usr_intent_idx'),
             models.Index(fields=['user', 'url_hash'], name='clips_usr_urlhash_idx'),
         ]
-        if PGVECTOR_SUPPORT:
-            indexes.append(
-                HnswIndex(
-                    name='clips_clip_emb_hnsw_idx',
-                    fields=['embedding'],
-                    m=16,
-                    ef_construction=64,
-                    opclasses=['vector_cosine_ops'],
-                )
-            )
 
     def __str__(self):
         return f'{self.url} ({self.status})'

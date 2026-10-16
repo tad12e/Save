@@ -45,7 +45,7 @@ class FeedEngine:
         # Base queryset of all user clips (defer heavy blobs to save RAM)
         clips_qs = (
             Clip.objects.filter(user=user)
-            .defer('raw_content', 'embedding')
+            .defer('raw_content')
             .select_related('destination')
         )
 
@@ -336,7 +336,7 @@ class FeedEngine:
                 'takeaways': [
                     'Ingest bookmarks with the browser extension or quick ingest bar.',
                     'Upcoming deadlines will automatically populate your action radar.',
-                    'Vector embeddings cluster related research into actionable daily briefs.',
+                    'Topic clustering organizes related research into actionable daily briefs.',
                 ],
                 'item_count': 0,
                 'updated_at': timezone.now().isoformat(),

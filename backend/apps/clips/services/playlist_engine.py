@@ -48,7 +48,7 @@ class PlaylistEngine:
         clips_qs = (
             Clip.objects.filter(user=user)
             .exclude(status=Clip.STATUS_FAILED)
-            .defer('raw_content', 'embedding')
+            .defer('raw_content')
             .order_by('-created_at')
         )
 
@@ -65,7 +65,7 @@ class PlaylistEngine:
         from apps.clips.services.feed_engine import FeedEngine
         daily_queue = FeedEngine._build_daily_review_queue(clips_qs, now.date())
         if daily_queue:
-            d5_clip_ids = {item['clip_id'] for item in daily_queue}
+            d5_clip_ids = {str(item.get('clip_id') or item.get('id')) for item in daily_queue if item.get('clip_id') or item.get('id')}
             d5_clips = [c for c in all_clips if str(c.id) in d5_clip_ids]
             reviewed_d5 = sum(
                 1 for c in d5_clips

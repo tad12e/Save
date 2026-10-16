@@ -142,7 +142,7 @@ class ClipCreateView(APIView):
         # 2. Database query on cache miss (Deferred heavy blobs, pre-indexed, zero write locks)
         clips = list(
             clips_qs
-            .defer('raw_content', 'embedding')
+            .defer('raw_content')
             .select_related('destination', 'custom_page', 'parent_clip')
             .annotate(prefetched_child_count=Count('child_clips'))
             .order_by('-created_at')[:100]
@@ -630,7 +630,7 @@ class DashboardView(APIView):
 
         # One annotated base queryset per list below, so the serializer's
         # child-clip count comes from the same query (no N+1 COUNT per clip).
-        base_clips_qs = qs.defer('raw_content', 'embedding').select_related('destination', 'parent_clip').annotate(
+        base_clips_qs = qs.defer('raw_content').select_related('destination', 'parent_clip').annotate(
             prefetched_child_count=Count('child_clips')
         )
         recent_clips = ClipSerializer(base_clips_qs.order_by('-created_at')[:50], many=True).data
@@ -743,17 +743,11 @@ class SimilaritySearchView(APIView):
         if not text:
             return Response({'relevant': False, 'reason': 'empty_text'})
 
-        from .services.embed import generate_embedding
         from .services.similarity import VectorSimilarityEngine
 
-        query_vec = generate_embedding(text)
-        if not query_vec:
-            return Response({'relevant': False, 'reason': 'embedding_failed'})
-
-        # High-performance SIMD vector search
         matches = VectorSimilarityEngine.search_similar_clips(
             user=user,
-            query_vector=query_vec,
+            query_text=text,
             threshold=threshold,
             limit=limit,
         )
