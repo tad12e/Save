@@ -163,9 +163,15 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
     { id: 'settings', label: 'Settings', icon: <SettingsIcon className="w-[18px] h-[18px]" /> },
   ];
 
-  // User created custom pages (exclude system defaults rendered above)
+  // User created custom pages (exclude system defaults and removed research/books/projects pages)
   const userCustomPages = customPages.filter(
-    (p) => p.id !== 'page_job' && p.id !== 'page_education'
+    (p) =>
+      p.id !== 'page_job' &&
+      p.id !== 'page_education' &&
+      p.id !== 'page_research' &&
+      p.id !== 'page_books' &&
+      p.id !== 'page_projects' &&
+      !['AI & Tech Research', 'Books & Reading List', 'Projects & Ideas'].includes(p.name)
   );
 
   if (collapsed) {

@@ -29,7 +29,19 @@ export const saveStoredPrivacyMode = (enabled: boolean): void => {
 export const getStoredCustomPages = (): CustomPageConfig[] => {
   try {
     const item = localStorage.getItem(PAGES_KEY);
-    return item ? JSON.parse(item) : INITIAL_CUSTOM_PAGES;
+    if (item) {
+      const parsed: CustomPageConfig[] = JSON.parse(item);
+      const filtered = parsed.filter(
+        (p) =>
+          !['page_research', 'page_books', 'page_projects', 'research', 'books', 'projects'].includes(p.id) &&
+          !['AI & Tech Research', 'Books & Reading List', 'Projects & Ideas'].includes(p.name)
+      );
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem(PAGES_KEY, JSON.stringify(filtered));
+      }
+      return filtered;
+    }
+    return INITIAL_CUSTOM_PAGES;
   } catch (e) {
     console.error('Error loading stored custom pages', e);
     return INITIAL_CUSTOM_PAGES;

@@ -26,45 +26,6 @@ export const INITIAL_CUSTOM_PAGES: CustomPageConfig[] = [
     aiGoalPrompt: 'Extract grant amounts, application deadlines, prerequisite criteria, and university ranking.',
     createdAt: '2026-08-01T00:00:00Z',
     isSystemDefault: true
-  },
-  {
-    id: 'page_research',
-    name: 'AI & Tech Research',
-    slug: 'research',
-    iconName: 'Cpu',
-    color: '#8B5CF6',
-    bgColor: 'rgba(139, 92, 246, 0.1)',
-    description: 'Deep learning papers, LLM architecture benchmarks, and technical whitepapers.',
-    contentTypes: ['research', 'article'],
-    aiGoalPrompt: 'Summarize key innovations, abstract methodology, code repository links, and benchmark performance.',
-    createdAt: '2026-08-02T10:00:00Z',
-    isSystemDefault: false
-  },
-  {
-    id: 'page_books',
-    name: 'Books & Reading List',
-    slug: 'books',
-    iconName: 'BookOpen',
-    color: '#EC4899',
-    bgColor: 'rgba(236, 72, 153, 0.1)',
-    description: 'Non-fiction books, technical guides, chapter highlights, and personal reading notes.',
-    contentTypes: ['book', 'article'],
-    aiGoalPrompt: 'Extract author, main thesis, key chapter takeaways, and actionable mental models.',
-    createdAt: '2026-08-03T12:00:00Z',
-    isSystemDefault: false
-  },
-  {
-    id: 'page_projects',
-    name: 'Projects & Ideas',
-    slug: 'projects',
-    iconName: 'FolderGit2',
-    color: '#3B82F6',
-    bgColor: 'rgba(59, 130, 246, 0.1)',
-    description: 'Open source repositories, side project ideas, tech stack blueprints, and architecture drafts.',
-    contentTypes: ['project', 'programming'],
-    aiGoalPrompt: 'Extract repository stats, technology stack, setup commands, and potential integration use-cases.',
-    createdAt: '2026-08-04T14:00:00Z',
-    isSystemDefault: false
   }
 ];
 
