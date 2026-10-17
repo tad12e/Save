@@ -65,7 +65,6 @@ export default function App() {
     if (hash === 'settings') return 'settings';
     if (hash === 'analytics') return 'analytics';
     if (hash === 'connections' || window.location.search.includes('oauth_success')) return 'connections';
-    if (hash === 'digest') return 'digest';
     if (hash === 'boards') return 'boards';
     return 'dashboard';
   });
@@ -693,19 +692,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'jobs' && (
-            <JobsPage
-              jobs={jobs}
-              setJobs={setJobs}
-            />
-          )}
 
-          {activeTab === 'digest' && (
-            <DigestPage
-              digest={INITIAL_DIGEST}
-              clips={clips}
-            />
-          )}
 
           {activeTab === 'boards' && (
             <BoardsPage

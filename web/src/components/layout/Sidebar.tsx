@@ -157,7 +157,6 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
     { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon className="w-[18px] h-[18px]" /> },
     { id: 'connections', label: 'Connections', icon: <ConnectionsIcon className="w-[18px] h-[18px]" /> },
     { id: 'clips', label: 'Clips', icon: <ClipsIcon className="w-[18px] h-[18px]" /> },
-    { id: 'digest', label: 'Digest', icon: <DigestIcon className="w-[18px] h-[18px]" /> },
     { id: 'boards', label: 'Boards', icon: <BoardsIcon className="w-[18px] h-[18px]" /> },
     { id: 'settings', label: 'Settings', icon: <SettingsIcon className="w-[18px] h-[18px]" /> },
   ];

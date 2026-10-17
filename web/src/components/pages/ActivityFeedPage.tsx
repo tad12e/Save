@@ -483,7 +483,7 @@ export const ActivityFeedPage: React.FC<ActivityFeedPageProps> = ({
           {/* Part 4: Connect the Dots AI Synthesis Banner */}
           <FeedSynthesisBanner
             synthesis={feedData.ai_synthesis}
-            onOpenDigest={() => setActiveTab('digest')}
+            onOpenDigest={() => setActiveTab('clips')}
             isDark={isDark}
           />
 

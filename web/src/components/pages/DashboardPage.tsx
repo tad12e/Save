@@ -1327,10 +1327,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   {weekDigestSummary}
                 </p>
                 <button
-                  onClick={() => setActiveTab?.('digest')}
+                  onClick={() => setActiveTab?.('clips')}
                   className={`mt-2 inline-flex items-center gap-1 text-[12px] font-medium hover:underline cursor-pointer ${isDark ? 'text-[#3FE769]' : 'text-[#2D6A4F]'}`}
                 >
-                  View digest
+                  View clips
                   <ArrowUpRight className="w-3 h-3" />
                 </button>
               </motion.div>
