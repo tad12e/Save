@@ -2,19 +2,6 @@ import { DestinationConfig, ClipItem, JobCard, ConnectionSyncLog, SharedBoard, W
 
 export const INITIAL_CUSTOM_PAGES: CustomPageConfig[] = [
   {
-    id: 'page_job',
-    name: 'Job Opportunities',
-    slug: 'job',
-    iconName: 'Briefcase',
-    color: '#F59E0B',
-    bgColor: 'rgba(245, 158, 11, 0.1)',
-    description: 'Track job listings, application status, salary metrics, and interview timelines.',
-    contentTypes: ['job', 'general'],
-    aiGoalPrompt: 'Extract company name, salary range, location, requirements, and calculate candidate fit score.',
-    createdAt: '2026-08-01T00:00:00Z',
-    isSystemDefault: true
-  },
-  {
     id: 'page_education',
     name: 'Education & Academics',
     slug: 'education',

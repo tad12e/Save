@@ -157,21 +157,21 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
     { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon className="w-[18px] h-[18px]" /> },
     { id: 'connections', label: 'Connections', icon: <ConnectionsIcon className="w-[18px] h-[18px]" /> },
     { id: 'clips', label: 'Clips', icon: <ClipsIcon className="w-[18px] h-[18px]" /> },
-    { id: 'jobs', label: 'Jobs', icon: <JobsIcon className="w-[18px] h-[18px]" /> },
     { id: 'digest', label: 'Digest', icon: <DigestIcon className="w-[18px] h-[18px]" /> },
     { id: 'boards', label: 'Boards', icon: <BoardsIcon className="w-[18px] h-[18px]" /> },
     { id: 'settings', label: 'Settings', icon: <SettingsIcon className="w-[18px] h-[18px]" /> },
   ];
 
-  // User created custom pages (exclude system defaults and removed research/books/projects pages)
+  // User created custom pages (exclude system defaults and removed pages)
   const userCustomPages = customPages.filter(
     (p) =>
       p.id !== 'page_job' &&
+      p.id !== 'job' &&
       p.id !== 'page_education' &&
       p.id !== 'page_research' &&
       p.id !== 'page_books' &&
       p.id !== 'page_projects' &&
-      !['AI & Tech Research', 'Books & Reading List', 'Projects & Ideas'].includes(p.name)
+      !['Job Opportunities', 'AI & Tech Research', 'Books & Reading List', 'Projects & Ideas'].includes(p.name)
   );
 
   if (collapsed) {

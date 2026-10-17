@@ -33,8 +33,8 @@ export const getStoredCustomPages = (): CustomPageConfig[] => {
       const parsed: CustomPageConfig[] = JSON.parse(item);
       const filtered = parsed.filter(
         (p) =>
-          !['page_research', 'page_books', 'page_projects', 'research', 'books', 'projects'].includes(p.id) &&
-          !['AI & Tech Research', 'Books & Reading List', 'Projects & Ideas'].includes(p.name)
+          !['page_job', 'job', 'page_research', 'page_books', 'page_projects', 'research', 'books', 'projects'].includes(p.id) &&
+          !['Job Opportunities', 'AI & Tech Research', 'Books & Reading List', 'Projects & Ideas'].includes(p.name)
       );
       if (filtered.length !== parsed.length) {
         localStorage.setItem(PAGES_KEY, JSON.stringify(filtered));
