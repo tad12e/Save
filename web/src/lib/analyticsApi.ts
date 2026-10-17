@@ -1,7 +1,7 @@
 import { ClipItem, DestinationConfig } from '../types';
 import { TYPE_COLORS } from './chartColors';
 
-const BASE_URL = 'http://localhost:8000';
+const BASE_URL = (import.meta.env.VITE_API_URL as string) || (import.meta.env.DEV ? 'http://localhost:8000' : 'https://yaze.azurewebsites.net');
 
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('clipper_access_token');

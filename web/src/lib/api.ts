@@ -30,7 +30,7 @@ export interface AuthorizeResponse {
   destination: any;
 }
 
-const BASE_URL = 'http://localhost:8000';
+const BASE_URL = (import.meta.env.VITE_API_URL as string) || (import.meta.env.DEV ? 'http://localhost:8000' : 'https://yaze.azurewebsites.net');
 
 function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('clipper_access_token') : null;
