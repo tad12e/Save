@@ -259,7 +259,7 @@ class ClipCreateView(APIView):
             )
         initial_intent = clean_action_intent(initial_intent or 'other')
 
-        # Resolve custom page if provided
+        # Resolve custom page if provided, or auto-route based on topic (e.g. Books)
         custom_page = None
         page_id_val = request.data.get('custom_page_id') or request.data.get('page_id')
         if page_id_val:
@@ -269,6 +269,20 @@ class ClipCreateView(APIView):
                 custom_page = CustomPage.objects.filter(user=user, pk=page_uuid).first()
             except (ValueError, TypeError):
                 custom_page = CustomPage.objects.filter(user=user, slug=str(page_id_val)).first()
+
+        if not custom_page:
+            try:
+                from apps.clips.services.page_router import find_matching_custom_page
+                custom_page = find_matching_custom_page(
+                    user=user,
+                    content_type=initial_content_type,
+                    url=url_val,
+                    text=sel_text,
+                    intent=initial_intent,
+                    tags=user_tags,
+                )
+            except Exception as auto_route_err:
+                logger.warning("Auto-routing to custom page failed: %s", auto_route_err)
 
         clip = Clip.objects.create(
             user=user,
@@ -1092,8 +1106,19 @@ class CustomPageListCreateView(APIView):
         if isinstance(content_types, str):
             content_types = [c.strip() for c in content_types.split(',') if c.strip()]
 
+        parent_page = None
+        parent_id_val = request.data.get('parent_id') or request.data.get('parentId')
+        if parent_id_val:
+            try:
+                import uuid as uuid_pkg
+                parent_uuid = uuid_pkg.UUID(str(parent_id_val))
+                parent_page = CustomPage.objects.filter(user=request.user, pk=parent_uuid).first()
+            except (ValueError, TypeError):
+                parent_page = CustomPage.objects.filter(user=request.user, slug=str(parent_id_val)).first()
+
         page = CustomPage.objects.create(
             user=request.user,
+            parent=parent_page,
             name=name,
             slug=slug,
             icon_name=request.data.get('icon_name') or request.data.get('icon') or 'Bookmark',

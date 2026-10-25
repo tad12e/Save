@@ -29,11 +29,14 @@ class CustomCategorySerializer(serializers.ModelSerializer):
 
 class CustomPageSerializer(serializers.ModelSerializer):
     clip_count = serializers.SerializerMethodField()
+    parent_id = serializers.UUIDField(source='parent.id', read_only=True, allow_null=True)
+    sub_page_count = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomPage
         fields = (
             'id',
+            'parent_id',
             'name',
             'slug',
             'icon_name',
@@ -44,16 +47,20 @@ class CustomPageSerializer(serializers.ModelSerializer):
             'ai_goal_prompt',
             'is_system_default',
             'clip_count',
+            'sub_page_count',
             'created_at',
             'updated_at',
         )
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'parent_id', 'created_at', 'updated_at')
 
     def get_clip_count(self, obj) -> int:
         annotated = getattr(obj, 'annotated_clip_count', None)
         if annotated is not None:
             return int(annotated)
         return obj.clips.count()
+
+    def get_sub_page_count(self, obj) -> int:
+        return obj.sub_pages.count()
 
 
 from apps.clips.services.sanitizer import (

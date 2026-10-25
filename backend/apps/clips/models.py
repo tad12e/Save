@@ -17,6 +17,13 @@ class CustomPage(models.Model):
         on_delete=models.CASCADE,
         related_name='custom_pages',
     )
+    parent = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='sub_pages',
+    )
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255)
     icon_name = models.CharField(max_length=64, default='Bookmark')

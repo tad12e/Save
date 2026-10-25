@@ -268,6 +268,18 @@ def process_clip(self, clip_id: str):
             clip.music_embed_url = music_url
             update_fields.append('music_embed_url')
 
+        # Auto-route clip to matching user CustomPage (e.g. Books) if not already assigned
+        if not clip.custom_page_id:
+            try:
+                from apps.clips.services.page_router import match_clip_to_page
+                matched_page = match_clip_to_page(clip)
+                if matched_page:
+                    clip.custom_page = matched_page
+                    update_fields.append('custom_page')
+                    logger.info("Auto-assigned clip %s to custom page '%s'", clip.id, matched_page.name)
+            except Exception as auto_route_err:
+                logger.warning("Error auto-routing clip %s to custom page: %s", clip.id, auto_route_err)
+
         clip.status = Clip.STATUS_DONE
         clip.save(update_fields=update_fields)
         try:

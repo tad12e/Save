@@ -11,6 +11,7 @@ from .url import is_safe_public_url
 logger = logging.getLogger(__name__)
 
 CONTENT_TYPE_KEYWORDS = {
+    'book': ['book', 'isbn', 'hardcover', 'paperback', 'goodreads', 'reading list', 'novel', 'author', 'audiobook', 'chapter', 'nonfiction', 'fiction', 'bestseller'],
     'job': ['apply now', 'job description', 'we are hiring', 'open positions', 'salary', 'hiring', 'intern', 'internship', 'eligible batch', 'apply here', 'full time', 'part time', 'remote role', 'engineering intern', 'developer intern', 'sde intern', 'junior developer', 'careers', 'apply at'],
     'scholarship': ['scholarship', 'grant', 'funding', 'call for applications', 'fellowship'],
     'event': ['register now', 'eventbrite', 'meetup', 'limited spots', 'early bird', 'hackathon', 'webinar', 'conference'],
@@ -86,7 +87,13 @@ def _detect_content_type(text: str = '', url: str = '') -> str:
     if any(ed in domain for ed in ('eventbrite.com', 'lu.ma', 'luma.com', 'meetup.com', 'partiful.com', 'hopin.com')):
         return 'event'
 
-    # 6. E-commerce / Deals
+    # 6. Books & Reading
+    if any(bd in domain for bd in ('goodreads.com', 'openlibrary.org', 'books.google.', 'storytel.com', 'audible.com', 'bookshop.org', 'barnesandnoble.com')):
+        return 'book'
+    if '/book/' in path or '/books/' in path:
+        return 'book'
+
+    # 7. E-commerce / Deals
     if any(cd in domain for cd in ('amazon.', 'gumroad.com', 'etsy.com', 'ebay.com', 'aliexpress.com')):
         return 'deal'
     if any(cp in path for cp in ('/product/', '/products/', '/pricing/', '/cart', '/checkout')):
