@@ -32,7 +32,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-default-dev-key')
 DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',') if host.strip()]
-for default_host in ['.azurewebsites.net', '10.0.2.2', '127.0.0.1', 'localhost']:
+for default_host in ['.azurewebsites.net', 'yazem.tech', '.yazem.tech', '10.0.2.2', '127.0.0.1', 'localhost']:
     if default_host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(default_host)
 if DEBUG and '*' not in ALLOWED_HOSTS:
@@ -51,15 +51,16 @@ frontend_url = os.getenv('FRONTEND_URL', '').strip()
 if frontend_url and frontend_url not in CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS.append(frontend_url)
 
-if DEBUG:
-    for default_origin in [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://localhost:3001',
-        'http://localhost:3005',
-    ]:
-        if default_origin not in CORS_ALLOWED_ORIGINS:
-            CORS_ALLOWED_ORIGINS.append(default_origin)
+for default_origin in [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:3001',
+    'http://localhost:3005',
+    'https://yazem.tech',
+    'http://yazem.tech',
+]:
+    if default_origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(default_origin)
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r'^chrome-extension://.*$',
@@ -69,9 +70,18 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 CSRF_TRUSTED_ORIGINS = [
     origin for origin in CORS_ALLOWED_ORIGINS if origin.startswith(('http://', 'https://'))
 ]
-for azure_origin in ['https://*.azurewebsites.net', 'https://127.0.0.1:8000', 'http://127.0.0.1:8000']:
-    if azure_origin not in CSRF_TRUSTED_ORIGINS:
-        CSRF_TRUSTED_ORIGINS.append(azure_origin)
+for default_csrf in [
+    'https://*.azurewebsites.net',
+    'https://yazem.tech',
+    'https://*.yazem.tech',
+    'http://yazem.tech',
+    'https://127.0.0.1:8000',
+    'http://127.0.0.1:8000',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]:
+    if default_csrf not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(default_csrf)
 
 
 # Application definition
