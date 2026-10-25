@@ -9,7 +9,6 @@ import { ClipsPage } from './components/pages/ClipsPage';
 import { CustomPageView } from './components/pages/CustomPageView';
 import { JobsPage } from './components/pages/JobsPage';
 import { DigestPage } from './components/pages/DigestPage';
-import { BoardsPage } from './components/pages/BoardsPage';
 import { SettingsPage } from './components/pages/SettingsPage';
 import { StitchPreviewPage } from './components/pages/StitchPreviewPage';
 import { ExtensionSimulator } from './components/extension/ExtensionSimulator';
@@ -24,7 +23,6 @@ import {
   ClipItem, 
   JobCard, 
   ConnectionSyncLog, 
-  SharedBoard, 
   CustomPageConfig 
 } from './types';
 import { 
@@ -36,8 +34,6 @@ import {
   saveStoredJobs, 
   getStoredLogs, 
   saveStoredLogs, 
-  getStoredBoards, 
-  saveStoredBoards,
   getStoredCustomPages,
   saveStoredCustomPages 
 } from './lib/storage';
@@ -65,7 +61,6 @@ export default function App() {
     if (hash === 'settings') return 'settings';
     if (hash === 'analytics') return 'analytics';
     if (hash === 'connections' || window.location.search.includes('oauth_success')) return 'connections';
-    if (hash === 'boards') return 'boards';
     return 'dashboard';
   });
 
@@ -96,6 +91,7 @@ export default function App() {
   const [isExtensionOpen, setIsExtensionOpen] = useState(true);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
+  const [createPageParent, setCreatePageParent] = useState<CustomPageConfig | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showMusicRadarModal, setShowMusicRadarModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
@@ -113,7 +109,6 @@ export default function App() {
   const [clips, setClips] = useState<ClipItem[]>(() => getStoredClips());
   const [jobs, setJobs] = useState<JobCard[]>(() => getStoredJobs());
   const [logs, setLogs] = useState<ConnectionSyncLog[]>(() => getStoredLogs());
-  const [boards, setBoards] = useState<SharedBoard[]>(() => getStoredBoards());
   const [customPages, setCustomPages] = useState<CustomPageConfig[]>(() => getStoredCustomPages());
 
   // Fetch real destinations, clips, custom pages & dashboard from Django backend on mount
@@ -231,7 +226,6 @@ export default function App() {
   useEffect(() => { saveStoredClips(clips); }, [clips]);
   useEffect(() => { saveStoredJobs(jobs); }, [jobs]);
   useEffect(() => { saveStoredLogs(logs); }, [logs]);
-  useEffect(() => { saveStoredBoards(boards); }, [boards]);
   useEffect(() => { saveStoredCustomPages(customPages); }, [customPages]);
 
   // Sync html class for theme mode
@@ -423,11 +417,16 @@ export default function App() {
     }
   };
 
-  // Handle Create Custom Page
+  const handleOpenCreatePage = (parent?: CustomPageConfig | null) => {
+    setCreatePageParent(parent || null);
+    setShowCreatePageModal(true);
+  };
+
+  // Handle Create Custom Page (supports top-level and nested sub-pages)
   const handleCreateCustomPage = async (newPage: CustomPageConfig) => {
     setCustomPages(prev => [...prev, newPage]);
     setActiveTab(newPage.id);
-    triggerToast(`Created Custom Page: ${newPage.name}`);
+    triggerToast(newPage.parentId ? `Created nested sub-page: ${newPage.name}` : `Created Custom Page: ${newPage.name}`);
 
     // Persist to backend and update local ID with persisted UUID
     const backendRes = await createCustomPageBackend({
@@ -440,6 +439,7 @@ export default function App() {
       content_types: newPage.contentTypes,
       ai_goal_prompt: newPage.aiGoalPrompt,
       is_system_default: newPage.isSystemDefault,
+      parent_id: newPage.parentId || null,
     });
 
     if (backendRes && backendRes.id) {
@@ -574,7 +574,8 @@ export default function App() {
         activeConnectionsCount={activeConnectionsCount}
         totalClipsCount={clips.length}
         customPages={customPages}
-        onOpenCreatePageModal={() => setShowCreatePageModal(true)}
+        onOpenCreatePageModal={() => handleOpenCreatePage(null)}
+        onOpenCreateSubPage={(parent) => handleOpenCreatePage(parent)}
         toggleExtensionWidget={() => setIsExtensionOpen(!isExtensionOpen)}
         isExtensionOpen={isExtensionOpen}
         collapsed={sidebarCollapsed}
@@ -595,6 +596,7 @@ export default function App() {
           onQuickAddClip={() => handleOpenAddClipForPage()}
           onOpenBulkImport={() => setShowBulkImportModal(true)}
           onOpenMusicRadar={() => setShowMusicRadarModal(true)}
+          onOpenCreatePageModal={() => handleOpenCreatePage(null)}
           onRefreshSync={handleRefreshSync}
           isRefreshing={isRefreshing}
           theme={theme}
@@ -627,6 +629,8 @@ export default function App() {
               theme={theme}
               currentUser={currentUser}
               dashboardData={dashboardData}
+              customPages={customPages}
+              onSendToDestination={handleSendToDestination}
             />
           )}
 
@@ -686,18 +690,14 @@ export default function App() {
               clips={clips}
               setClips={setClips}
               destinations={destinations}
+              customPages={customPages}
+              setActiveTab={setActiveTab}
               onOpenAddClip={handleOpenAddClipForPage}
               onDeletePage={handleDeleteCustomPage}
+              onOpenCreatePageModal={() => handleOpenCreatePage(null)}
+              onOpenCreateSubPage={(parent) => handleOpenCreatePage(parent)}
+              onSendToDestination={handleSendToDestination}
               theme={theme}
-            />
-          )}
-
-
-
-          {activeTab === 'boards' && (
-            <BoardsPage
-              boards={boards}
-              setBoards={setBoards}
             />
           )}
 
@@ -742,8 +742,13 @@ export default function App() {
       {/* Create Custom Page Modal */}
       <CreatePageModal
         isOpen={showCreatePageModal}
-        onClose={() => setShowCreatePageModal(false)}
+        onClose={() => {
+          setShowCreatePageModal(false);
+          setCreatePageParent(null);
+        }}
         onCreatePage={handleCreateCustomPage}
+        parentPage={createPageParent}
+        customPages={customPages}
       />
 
       {/* User Auth Modal (Sign In / Register / OTP) */}

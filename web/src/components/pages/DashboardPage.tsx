@@ -32,14 +32,17 @@ import {
   DestinationConfig,
   JobCard,
   ConnectionSyncLog,
+  CustomCategoryConfig,
+  CustomPageConfig,
 } from '../../types';
 import { TabType } from '../layout/Sidebar';
 import { getClipIntent } from './ClipsPage';
 import { ClipCinemaViewer } from '../cards/ClipCinemaViewer';
+import { PolymorphicClipCard } from '../cards/PolymorphicClipCard';
 
 interface DashboardPageProps {
   clips: ClipItem[];
-  setClips: React.Dispatch<React.SetStateAction<ClipItem[]>>;
+  setClips?: React.Dispatch<React.SetStateAction<ClipItem[]>>;
   destinations: DestinationConfig[];
   setDestinations: React.Dispatch<React.SetStateAction<DestinationConfig[]>>;
   jobs: JobCard[];
@@ -52,6 +55,9 @@ interface DashboardPageProps {
   theme?: 'terminal' | 'dark' | 'light';
   currentUser?: { name: string; email: string } | null;
   dashboardData?: any;
+  customCategories?: CustomCategoryConfig[];
+  customPages?: CustomPageConfig[];
+  onSendToDestination?: (clip: ClipItem, destType: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +224,7 @@ function mapClipToStaticClip(c: ClipItem): StaticClip {
 export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
   const {
     clips = [],
+    setClips,
     destinations = [],
     onOpenManualAddModal,
     onRefreshSync,
@@ -226,6 +233,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
     currentUser,
     dashboardData,
     setActiveTab,
+    customCategories = [],
+    customPages = [],
+    onSendToDestination,
   } = props;
   const isDark = theme === 'dark' || theme === 'terminal';
   const cardClass = isDark
@@ -236,7 +246,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
   const [starred, setStarred] = useState<Set<string>>(() => {
     return new Set(clips.filter(c => c.isFavorite).map(c => c.id));
   });
-  const [gridView, setGridView] = useState(false);
+  const [gridView, setGridView] = useState(true);
+  const [syncedState, setSyncedState] = useState<Record<string, boolean>>({});
   const [showEmpty, setShowEmpty] = useState(false);
   const [cinemaClip, setCinemaClip] = useState<ClipItem | null>(null);
   const [activeDonut, setActiveDonut] = useState<number | null>(null);
@@ -245,6 +256,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
   const [copied, setCopied] = useState(false);
   const reduceMotion = useReducedMotion();
   const enter = reduceMotion ? { duration: 0 } : { ...SPRING };
+
+  const handleExportClick = (clip: ClipItem, destType: string) => {
+    if (onSendToDestination) {
+      onSendToDestination(clip, destType);
+    }
+    const key = `${clip.id}_${destType}`;
+    setSyncedState(prev => ({ ...prev, [key]: true }));
+    setTimeout(() => {
+      setSyncedState(prev => ({ ...prev, [key]: false }));
+    }, 2000);
+  };
+
+  const deleteClip = (id: string) => {
+    setClips?.(prev => prev.filter(c => c.id !== id));
+    if (cinemaClip?.id === id) {
+      setCinemaClip(null);
+    }
+  };
 
   const userName = currentUser?.name?.split(' ')[0] || dashboardData?.user?.name?.split(' ')[0] || 'Guest';
 
@@ -630,6 +659,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
 
   const visibleClips = showEmpty ? [] : dynamicClips.filter((c) => matchesFilter(c) && matchesQuery(c));
 
+  const filteredFullClips = useMemo(() => {
+    if (showEmpty || !clips) return [];
+    return clips.filter((c) => {
+      if (activeFilter !== 'All') {
+        const intent = getClipIntent(c, customCategories);
+        if (intent.toLowerCase() !== activeFilter.toLowerCase()) return false;
+      }
+      const q = filterQuery.trim().toLowerCase();
+      if (q) {
+        const titleMatch = c.title?.toLowerCase().includes(q);
+        const urlMatch = c.url?.toLowerCase().includes(q);
+        const summaryMatch = c.summary?.toLowerCase().includes(q);
+        const tagMatch = c.tags?.some((t) => t.toLowerCase().includes(q));
+        if (!titleMatch && !urlMatch && !summaryMatch && !tagMatch) return false;
+      }
+      return true;
+    });
+  }, [clips, showEmpty, activeFilter, filterQuery, customCategories]);
+
   return (
     <div
       className={`min-h-screen font-gambetta antialiased pb-14 transition-colors duration-200 ${
@@ -650,7 +698,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
               onToggleStorage={() => {}}
               onToggleFavorite={(id) => toggleStar(id)}
               onDeleteClip={(id) => {
-                setClips(prev => prev.filter(c => c.id !== id));
+                setClips?.(prev => prev.filter(c => c.id !== id));
                 setCinemaClip(null);
               }}
               isDark={isDark}
@@ -1021,7 +1069,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     Recent Clips
                   </h2>
                   <span className={`text-[13px] leading-[20px] ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                    Showing {visibleClips.length} of {dynamicClips.length} clips
+                    Showing {filteredFullClips.length} of {clips.length} clips
                   </span>
                 </div>
                 <button
@@ -1035,7 +1083,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                 </button>
               </div>
 
-              {!showEmpty && visibleClips.length === 0 ? (
+              {!showEmpty && filteredFullClips.length === 0 ? (
                 <div className={`${cardClass} p-12 flex flex-col items-center justify-center text-center`}>
                   <div
                     className={`w-14 h-14 rounded-2xl border flex items-center justify-center mb-4 shadow-sm ${
@@ -1048,14 +1096,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                     className={`text-[20px] leading-[26px] font-semibold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}
                     style={{ fontFamily: FONT_GAMBETTA }}
                   >
-                    {dynamicClips.length === 0 ? 'You do not have anything saved yet' : 'No clips match this filter'}
+                    {clips.length === 0 ? 'You do not have anything saved yet' : 'No clips match this filter'}
                   </h3>
                   <p className={`text-[13px] leading-[18px] max-w-sm mb-5 ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
-                    {dynamicClips.length === 0
+                    {clips.length === 0
                       ? 'Your vault is completely empty. Clip articles, links, or notes to get started.'
                       : 'Try resetting your filter or searching for another topic.'}
                   </p>
-                  {dynamicClips.length === 0 && (
+                  {clips.length === 0 && (
                     <button
                       onClick={onOpenManualAddModal}
                       className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
@@ -1067,170 +1115,43 @@ export const DashboardPage: React.FC<DashboardPageProps> = (props) => {
                   )}
                 </div>
               ) : !showEmpty && (
-                <div className={`${cardClass} overflow-hidden flex flex-col`}>
-                  {visibleClips.map((clip) => (
-                    <article
-                      key={clip.id}
-                      onClick={() => {
-                        const full = clips.find(c => c.id === clip.id);
-                        if (full) {
-                          setCinemaClip(full);
-                        } else {
-                          setCinemaClip({
-                            id: clip.id,
-                            title: clip.title,
-                            url: `https://${clip.domain}`,
-                            createdAt: new Date().toISOString(),
-                            updatedAt: new Date().toISOString(),
-                            tags: clip.tags,
-                            summary: clip.excerpt,
-                          });
-                        }
-                      }}
-                      className={`p-6 transition-colors group flex flex-col sm:flex-row gap-4 justify-between items-start border-b last:border-b-0 cursor-pointer ${
-                        clip.amber
-                          ? isDark
-                            ? 'bg-[#1C120C]/40 hover:bg-[#1C120C]/70 border-b-[#381F14]'
-                            : 'bg-amber-50/30 hover:bg-amber-50/60 border-b-amber-100'
-                          : isDark
-                          ? 'hover:bg-[#141414] border-b-[#1F1F1F]'
-                          : 'hover:bg-[#F8FAFC] border-b-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-start gap-5 min-w-0 flex-1">
-                        <div
-                          className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 shadow-sm ${
-                            clip.amber
-                              ? isDark
-                                ? 'bg-[#2A1715] border-[#4A1E1C] text-[#F87171]'
-                                : 'bg-amber-100 border-amber-200/50 text-amber-700'
-                              : isDark
-                              ? 'bg-[#141414] border-[#262626] text-[#A1A1A1]'
-                              : 'bg-slate-50 border-slate-100 text-slate-500'
-                          }`}
-                        >
-                          <Link2 className="w-5 h-5" />
-                        </div>
-                        <div className="flex flex-col gap-2 min-w-0 flex-1">
-                          <div className="flex items-center flex-wrap gap-2 mb-1">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full border text-[11px] leading-[14px] font-semibold tracking-wide ${badgeClass(
-                                clip.badge,
-                                clip.amber,
-                                isDark
-                              )}`}
-                            >
-                              {clip.badge}
-                              {clip.badgeExtra ? ` • ${clip.badgeExtra}` : ''}
-                            </span>
-                            <span
-                              className={`text-[11px] leading-[14px] font-mono tracking-tight px-1.5 py-0.5 rounded border ${
-                                isDark
-                                  ? 'bg-[#141414] text-[#878787] border-[#262626]'
-                                  : 'text-slate-500 bg-slate-50 border-slate-100'
-                              }`}
-                            >
-                              {clip.domain}
-                            </span>
-                            <span className={`inline-block w-1 h-1 rounded-full ${isDark ? 'bg-[#262626]' : 'bg-slate-300'}`}></span>
-                            <span className={`text-[11px] leading-[14px] ${isDark ? 'text-[#666666]' : 'text-slate-400'}`}>
-                              {clip.time}
-                            </span>
-                          </div>
-                          <span
-                            className={`text-[16px] leading-[24px] font-semibold transition-colors line-clamp-1 cursor-pointer ${
-                              isDark ? 'text-[#EDEDED] hover:text-[#3FE769]' : 'text-slate-900 hover:text-[#2D6A4F]'
-                            }`}
-                          >
-                            {clip.title}
-                          </span>
-                          <p className={`text-[14px] leading-[22px] line-clamp-2 pr-4 ${isDark ? 'text-[#A1A1A1]' : 'text-slate-600'}`}>
-                            {clip.excerpt}
-                          </p>
-                          <div className="flex items-center flex-wrap gap-3 pt-2">
-                            <div className="flex items-center gap-1.5 text-[11px] leading-[14px]">
-                              {clip.tags.map((t) => (
-                                <span
-                                  key={t}
-                                  className={`px-2 py-1 rounded-full font-medium ${
-                                    isDark ? 'bg-[#181818] text-[#A1A1A1]' : 'bg-slate-100 text-slate-600'
-                                  }`}
-                                >
-                                  {t}
-                                </span>
-                              ))}
-                            </div>
-                            <span className={`inline-block w-1 h-1 rounded-full ${isDark ? 'bg-[#262626]' : 'bg-slate-300'}`}></span>
-                            <div
-                              className={`flex items-center gap-1 text-[11px] leading-[14px] px-2 py-1 rounded-full ${
-                                clip.amber
-                                  ? isDark
-                                    ? 'text-[#F87171] bg-[#2A1715]'
-                                    : 'text-amber-700 bg-amber-100/50'
-                                  : isDark
-                                  ? 'text-[#3FE769] bg-[#1C1B1B]'
-                                  : 'text-emerald-600 bg-emerald-50'
-                              }`}
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                              <span className="font-medium">{clip.sync}</span>
-                            </div>
-                          </div>
-                        </div>
+                gridView ? (
+                  <div className="columns-1 sm:columns-2 gap-4 [column-fill:_balance]">
+                    {filteredFullClips.map((clip) => (
+                      <div key={clip.id} className="break-inside-avoid mb-4 block w-full">
+                        <PolymorphicClipCard
+                          clip={clip}
+                          isDark={isDark}
+                          onToggleFavorite={toggleStar}
+                          onOpenDetail={(c) => setCinemaClip(c)}
+                          onDelete={deleteClip}
+                          onSync={(c) => handleExportClick(c, 'notion')}
+                          isSynced={Boolean(syncedState[`${clip.id}_notion`])}
+                          customCategories={customCategories}
+                          customPages={customPages}
+                        />
                       </div>
-                      <div
-                        className={`flex sm:flex-col items-center gap-0.5 self-end sm:self-start transition-opacity ${
-                          starred.has(clip.id) ? 'opacity-70' : 'opacity-0 group-hover:opacity-100'
-                        }`}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleStar(clip.id);
-                          }}
-                          className={`h-9 w-9 flex items-center justify-center rounded-lg border border-transparent transition-all cursor-pointer ${
-                            starred.has(clip.id)
-                              ? 'text-amber-500'
-                              : isDark
-                              ? 'text-[#878787] hover:text-amber-400 hover:bg-[#181818] hover:border-[#262626]'
-                              : 'text-slate-400 hover:text-amber-500 hover:bg-white hover:border-slate-200 hover:shadow-sm'
-                          }`}
-                          title="Bookmark"
-                        >
-                          <Star
-                            className="w-[18px] h-[18px]"
-                            fill={starred.has(clip.id) ? 'currentColor' : 'none'}
-                          />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyClipLink(clip);
-                          }}
-                          className={`h-9 w-9 flex items-center justify-center rounded-lg border border-transparent transition-all cursor-pointer ${
-                            isDark
-                              ? 'text-[#878787] hover:text-[#3FE769] hover:bg-[#181818] hover:border-[#262626]'
-                              : 'text-slate-400 hover:text-[#2D6A4F] hover:bg-white hover:border-slate-200 hover:shadow-sm'
-                          }`}
-                          title="Copy URL"
-                        >
-                          <Copy className="w-[18px] h-[18px]" />
-                        </button>
-                        <button
-                          onClick={(e) => e.stopPropagation()}
-                          className={`h-9 w-9 flex items-center justify-center rounded-lg border border-transparent transition-all cursor-pointer ${
-                            isDark
-                              ? 'text-[#878787] hover:text-white hover:bg-[#181818] hover:border-[#262626]'
-                              : 'text-slate-400 hover:text-slate-900 hover:bg-white hover:border-slate-200 hover:shadow-sm'
-                          }`}
-                          title="More options"
-                        >
-                          <MoreHorizontal className="w-[18px] h-[18px]" />
-                        </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {filteredFullClips.map((clip) => (
+                      <div key={clip.id} className="w-full">
+                        <PolymorphicClipCard
+                          clip={clip}
+                          isDark={isDark}
+                          onToggleFavorite={toggleStar}
+                          onOpenDetail={(c) => setCinemaClip(c)}
+                          onDelete={deleteClip}
+                          onSync={(c) => handleExportClick(c, 'notion')}
+                          isSynced={Boolean(syncedState[`${clip.id}_notion`])}
+                          customCategories={customCategories}
+                          customPages={customPages}
+                        />
                       </div>
-                    </article>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )
               )}
 
               {showEmpty && (

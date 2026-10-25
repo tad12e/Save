@@ -109,6 +109,7 @@ export const MusicRadarModal: React.FC<MusicRadarModalProps> = ({ isOpen, onClos
   };
 
   const identifyAudio = async (base64Audio: string) => {
+    try {
       const apiUrl = (import.meta.env.VITE_API_URL as string) || (import.meta.env.DEV ? 'http://localhost:8000' : 'https://yaze.azurewebsites.net');
       const resp = await fetch(`${apiUrl}/api/clips/recognize-audio/`, {
         method: 'POST',

@@ -788,6 +788,7 @@ export async function createCustomPageBackend(pageData: {
   content_types?: string[];
   ai_goal_prompt?: string;
   is_system_default?: boolean;
+  parent_id?: string | null;
 }) {
   try {
     const response = await fetch(`${BASE_URL}/api/clips/pages/`, {
@@ -847,6 +848,7 @@ export function convertBackendPageToConfig(p: any): CustomPageConfig {
     aiGoalPrompt: p.ai_goal_prompt || '',
     createdAt: p.created_at || new Date().toISOString(),
     isSystemDefault: Boolean(p.is_system_default),
+    parentId: p.parent_id || p.parentId || null,
   };
 }
 

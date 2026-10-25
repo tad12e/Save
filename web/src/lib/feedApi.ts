@@ -449,7 +449,7 @@ export function generateClientSynthesizedFeed(
     stream_items,
     sync_river,
     watchlist,
-    generated_at: now.isoformat ? now.isoformat() : now.toISOString(),
+    generated_at: now.toISOString(),
   };
 }
 

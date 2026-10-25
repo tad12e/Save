@@ -20,6 +20,7 @@ export interface CustomPageConfig {
   aiGoalPrompt: string;
   createdAt: string;
   isSystemDefault?: boolean;
+  parentId?: string | null;
 }
 
 export interface CustomCategoryConfig {
@@ -67,6 +68,10 @@ export interface DestinationConfig {
   fieldMappings: FieldMapping[];
   syncFrequency: 'instant' | 'hourly' | 'daily' | 'manual';
   autoCreateColumns: boolean;
+  is_active?: boolean;
+  provider?: string;
+  config?: any;
+  [key: string]: any;
 }
 
 export interface ClipItem {
@@ -106,6 +111,21 @@ export interface ClipItem {
   /** Native bookmark skin payload (see types/clipPlatform.ts). Always present after convertBackendClipToItem. */
   platformMeta?: PlatformMeta;
   intent?: string;
+  created_at?: string;
+  is_favorite?: boolean;
+  status?: string;
+  content_type?: string;
+  category?: string;
+  deadline_date?: string;
+  destination?: any;
+  extra_metadata?: any;
+  author?: string;
+  source_platform?: string;
+  selected_text?: string;
+  music_embed_url?: string;
+  extracted_resource_url?: string;
+  export_url?: string;
+  [key: string]: any;
 }
 
 export interface JobCard {

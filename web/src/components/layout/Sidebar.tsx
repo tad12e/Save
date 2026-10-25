@@ -9,6 +9,7 @@ import {
   KeyRound,
   User,
   Settings,
+  Plus,
 } from 'lucide-react';
 import { CustomPageConfig } from '../../types';
 
@@ -21,6 +22,7 @@ interface SidebarProps {
   totalClipsCount: number;
   customPages: CustomPageConfig[];
   onOpenCreatePageModal: () => void;
+  onOpenCreateSubPage?: (parentPage: CustomPageConfig) => void;
   toggleExtensionWidget: () => void;
   isExtensionOpen: boolean;
   collapsed?: boolean;
@@ -128,6 +130,8 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
     activeTab,
     setActiveTab,
     customPages,
+    onOpenCreatePageModal,
+    onOpenCreateSubPage,
     toggleExtensionWidget,
     collapsed = false,
     theme = 'dark',
@@ -157,20 +161,17 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
     { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon className="w-[18px] h-[18px]" /> },
     { id: 'connections', label: 'Connections', icon: <ConnectionsIcon className="w-[18px] h-[18px]" /> },
     { id: 'clips', label: 'Clips', icon: <ClipsIcon className="w-[18px] h-[18px]" /> },
-    { id: 'boards', label: 'Boards', icon: <BoardsIcon className="w-[18px] h-[18px]" /> },
     { id: 'settings', label: 'Settings', icon: <SettingsIcon className="w-[18px] h-[18px]" /> },
   ];
 
-  // User created custom pages (exclude system defaults and removed pages)
+  // User created custom pages (exclude obsolete defaults and removed test pages)
   const userCustomPages = customPages.filter(
     (p) =>
       p.id !== 'page_job' &&
       p.id !== 'job' &&
       p.id !== 'page_education' &&
-      p.id !== 'page_research' &&
-      p.id !== 'page_books' &&
       p.id !== 'page_projects' &&
-      !['Job Opportunities', 'AI & Tech Research', 'Books & Reading List', 'Projects & Ideas'].includes(p.name)
+      !['Job Opportunities', 'Projects & Ideas'].includes(p.name)
   );
 
   if (collapsed) {
@@ -210,6 +211,43 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                 </button>
               );
             })}
+
+            {userCustomPages.map((page) => {
+              const isActive = activeTab === page.id;
+              const PageIconComp = ICON_MAP[page.iconName] || Bookmark;
+              return (
+                <button
+                  key={page.id}
+                  onClick={() => setActiveTab(page.id)}
+                  title={page.name}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+                    isActive
+                      ? isDark
+                        ? 'bg-[#1C1B1B] text-[#3FE769] border border-[#2A2A2A]'
+                        : 'bg-[#a1f4c8] text-[#0f5238]'
+                      : isDark
+                      ? 'text-[#878787] hover:bg-[#181818] hover:text-white'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <PageIconComp className="w-[18px] h-[18px]" />
+                </button>
+              );
+            })}
+
+            {onOpenCreatePageModal && (
+              <button
+                onClick={onOpenCreatePageModal}
+                title="Create Custom Page"
+                className={`w-10 h-10 mt-1 rounded-lg flex items-center justify-center border border-dashed transition-colors ${
+                  isDark
+                    ? 'border-[#262626] text-[#878787] hover:border-[#3FE769] hover:text-[#3FE769] hover:bg-[#181818]'
+                    : 'border-slate-300 text-slate-500 hover:border-[#2D6A4F] hover:text-[#2D6A4F] hover:bg-emerald-50'
+                }`}
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-center gap-2">
@@ -353,28 +391,110 @@ export const Sidebar: React.FC<SidebarProps> = (props) => {
                 </motion.button>
               );
             })}
-            {userCustomPages.map((page) => {
-              const isActive = activeTab === page.id;
-              const PageIconComp = ICON_MAP[page.iconName] || Bookmark;
-              return (
+
+            {/* Custom Pages / Workspaces section */}
+            <div className="pt-4 pb-1.5 px-3 flex items-center justify-between">
+              <span className={`text-[11px] font-mono uppercase tracking-wider font-semibold ${isDark ? 'text-[#878787]' : 'text-slate-500'}`}>
+                Custom Pages
+              </span>
+              {onOpenCreatePageModal && (
                 <button
-                  key={page.id}
-                  onClick={() => setActiveTab(page.id)}
-                  className={`flex items-center gap-3 px-3 h-9 rounded-lg transition-colors font-medium text-[14px] leading-[20px] ${
-                    isActive
-                      ? isDark
-                        ? 'bg-[#1C1B1B] text-white border border-[#262626]'
-                        : 'bg-[#a1f4c8] text-[#0f5238]'
-                      : isDark
-                      ? 'text-[#A1A1A1] hover:bg-[#181818] hover:text-white'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  onClick={onOpenCreatePageModal}
+                  title="Create Custom Page"
+                  className={`p-1 rounded transition-colors flex items-center justify-center ${
+                    isDark
+                      ? 'text-[#878787] hover:text-[#3FE769] hover:bg-[#181818]'
+                      : 'text-slate-400 hover:text-[#2D6A4F] hover:bg-slate-100'
                   }`}
                 >
-                  <PageIconComp className="w-[18px] h-[18px]" />
-                  <span className="truncate">{page.name}</span>
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            {(() => {
+              const topPages = userCustomPages.filter((p) => !p.parentId || !userCustomPages.some(parent => parent.id === p.parentId));
+
+              const renderCustomPageNode = (page: CustomPageConfig, level = 0): React.ReactNode => {
+                const isActive = activeTab === page.id;
+                const PageIconComp = ICON_MAP[page.iconName] || Bookmark;
+                const children = userCustomPages.filter((c) => c.parentId === page.id);
+
+                return (
+                  <div key={page.id} className="flex flex-col">
+                    <div className="group relative flex items-center">
+                      <button
+                        onClick={() => setActiveTab(page.id)}
+                        className={`flex-1 flex items-center gap-2 px-2.5 h-8.5 rounded-lg transition-colors font-medium text-[13px] leading-[18px] ${
+                          level > 0 ? (level === 1 ? 'ml-3 text-[12.5px]' : 'ml-6 text-[12px]') : ''
+                        } ${
+                          isActive
+                            ? isDark
+                              ? 'bg-[#1C1B1B] text-white border border-[#262626]'
+                              : 'bg-[#a1f4c8] text-[#0f5238]'
+                            : isDark
+                            ? 'text-[#A1A1A1] hover:bg-[#181818] hover:text-white'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <PageIconComp className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{page.name}</span>
+                        {children.length > 0 && (
+                          <span className={`ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                            isDark ? 'bg-white/5 text-[#777777]' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {children.length}
+                          </span>
+                        )}
+                      </button>
+
+                      {onOpenCreateSubPage && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenCreateSubPage(page);
+                          }}
+                          title={`Add sub-page inside "${page.name}"`}
+                          className={`opacity-0 group-hover:opacity-100 p-1 mr-1 rounded transition-all cursor-pointer ${
+                            isDark
+                              ? 'text-[#878787] hover:text-[#3FE769] hover:bg-[#222222]'
+                              : 'text-slate-400 hover:text-emerald-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Nested Sub-Pages */}
+                    {children.length > 0 && (
+                      <div className={`flex flex-col gap-0.5 my-0.5 border-l ${
+                        isDark ? 'border-[#222222]' : 'border-slate-200'
+                      } ${level === 0 ? 'ml-3.5 pl-1.5' : 'ml-3 pl-1.5'}`}>
+                        {children.map((child) => renderCustomPageNode(child, level + 1))}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              return topPages.map((page) => renderCustomPageNode(page, 0));
+            })()}
+
+            {/* Prominent Add Custom Page button */}
+            {onOpenCreatePageModal && (
+              <button
+                onClick={onOpenCreatePageModal}
+                className={`w-full flex items-center gap-2.5 px-3 h-9 mt-1 rounded-lg border border-dashed transition-all text-[13px] font-medium cursor-pointer ${
+                  isDark
+                    ? 'border-[#262626] text-[#878787] hover:border-[#3FE769]/60 hover:text-[#3FE769] hover:bg-[#141414]'
+                    : 'border-slate-300 text-slate-600 hover:border-[#2D6A4F] hover:text-[#2D6A4F] hover:bg-emerald-50/60'
+                }`}
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span>Add Custom Page</span>
+              </button>
+            )}
           </nav>
         </div>
       </div>

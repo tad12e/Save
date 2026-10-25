@@ -200,7 +200,7 @@ export const AchievementsGrid: React.FC<AchievementsGridProps> = ({
   const unlockedCount = badges.filter((b) => b.unlocked).length;
   const completionPct = badges.length > 0 ? Math.round((unlockedCount / badges.length) * 100) : 0;
 
-  const categories = ['all', ...Array.from(new Set(badges.map((b) => b.category)))];
+  const categories: string[] = ['all', ...Array.from<string>(new Set(badges.map((b) => String(b.category))))];
 
   const filteredBadges = badges.filter((b) => {
     if (filterUnlockedOnly && !b.unlocked) return false;
@@ -450,7 +450,7 @@ export const AchievementsGrid: React.FC<AchievementsGridProps> = ({
         }`}
       >
         <div className="flex items-center gap-1.5 flex-wrap">
-          {categories.map((cat) => {
+          {categories.map((cat: string) => {
             const isSelected = selectedCategory === cat;
             return (
               <motion.button

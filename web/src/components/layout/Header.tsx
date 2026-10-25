@@ -12,6 +12,7 @@ import {
   Moon,
   Upload,
   AlertCircle,
+  Plus,
 } from 'lucide-react';
 import { DestinationConfig, ConnectionSyncLog, ClipItem } from '../../types';
 
@@ -22,6 +23,7 @@ interface HeaderProps {
   onQuickAddClip: () => void;
   onOpenBulkImport?: () => void;
   onOpenMusicRadar?: () => void;
+  onOpenCreatePageModal?: () => void;
   onRefreshSync: () => void;
   isRefreshing: boolean;
   theme: 'terminal' | 'dark' | 'light';
@@ -52,6 +54,7 @@ export const Header: React.FC<HeaderProps> = (props) => {
     searchQuery,
     setSearchQuery,
     onOpenBulkImport,
+    onOpenCreatePageModal,
     onRefreshSync,
     isRefreshing,
     theme,
@@ -209,6 +212,22 @@ export const Header: React.FC<HeaderProps> = (props) => {
           >
             <Upload className={`w-3.5 h-3.5 ${isDark ? 'text-[#3FE769]' : 'text-emerald-700'}`} />
             <span className="font-semibold whitespace-nowrap">Bulk Import</span>
+          </button>
+        )}
+
+        {onOpenCreatePageModal && (
+          <button
+            id="add-custom-page-header-btn"
+            onClick={onOpenCreatePageModal}
+            className={`h-9 px-3 flex items-center gap-1.5 rounded-xl text-xs font-sans font-medium transition-all duration-150 cursor-pointer shadow-sm ${
+              isDark
+                ? 'bg-[#181818] hover:bg-[#222222] text-[#EDEDED] border border-[#2E2E2E] hover:border-[#3FE769]/50 hover:shadow-[0_0_10px_rgba(63,231,105,0.1)]'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-emerald-500'
+            }`}
+            title="Create a new custom page"
+          >
+            <Plus className={`w-3.5 h-3.5 ${isDark ? 'text-[#3FE769]' : 'text-emerald-600'}`} />
+            <span className="font-semibold whitespace-nowrap">New Page</span>
           </button>
         )}
 
