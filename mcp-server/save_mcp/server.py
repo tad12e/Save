@@ -24,8 +24,9 @@ mcp = FastMCP(
     - Search through bookmarks, research links, and notes by semantic meaning or keyword.
     - List and filter clips by Action Intent ('apply', 'learn', 'buy', 'attend', 'hire', 'track', 'other') or source platform.
     - Read full extracted article/page text with 'read_clip_content' for in-depth analysis.
-    - Save new links and ideas to your vault with 'save_clip'.
-    - Update tags and notes with 'update_clip'.
+    - Save new links and ideas to your vault with 'save_clip', optionally into a custom page (e.g. 'Books').
+    - Organize clips into custom pages and workspaces (e.g. 'Books', 'AI Research') with 'list_pages', 'add_clip_to_page', and 'create_custom_page'.
+    - Update tags, notes, and custom space assignments with 'update_clip'.
     """,
 )
 
@@ -165,10 +166,12 @@ def save_clip(
     tags: Optional[list[str]] = None,
     note: str = "",
     intent: Optional[str] = None,
+    page: Optional[str] = None,
 ) -> str:
     """
-    Save a new URL, article, tweet, or excerpt to the user's Save catalog.
+    Save a new URL, article, tweet, book, or excerpt to the user's Save catalog.
     The backend will automatically parse metadata, trigger AI summarization, and index it for search.
+    If 'page' is provided (e.g. 'Books'), it will be saved directly into that custom space.
 
     Args:
         url: The web URL to save.
@@ -176,17 +179,32 @@ def save_clip(
         tags: Optional list of tags to categorize the clip.
         note: Optional personal note or reminder about why this was saved.
         intent: Optional intent label ('apply', 'learn', 'buy', 'attend', 'hire', 'track', 'other').
+        page: Optional custom page name, slug, or UUID to file the clip under (e.g. 'Books').
     """
     try:
         client = _get_client()
+        page_id = None
+        if page:
+            pages = client.list_pages()
+            target_key = page.strip().lower()
+            for p in pages:
+                if str(p.get("id")) == page or p.get("slug", "").lower() == target_key or p.get("name", "").lower() == target_key:
+                    page_id = str(p.get("id"))
+                    break
+            if not page_id:
+                new_p = client.create_page(name=page.title())
+                page_id = str(new_p.get("id"))
+
         result = client.save_clip(
             url=url,
             selected_text=selected_text,
             tags=tags or [],
             note=note,
             intent=intent,
+            custom_page_id=page_id,
         )
-        return f"Successfully saved clip! ID: {result.get('id')}\nTitle: {result.get('title') or url}"
+        page_suffix = f" (Filed in page: '{page}')" if page else ""
+        return f"Successfully saved clip! ID: {result.get('id')}\nTitle: {result.get('title') or url}{page_suffix}"
     except SaveApiError as e:
         return f"Error saving clip: {str(e)}"
 
@@ -198,9 +216,10 @@ def update_clip(
     title: Optional[str] = None,
     intent: Optional[str] = None,
     note: Optional[str] = None,
+    page: Optional[str] = None,
 ) -> str:
     """
-    Update tags, title, intent, or notes for an existing clip in the catalog.
+    Update tags, title, intent, notes, or assigned custom page for an existing clip.
 
     Args:
         clip_id: The UUID of the clip to update.
@@ -208,19 +227,108 @@ def update_clip(
         title: Updated title string.
         intent: Updated intent ('apply', 'learn', 'buy', 'attend', 'hire', 'track', 'other').
         note: Updated user note.
+        page: Optional custom page name or UUID to assign this clip to (e.g. 'Books').
     """
     try:
         client = _get_client()
+        page_id = None
+        if page:
+            pages = client.list_pages()
+            target_key = page.strip().lower()
+            for p in pages:
+                if str(p.get("id")) == page or p.get("slug", "").lower() == target_key or p.get("name", "").lower() == target_key:
+                    page_id = str(p.get("id"))
+                    break
+            if not page_id:
+                new_p = client.create_page(name=page.title())
+                page_id = str(new_p.get("id"))
+
         result = client.update_clip(
             clip_id=clip_id,
             tags=tags,
             title=title,
             intent=intent,
             note=note,
+            custom_page_id=page_id,
         )
         return f"Successfully updated clip {clip_id}."
     except SaveApiError as e:
         return f"Error updating clip {clip_id}: {str(e)}"
+
+
+@mcp.tool()
+def list_pages() -> str:
+    """
+    List all custom workspaces and pages created by the user (e.g. 'Books', 'AI Research', 'Jobs').
+    Shows page names, IDs, slugs, descriptions, and current clip counts.
+    """
+    try:
+        client = _get_client()
+        pages = client.list_pages()
+        if not pages:
+            return "No custom pages found. You can create one using 'create_custom_page'."
+        
+        formatted = [
+            {
+                "id": p.get("id"),
+                "name": p.get("name"),
+                "slug": p.get("slug"),
+                "description": p.get("description"),
+                "clip_count": p.get("clip_count", 0),
+                "ai_goal_prompt": p.get("ai_goal_prompt", ""),
+            }
+            for p in pages
+        ]
+        return json.dumps(formatted, indent=2)
+    except SaveApiError as e:
+        return f"Error listing custom pages: {str(e)}"
+
+
+@mcp.tool()
+def create_custom_page(
+    name: str,
+    description: str = "",
+    ai_goal_prompt: str = "",
+) -> str:
+    """
+    Create a new custom workspace/page with custom identity and AI Goal summarization rules.
+
+    Args:
+        name: Name of the page (e.g. 'Books', 'AI Research Papers', 'Startups').
+        description: Brief description of what is collected here.
+        ai_goal_prompt: Custom rule for the AI summarizer (e.g. 'Extract author, main thesis, key arguments, and reading difficulty').
+    """
+    try:
+        client = _get_client()
+        page = client.create_page(
+            name=name,
+            description=description,
+            ai_goal_prompt=ai_goal_prompt,
+        )
+        return f"Successfully created page '{name}' (ID: {page.get('id')})!"
+    except SaveApiError as e:
+        return f"Error creating page: {str(e)}"
+
+
+@mcp.tool()
+def add_clip_to_page(
+    clip_id: str,
+    page: str,
+) -> str:
+    """
+    Move or file an existing clip into a custom page (e.g. 'Books').
+    If the page does not exist yet, it will automatically be created.
+
+    Args:
+        clip_id: The UUID of the clip to move/assign.
+        page: The name, slug, or UUID of the custom page (e.g. 'Books').
+    """
+    try:
+        client = _get_client()
+        res = client.add_clip_to_page(clip_id=clip_id, page_name_or_id=page)
+        return res.get("message", f"Assigned clip {clip_id} to page '{page}'.")
+    except SaveApiError as e:
+        return f"Error assigning clip to page: {str(e)}"
 
 
 @mcp.tool()

@@ -154,6 +154,7 @@ class SaveApiClient:
         tags: Optional[list[str]] = None,
         note: str = "",
         intent: Optional[str] = None,
+        custom_page_id: Optional[str] = None,
     ) -> dict:
         """
         Save a new URL or excerpt to the user's catalog.
@@ -166,6 +167,8 @@ class SaveApiClient:
         }
         if intent:
             payload["intent"] = intent
+        if custom_page_id:
+            payload["custom_page_id"] = custom_page_id
         return self._request("POST", "/clips/", json=payload)
 
     def update_clip(
@@ -175,9 +178,10 @@ class SaveApiClient:
         title: Optional[str] = None,
         intent: Optional[str] = None,
         note: Optional[str] = None,
+        custom_page_id: Optional[str] = None,
     ) -> dict:
         """
-        Update tags, title, intent, or notes for an existing clip.
+        Update tags, title, intent, notes, or assigned custom page for an existing clip.
         """
         payload: dict[str, Any] = {}
         if tags is not None:
@@ -188,8 +192,63 @@ class SaveApiClient:
             payload["intent"] = intent
         if note is not None:
             payload["note"] = note
+        if custom_page_id is not None:
+            payload["custom_page_id"] = custom_page_id
 
         return self._request("PATCH", f"/clips/{clip_id}/", json=payload)
+
+    def list_pages(self) -> list[dict]:
+        """
+        List all custom workspaces/pages for the user with live clip counts.
+        """
+        data = self._request("GET", "/clips/pages/")
+        return data if isinstance(data, list) else []
+
+    def create_page(
+        self,
+        name: str,
+        description: str = "",
+        icon_name: str = "Bookmark",
+        color: str = "#8B5CF6",
+        ai_goal_prompt: str = "",
+        content_types: Optional[list[str]] = None,
+    ) -> dict:
+        """
+        Create a new custom workspace/page with custom theme and AI goal extraction rules.
+        """
+        payload = {
+            "name": name,
+            "description": description,
+            "icon_name": icon_name,
+            "color": color,
+            "ai_goal_prompt": ai_goal_prompt,
+            "content_types": content_types or ["general", "article"],
+        }
+        return self._request("POST", "/clips/pages/", json=payload)
+
+    def add_clip_to_page(self, clip_id: str, page_name_or_id: str) -> dict:
+        """
+        Assigns an existing clip to a custom page by page name, slug, or UUID.
+        """
+        pages = self.list_pages()
+        target_page = None
+        target_key = page_name_or_id.strip().lower()
+
+        for p in pages:
+            if str(p.get("id")) == page_name_or_id or p.get("slug", "").lower() == target_key or p.get("name", "").lower() == target_key:
+                target_page = p
+                break
+
+        if not target_page:
+            # If page doesn't exist, automatically create it!
+            target_page = self.create_page(name=page_name_or_id.title())
+
+        updated = self.update_clip(clip_id=clip_id, custom_page_id=str(target_page["id"]))
+        return {
+            "clip": updated,
+            "page": target_page,
+            "message": f"Successfully added clip {clip_id} to page '{target_page.get('name')}'."
+        }
 
     def get_clusters(
         self,
