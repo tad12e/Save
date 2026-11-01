@@ -19,6 +19,11 @@ node_modules/
 **/node_modules/
 extension/.output/
 extension/.wxt/
+.next/
+**/.next/
+out/
+.env.local
+**/.env.local
 
 # Log files
 *.log
@@ -47,3 +52,5 @@ dump.rdb
 # Android bug reports & archive dumps
 bugreport*.zip
 *.zip
+
+*.tsbuildinfo

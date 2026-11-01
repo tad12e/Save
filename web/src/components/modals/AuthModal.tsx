@@ -18,16 +18,23 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAuthSuccess: (userData: any, tokens: { access: string; refresh: string }) => void;
+  initialMode?: 'SIGNIN' | 'SIGNUP';
 }
 
 type AuthMode = 'SIGNIN' | 'SIGNUP' | 'OTP_VERIFY';
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuccess }) => {
-  const [mode, setMode] = useState<AuthMode>('SIGNIN');
+export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuccess, initialMode = 'SIGNIN' }) => {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
+
+  React.useEffect(() => {
+    if (initialMode && isOpen) {
+      setMode(initialMode);
+    }
+  }, [initialMode, isOpen]);
   
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);

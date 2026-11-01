@@ -64,10 +64,39 @@ export default function App() {
     return 'dashboard';
   });
 
+  const [authInitialMode, setAuthInitialMode] = useState<'SIGNIN' | 'SIGNUP'>('SIGNIN');
+
+  // Handle URL auth triggers (#login, #signup, ?auth=login, ?auth=signup)
+  useEffect(() => {
+    const checkAuthInUrl = () => {
+      const hash = window.location.hash.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      
+      const isSignup = hash.includes('signup') || hash.includes('register') || search.includes('auth=signup') || search.includes('auth=register');
+      const isLogin = hash.includes('login') || hash.includes('signin') || search.includes('auth=login') || search.includes('auth=signin');
+
+      if (isSignup) {
+        setAuthInitialMode('SIGNUP');
+        setShowAuthModal(true);
+        if (search.includes('plan=pro') || hash.includes('plan=pro')) {
+          setToastMessage('Creating account with Save Pro ($2.60/mo) plan.');
+        }
+      } else if (isLogin) {
+        setAuthInitialMode('SIGNIN');
+        setShowAuthModal(true);
+      }
+    };
+
+    checkAuthInUrl();
+    window.addEventListener('hashchange', checkAuthInUrl);
+    return () => window.removeEventListener('hashchange', checkAuthInUrl);
+  }, []);
+
   // Keep window.location.hash in sync with activeTab
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '').toLowerCase();
+      if (hash.startsWith('login') || hash.startsWith('signup')) return;
       if (hash && hash !== activeTab) {
         setActiveTab(hash);
       }
@@ -78,6 +107,9 @@ export default function App() {
 
   useEffect(() => {
     const currentHash = window.location.hash.replace('#', '').toLowerCase();
+    if (currentHash.startsWith('login') || currentHash.startsWith('signup')) {
+      return;
+    }
     if (activeTab && activeTab !== currentHash) {
       window.history.replaceState(null, '', `#${activeTab}`);
     }
@@ -754,6 +786,7 @@ export default function App() {
       {/* User Auth Modal (Sign In / Register / OTP) */}
       <AuthModal
         isOpen={showAuthModal}
+        initialMode={authInitialMode}
         onClose={() => setShowAuthModal(false)}
         onAuthSuccess={handleAuthSuccess}
       />

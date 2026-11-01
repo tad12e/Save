@@ -1,0 +1,20 @@
+/**
+ * Global URL and Authentication Routes for Save Landing Page.
+ * Configured to route seamlessly into the live Web Vault and Django backend.
+ */
+
+export const WEB_APP_URL =
+  process.env.NEXT_PUBLIC_WEB_APP_URL || 'http://localhost:3000';
+
+export const BACKEND_API_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
+
+export const APP_ROUTES = {
+  signIn: `${WEB_APP_URL}/#login`,
+  signUp: `${WEB_APP_URL}/#signup`,
+  upgradePro: `${WEB_APP_URL}/#signup?plan=pro`,
+  vault: `${WEB_APP_URL}/#dashboard`,
+  feed: `${WEB_APP_URL}/#feed`,
+  connections: `${WEB_APP_URL}/#connections`,
+  extensionDownload: '#extension-guide',
+};
