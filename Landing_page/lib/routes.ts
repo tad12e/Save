@@ -4,7 +4,7 @@
  */
 
 export const WEB_APP_URL =
-  process.env.NEXT_PUBLIC_WEB_APP_URL || 'http://localhost:3000';
+  process.env.NEXT_PUBLIC_WEB_APP_URL || '/app';
 
 export const BACKEND_API_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
