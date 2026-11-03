@@ -25,18 +25,16 @@ export default function Footer() {
   };
 
   return (
-    <footer className="w-full bg-surface py-12 px-4 sm:px-6 lg:px-8">
-      {/* ============================================================ */}
-      {/* GIANT FADED-BLUE HERO FOOTER CARD (OFFERPOST ARCHITECTURE)   */}
-      {/* ============================================================ */}
-      <div className="max-w-7xl mx-auto rounded-[32px] sm:rounded-[44px] bg-gradient-to-b from-[#F3F7FE] via-[#EDF3FC] to-[#E5EFFB] border border-blue-200/70 shadow-sm p-8 sm:p-12 lg:p-16 relative overflow-hidden text-zinc-800">
-        {/* Subtle decorative glow */}
-        <div className="absolute top-0 right-1/4 w-[500px] h-[300px] bg-blue-200/30 blur-3xl rounded-full pointer-events-none -z-0" />
+    <footer className="w-full bg-gradient-to-b from-[#F3F7FE] via-[#EDF3FC] to-[#E3EEFB] border-t border-blue-200/70 pt-16 sm:pt-20 pb-10 relative overflow-hidden text-zinc-800">
+      {/* Decorative ambient lighting */}
+      <div className="absolute top-0 right-1/4 w-[600px] h-[350px] bg-blue-200/30 blur-3xl rounded-full pointer-events-none -z-0" />
+      <div className="absolute bottom-0 left-10 w-[450px] h-[300px] bg-sky-200/25 blur-3xl rounded-full pointer-events-none -z-0" />
 
-        {/* ------------------------------------------------------------ */}
-        {/* TOP SECTION: MISSION & NEWSLETTER (LEFT) + 4 LINK COLS (RIGHT)*/}
-        {/* ------------------------------------------------------------ */}
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 pb-8">
+      {/* ------------------------------------------------------------ */}
+      {/* TOP SECTION: MISSION & NEWSLETTER (LEFT) + 4 LINK COLS (RIGHT)*/}
+      {/* ------------------------------------------------------------ */}
+      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 relative z-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 pb-10">
           {/* LEFT COLUMN: Mission & Email Dispatch */}
           <div className="lg:col-span-5 space-y-6">
             <p className="font-geist text-sm sm:text-[15px] text-zinc-700 leading-relaxed max-w-md font-normal">
@@ -270,20 +268,22 @@ export default function Footer() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* ------------------------------------------------------------ */}
-        {/* GIANT WATERMARK BRAND NAME: "Save" (MATCHING OFFERPOST STYLE)*/}
-        {/* ------------------------------------------------------------ */}
-        <div className="relative z-0 w-full overflow-hidden select-none pointer-events-none my-0 sm:my-2">
-          <h2 className="font-geist font-black tracking-tighter text-[20vw] sm:text-[22vw] lg:text-[23vw] leading-[0.78] text-center text-blue-900/[0.07] uppercase">
-            Save
-          </h2>
-        </div>
+      {/* ------------------------------------------------------------ */}
+      {/* GIANT WATERMARK BRAND NAME: "Save" (EDGE-TO-EDGE ACROSS WIDTH)*/}
+      {/* ------------------------------------------------------------ */}
+      <div className="w-full overflow-hidden select-none pointer-events-none mt-6 sm:mt-10 mb-2">
+        <h2 className="font-geist font-black tracking-tighter text-[23vw] leading-[0.75] text-center text-blue-900/[0.065] uppercase w-full block whitespace-nowrap">
+          Save
+        </h2>
+      </div>
 
-        {/* ------------------------------------------------------------ */}
-        {/* BOTTOM METADATA & COPYRIGHT STRIP                            */}
-        {/* ------------------------------------------------------------ */}
-        <div className="relative z-10 pt-6 border-t border-blue-200/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[11px] text-zinc-500 font-inter">
+      {/* ------------------------------------------------------------ */}
+      {/* BOTTOM METADATA & COPYRIGHT STRIP                            */}
+      {/* ------------------------------------------------------------ */}
+      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-6 border-t border-blue-200/60 relative z-10">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[11px] text-zinc-500 font-inter">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span>© 2026 Save Technologies Inc.</span>
             <span className="hidden sm:inline text-zinc-400">•</span>
