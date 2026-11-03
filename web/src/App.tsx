@@ -66,14 +66,15 @@ export default function App() {
 
   const [authInitialMode, setAuthInitialMode] = useState<'SIGNIN' | 'SIGNUP'>('SIGNIN');
 
-  // Handle URL auth triggers (#login, #signup, ?auth=login, ?auth=signup)
+  // Handle URL auth triggers (/app/login, /app/signup, #login, #signup, ?auth=login, ?auth=signup)
   useEffect(() => {
     const checkAuthInUrl = () => {
+      const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       const search = window.location.search.toLowerCase();
       
-      const isSignup = hash.includes('signup') || hash.includes('register') || search.includes('auth=signup') || search.includes('auth=register');
-      const isLogin = hash.includes('login') || hash.includes('signin') || search.includes('auth=login') || search.includes('auth=signin');
+      const isSignup = path.endsWith('/signup') || path.endsWith('/register') || hash.includes('signup') || hash.includes('register') || search.includes('auth=signup') || search.includes('auth=register');
+      const isLogin = path.endsWith('/login') || path.endsWith('/signin') || hash.includes('login') || hash.includes('signin') || search.includes('auth=login') || search.includes('auth=signin');
 
       if (isSignup) {
         setAuthInitialMode('SIGNUP');
@@ -110,13 +111,13 @@ export default function App() {
     if (currentHash.startsWith('login') || currentHash.startsWith('signup')) {
       return;
     }
-    if (activeTab && activeTab !== currentHash) {
+    if (window.location.hash && activeTab && activeTab !== currentHash) {
       window.history.replaceState(null, '', `#${activeTab}`);
     }
   }, [activeTab]);
   const [theme, setTheme] = useState<'terminal' | 'dark' | 'light'>(() => {
     const saved = localStorage.getItem('clipper_theme');
-    return (saved === 'light' || saved === 'dark' || saved === 'terminal') ? saved : 'dark';
+    return (saved === 'light' || saved === 'dark' || saved === 'terminal') ? saved : 'light';
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -787,7 +788,13 @@ export default function App() {
       <AuthModal
         isOpen={showAuthModal}
         initialMode={authInitialMode}
-        onClose={() => setShowAuthModal(false)}
+        theme={theme}
+        onClose={() => {
+          setShowAuthModal(false);
+          if (window.location.pathname.includes('/login') || window.location.pathname.includes('/signup')) {
+            window.history.replaceState(null, '', '/app');
+          }
+        }}
         onAuthSuccess={handleAuthSuccess}
       />
 
