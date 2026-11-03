@@ -136,7 +136,10 @@ class ApiService {
             const firstKey = Object.keys(errData)[0];
             if (firstKey) {
               const val = errData[firstKey];
-              errorMsg = Array.isArray(val) ? val[0] : String(val);
+              const msg = Array.isArray(val) ? val[0] : String(val);
+              errorMsg = firstKey === 'detail' || firstKey === 'error' || firstKey === 'message'
+                ? msg
+                : `${firstKey.replace(/_/g, ' ')}: ${msg}`;
             }
           }
         } catch {
@@ -199,7 +202,7 @@ class ApiService {
   async register(email: string, password: string, name: string): Promise<AuthResponse> {
     const res = await this.request<AuthResponse>('/api/auth/signup/', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, confirm_password: password, name }),
     });
     this.saveAuth(res);
     return res;

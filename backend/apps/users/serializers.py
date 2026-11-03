@@ -42,7 +42,7 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
 
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
-    confirm_password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, min_length=8, required=False)
 
     class Meta:
         model = CustomUser
@@ -56,12 +56,13 @@ class SignupSerializer(serializers.ModelSerializer):
         return normalized_email
 
     def validate(self, attrs):
-        if attrs['password'] != attrs['confirm_password']:
+        confirm_password = attrs.get('confirm_password')
+        if confirm_password and attrs['password'] != confirm_password:
             raise serializers.ValidationError({'confirm_password': 'Passwords do not match.'})
         return attrs
 
     def create(self, validated_data):
-        validated_data.pop('confirm_password')
+        validated_data.pop('confirm_password', None)
         email = validated_data['email']
 
         existing_user = CustomUser.objects.filter(email=email).first()
