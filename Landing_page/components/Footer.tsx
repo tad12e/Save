@@ -25,10 +25,10 @@ export default function Footer() {
   };
 
   return (
-    <footer className="w-full bg-gradient-to-b from-[#F3F7FE] via-[#EDF3FC] to-[#E3EEFB] border-t border-blue-200/70 pt-16 sm:pt-20 pb-10 relative overflow-hidden text-zinc-800">
+    <footer className="w-full bg-gradient-to-b from-[#EDF3FD] via-[#DCEBFA] to-[#C7E0F8] pt-12 sm:pt-16 pb-10 relative overflow-hidden text-zinc-800">
       {/* Decorative ambient lighting */}
-      <div className="absolute top-0 right-1/4 w-[600px] h-[350px] bg-blue-200/30 blur-3xl rounded-full pointer-events-none -z-0" />
-      <div className="absolute bottom-0 left-10 w-[450px] h-[300px] bg-sky-200/25 blur-3xl rounded-full pointer-events-none -z-0" />
+      <div className="absolute top-0 right-1/4 w-[600px] h-[350px] bg-blue-300/20 blur-3xl rounded-full pointer-events-none -z-0" />
+      <div className="absolute bottom-0 left-10 w-[450px] h-[300px] bg-sky-300/20 blur-3xl rounded-full pointer-events-none -z-0" />
 
       {/* ------------------------------------------------------------ */}
       {/* TOP SECTION: MISSION & NEWSLETTER (LEFT) + 4 LINK COLS (RIGHT)*/}
@@ -46,20 +46,20 @@ export default function Footer() {
                 <h4 className="font-geist text-xs font-semibold uppercase tracking-wider text-zinc-900">
                   The Save Dispatch
                 </h4>
-                <p className="font-inter text-xs text-zinc-500 mt-0.5">
+                <p className="font-inter text-xs text-zinc-600 mt-0.5">
                   Product updates, archetype templates, and new integrations, once a month.
                 </p>
               </div>
 
               {subscribed ? (
-                <div className="p-3 rounded-full bg-blue-100/80 border border-blue-300 text-xs font-geist font-medium text-blue-900 inline-flex items-center gap-2">
+                <div className="p-3 rounded-full bg-white/80 border border-blue-300 text-xs font-geist font-medium text-blue-900 inline-flex items-center gap-2 shadow-2xs">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
                   <span>You&apos;re subscribed to the Save Dispatch!</span>
                 </div>
               ) : (
                 <form
                   onSubmit={handleSubscribe}
-                  className="flex items-center bg-white/90 backdrop-blur-sm border border-blue-200/80 rounded-full p-1.5 shadow-2xs max-w-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all"
+                  className="flex items-center bg-white/95 backdrop-blur-sm border border-blue-200/80 rounded-full p-1.5 shadow-2xs max-w-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 transition-all"
                 >
                   <input
                     type="email"
@@ -87,14 +87,14 @@ export default function Footer() {
           <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-4 font-geist text-xs">
             {/* Column 1: Core Platform */}
             <div className="space-y-3">
-              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">
                 Platform
               </span>
               <ul className="space-y-2.5">
                 <li>
                   <a
                     href={APP_ROUTES.signIn}
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-block"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-block"
                   >
                     Web Vault
                   </a>
@@ -102,10 +102,10 @@ export default function Footer() {
                 <li>
                   <a
                     href="#pricing"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-flex items-center gap-1.5"
                   >
                     <span>Pricing</span>
-                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-blue-100 text-blue-900 border border-blue-200">
                       $2.60
                     </span>
                   </a>
@@ -113,10 +113,10 @@ export default function Footer() {
                 <li>
                   <a
                     href="#download"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-flex items-center gap-1.5"
                   >
                     <span>Extension</span>
-                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-zinc-200/80 text-zinc-700">
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-white/80 text-zinc-700 border border-zinc-200">
                       Alt+S
                     </span>
                   </a>
@@ -124,7 +124,7 @@ export default function Footer() {
                 <li>
                   <a
                     href="#mobile"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-block"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-block"
                   >
                     Mobile Apps
                   </a>
@@ -134,7 +134,7 @@ export default function Footer() {
 
             {/* Column 2: Ecosystem & Browsers */}
             <div className="space-y-3">
-              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">
                 Ecosystem
               </span>
               <ul className="space-y-2.5">
@@ -143,11 +143,11 @@ export default function Footer() {
                     href="https://microsoftedge.microsoft.com/addons"
                     target="_blank"
                     rel="noreferrer"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5 font-medium"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-flex items-center gap-1.5 font-medium"
                   >
                     <EdgeLogo size={13} />
                     <span>Microsoft Edge</span>
-                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-blue-100 text-blue-800">
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-blue-100 text-blue-900">
                       MV3
                     </span>
                   </a>
@@ -155,7 +155,7 @@ export default function Footer() {
                 <li>
                   <a
                     href="#download"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-flex items-center gap-1.5"
                   >
                     <ChromeLogo size={13} />
                     <span>Chrome Store</span>
@@ -164,18 +164,18 @@ export default function Footer() {
                 <li>
                   <a
                     href="#mobile"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-flex items-center gap-1"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-flex items-center gap-1"
                   >
-                    <AppleLogo size={12} className="text-zinc-700" />
+                    <AppleLogo size={12} className="text-zinc-800" />
                     <span>iOS Flutter</span>
                   </a>
                 </li>
                 <li>
                   <a
                     href="#mobile"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-flex items-center gap-1"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-flex items-center gap-1"
                   >
-                    <AndroidLogo size={12} className="text-zinc-700" />
+                    <AndroidLogo size={12} className="text-zinc-800" />
                     <span>Android</span>
                   </a>
                 </li>
@@ -184,14 +184,14 @@ export default function Footer() {
 
             {/* Column 3: Integrations & Updates */}
             <div className="space-y-3">
-              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">
                 Integrations
               </span>
               <ul className="space-y-2.5">
                 <li>
                   <a
                     href="#sync-mcp"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-flex items-center gap-1.5"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-flex items-center gap-1.5"
                   >
                     <span>Claude MCP</span>
                     <span className="px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-emerald-100 text-emerald-800">
@@ -202,7 +202,7 @@ export default function Footer() {
                 <li>
                   <a
                     href="#stack"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-block"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-block"
                   >
                     Notion Sync
                   </a>
@@ -210,13 +210,13 @@ export default function Footer() {
                 <li>
                   <a
                     href="#stack"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-block"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-block"
                   >
                     Google Sheets
                   </a>
                 </li>
                 <li>
-                  <div className="inline-flex items-center gap-1.5 text-zinc-500">
+                  <div className="inline-flex items-center gap-1.5 text-zinc-600">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span>Status 99.9%</span>
                   </div>
@@ -226,14 +226,14 @@ export default function Footer() {
 
             {/* Column 4: Compliance & Legal */}
             <div className="space-y-3">
-              <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">
                 Legal
               </span>
               <ul className="space-y-2.5">
                 <li>
                   <Link
                     href="/terms"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-block"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-block"
                   >
                     Terms of Use
                   </Link>
@@ -241,7 +241,7 @@ export default function Footer() {
                 <li>
                   <Link
                     href="/privacy"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-block"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-block"
                   >
                     Privacy Statement
                   </Link>
@@ -250,7 +250,7 @@ export default function Footer() {
                   <button
                     type="button"
                     onClick={() => setShowPrivacyModal(true)}
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-flex items-center gap-1 cursor-pointer"
                   >
                     <PrivacyChoicesIcon size={20} />
                     <span>Privacy Choices</span>
@@ -259,7 +259,7 @@ export default function Footer() {
                 <li>
                   <a
                     href="mailto:support@yazem.tech"
-                    className="text-zinc-700 hover:text-blue-600 transition-colors inline-block"
+                    className="text-zinc-800 hover:text-blue-700 transition-colors inline-block"
                   >
                     Contact Support
                   </a>
@@ -274,7 +274,7 @@ export default function Footer() {
       {/* GIANT WATERMARK BRAND NAME: "Save" (EDGE-TO-EDGE ACROSS WIDTH)*/}
       {/* ------------------------------------------------------------ */}
       <div className="w-full overflow-hidden select-none pointer-events-none mt-6 sm:mt-10 mb-2">
-        <h2 className="font-geist font-black tracking-tighter text-[23vw] leading-[0.75] text-center text-blue-900/[0.065] uppercase w-full block whitespace-nowrap">
+        <h2 className="font-geist font-black tracking-tighter text-[23vw] leading-[0.75] text-center text-blue-950/[0.08] uppercase w-full block whitespace-nowrap">
           Save
         </h2>
       </div>
@@ -282,8 +282,8 @@ export default function Footer() {
       {/* ------------------------------------------------------------ */}
       {/* BOTTOM METADATA & COPYRIGHT STRIP                            */}
       {/* ------------------------------------------------------------ */}
-      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-6 border-t border-blue-200/60 relative z-10">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[11px] text-zinc-500 font-inter">
+      <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-6 border-t border-blue-300/40 relative z-10">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[11px] text-zinc-600 font-inter">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span>© 2026 Save Technologies Inc.</span>
             <span className="hidden sm:inline text-zinc-400">•</span>
@@ -291,7 +291,7 @@ export default function Footer() {
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="text-[10px] text-zinc-400">
+            <span className="text-[10px] text-zinc-500">
               Microsoft Edge &amp; company logos belong to their respective owners.
             </span>
             <div className="flex items-center gap-2">
@@ -299,7 +299,7 @@ export default function Footer() {
                 href="https://github.com/tad12e/Save"
                 target="_blank"
                 rel="noreferrer"
-                className="p-1 rounded-md text-zinc-500 hover:text-zinc-900 transition-colors"
+                className="p-1 rounded-md text-zinc-600 hover:text-zinc-900 transition-colors"
                 title="GitHub"
               >
                 <GitHubLogo size={14} />
@@ -308,7 +308,7 @@ export default function Footer() {
                 href="https://x.com"
                 target="_blank"
                 rel="noreferrer"
-                className="p-1 rounded-md text-zinc-500 hover:text-zinc-900 transition-colors"
+                className="p-1 rounded-md text-zinc-600 hover:text-zinc-900 transition-colors"
                 title="X / Twitter"
               >
                 <XLogo size={12} />

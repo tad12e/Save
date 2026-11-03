@@ -5,10 +5,13 @@ import { APP_ROUTES } from "../lib/routes";
 
 export default function CTASection() {
   return (
-    <section id="cta" className="py-24 md:py-32 bg-surface text-center border-b border-surface-container-high relative overflow-hidden">
+    <section
+      id="cta"
+      className="py-24 md:py-32 bg-gradient-to-b from-surface via-[#F6FAFE]/70 to-[#EDF3FD] text-center relative overflow-hidden"
+    >
       {/* Soft Ambient Warm Glow */}
       <div className="absolute inset-0 flex items-center justify-center -z-10 pointer-events-none">
-        <div className="w-[500px] h-[250px] bg-gradient-to-tr from-amber-100/40 via-purple-100/30 to-emerald-100/30 blur-3xl rounded-full" />
+        <div className="w-[500px] h-[250px] bg-gradient-to-tr from-blue-100/30 via-sky-100/20 to-indigo-100/20 blur-3xl rounded-full" />
       </div>
 
       <div className="max-w-4xl mx-auto px-6 space-y-6">
@@ -34,7 +37,7 @@ export default function CTASection() {
           </a>
           <a
             href={APP_ROUTES.signIn}
-            className="h-11 px-7 rounded-full bg-surface-container-lowest border border-surface-container-high text-on-surface font-geist text-xs font-semibold inline-flex items-center gap-2 hover:bg-surface-container-low transition-all active:scale-[0.98] shadow-2xs"
+            className="h-11 px-7 rounded-full bg-white/90 backdrop-blur-sm border border-zinc-200 text-on-surface font-geist text-xs font-semibold inline-flex items-center gap-2 hover:bg-white transition-all active:scale-[0.98] shadow-2xs"
           >
             <span className="material-symbols-outlined text-[18px]">desktop_windows</span>
             <span>Open Web Vault</span>
@@ -45,7 +48,7 @@ export default function CTASection() {
         <div className="pt-6 flex flex-wrap items-center justify-center gap-4 text-xs font-code text-on-surface-variant">
           <span className="inline-flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span>Chrome & Safari Extension</span>
+            <span>Chrome &amp; Safari Extension</span>
           </span>
           <span className="text-zinc-300">•</span>
           <span className="inline-flex items-center gap-1.5">
@@ -55,11 +58,10 @@ export default function CTASection() {
           <span className="text-zinc-300">•</span>
           <span className="inline-flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-            <span>iOS & Android Flutter App</span>
+            <span>iOS &amp; Android Flutter App</span>
           </span>
         </div>
       </div>
     </section>
   );
 }
-
