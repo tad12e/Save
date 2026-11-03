@@ -28,7 +28,7 @@ export default function PricingSection() {
           </h2>
 
           <p className="font-inter text-sm md:text-base text-on-surface-variant max-w-2xl mx-auto leading-relaxed">
-            Other bookmark managers charge $10 to $12 per month. Save gives you full AI intent classification, bi-directional database sync, and mobile apps for just $2.60/month.
+            Other bookmark managers charge $10 to $12 per month. Yazem gives you full AI intent classification, bi-directional database sync, and mobile apps for just $2.60/month.
           </p>
 
           {/* Monthly / Annual Billing Toggle */}

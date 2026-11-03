@@ -25,10 +25,10 @@ export default function Header() {
         <div className="flex items-center gap-3">
           <a href="#" className="flex items-center gap-2 group">
             <div className="w-6 h-6 rounded bg-primary text-white flex items-center justify-center text-xs font-bold tracking-tighter shadow-sm transition-transform group-hover:scale-105">
-              S.
+              Y.
             </div>
             <span className="font-geist text-lg font-semibold tracking-tight text-on-surface">
-              Save
+              Yazem
             </span>
           </a>
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-geist uppercase tracking-wider font-semibold bg-surface-container border border-surface-container-high text-on-surface-variant">
@@ -94,7 +94,7 @@ export default function Header() {
             href={APP_ROUTES.signUp}
             className="inline-flex items-center justify-center h-9 px-5 rounded-full bg-primary text-white font-geist text-xs font-medium tracking-tight hover:bg-neutral-800 transition-all duration-150 active:scale-[0.98] shadow-sm"
           >
-            Get Save Free
+            Get Yazem Free
           </a>
         </div>
       </div>

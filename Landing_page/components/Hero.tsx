@@ -157,7 +157,7 @@ export default function Hero() {
 
           <div className="lg:col-span-4 flex flex-col justify-end space-y-6">
             <p className="font-inter text-sm md:text-base text-on-surface-variant leading-relaxed">
-              Traditional bookmark managers sort by media format. Save organizes by action intent—automatically routing to Notion and Google Sheets while rendering clips as they appear in their native apps.
+              Traditional bookmark managers sort by media format. Yazem organizes by action intent—automatically routing to Notion and Google Sheets while rendering clips as they appear in their native apps.
             </p>
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <a

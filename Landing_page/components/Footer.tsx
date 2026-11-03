@@ -44,7 +44,7 @@ export default function Footer() {
             <div className="space-y-3 pt-2">
               <div>
                 <h4 className="font-geist text-xs font-bold uppercase tracking-wider text-blue-950">
-                  The Save Dispatch
+                  The Yazem Dispatch
                 </h4>
                 <p className="font-inter text-xs text-blue-900/80 mt-0.5 font-medium">
                   Product updates, archetype templates, and new integrations, once a month.
@@ -54,7 +54,7 @@ export default function Footer() {
               {subscribed ? (
                 <div className="p-3 rounded-full bg-white/90 border border-white text-xs font-geist font-semibold text-blue-950 inline-flex items-center gap-2 shadow-xs">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>You&apos;re subscribed to the Save Dispatch!</span>
+                  <span>You&apos;re subscribed to the Yazem Dispatch!</span>
                 </div>
               ) : (
                 <form
@@ -271,11 +271,11 @@ export default function Footer() {
       </div>
 
       {/* ------------------------------------------------------------ */}
-      {/* GIANT WATERMARK BRAND NAME: "Save" (OVER DEEPER BLUE BASE)   */}
+      {/* GIANT WATERMARK BRAND NAME: "YAZEM" (OVER DEEPER BLUE BASE)  */}
       {/* ------------------------------------------------------------ */}
       <div className="w-full overflow-hidden select-none pointer-events-none mt-6 sm:mt-10 mb-2">
-        <h2 className="font-geist font-black tracking-tighter text-[23vw] leading-[0.75] text-center text-white/[0.22] uppercase w-full block whitespace-nowrap drop-shadow-xs">
-          Save
+        <h2 className="font-geist font-black tracking-tighter text-[20vw] sm:text-[21vw] leading-[0.75] text-center text-white/[0.22] uppercase w-full block whitespace-nowrap drop-shadow-xs">
+          YAZEM
         </h2>
       </div>
 
@@ -285,7 +285,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 pt-6 border-t border-white/20 relative z-10">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-[11px] text-blue-100 font-inter font-medium">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span className="text-white font-semibold">© 2026 Save Technologies Inc.</span>
+            <span className="text-white font-semibold">© 2026 Yazem Technologies Inc.</span>
             <span className="hidden sm:inline text-blue-200/60">•</span>
             <span>A cognitive bookmark &amp; knowledge vault architecture.</span>
           </div>

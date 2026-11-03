@@ -3,9 +3,9 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
 export const metadata = {
-  title: "Terms of Use | Save & Clipper - Microsoft Edge Add-ons Compliant",
+  title: "Terms of Use | Yazem & Clipper - Microsoft Edge Add-ons Compliant",
   description:
-    "Terms of Use and Service Agreement for Save Technologies and Clipper Browser Extension. Fully compliant with Microsoft Partner Center and Edge Add-ons Developer Agreement.",
+    "Terms of Use and Service Agreement for Yazem Technologies and Clipper Browser Extension. Fully compliant with Microsoft Partner Center and Edge Add-ons Developer Agreement.",
 };
 
 export default function TermsOfUsePage() {
@@ -31,21 +31,21 @@ export default function TermsOfUsePage() {
           <section className="space-y-3">
             <h2 className="text-xl font-semibold font-geist text-zinc-900">1. Acceptance of Terms</h2>
             <p>
-              By accessing Save (app.save.io, yazem.tech) or installing our Clipper extension for Microsoft Edge, Google Chrome, or other supported browsers, you agree to be bound by these Terms of Use and our Privacy Statement. If you do not agree, do not use the service or extension.
+              By accessing Yazem (app.save.io, yazem.tech) or installing our Clipper extension for Microsoft Edge, Google Chrome, or other supported browsers, you agree to be bound by these Terms of Use and our Privacy Statement. If you do not agree, do not use the service or extension.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold font-geist text-zinc-900">2. Description of Service & Clipper Extension</h2>
             <p>
-              Save provides an AI-augmented knowledge management platform allowing users to capture, index, synthesize, and query bookmarks, media, research papers, e-commerce listings, and personal notes. The Clipper extension acts as a client utility to capture page content upon user command.
+              Yazem provides an AI-augmented knowledge management platform allowing users to capture, index, synthesize, and query bookmarks, media, research papers, e-commerce listings, and personal notes. The Clipper extension acts as a client utility to capture page content upon user command.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold font-geist text-zinc-900">3. Acceptable Use & Intellectual Property</h2>
             <p>
-              You retain ownership of the content and notes you store in Save. You agree not to use the service to:
+              You retain ownership of the content and notes you store in Yazem. You agree not to use the service to:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-sm">
               <li>Infringe on third-party intellectual property or copyright laws.</li>
@@ -57,21 +57,21 @@ export default function TermsOfUsePage() {
           <section className="space-y-3">
             <h2 className="text-xl font-semibold font-geist text-zinc-900">4. Third-Party Platforms & Trademarks</h2>
             <p>
-              Microsoft, Microsoft Edge, Windows, and the Microsoft logo are registered trademarks of Microsoft Corporation. Google, Chrome, and Android are trademarks of Google LLC. Apple, Safari, and iOS are trademarks of Apple Inc. Notion, Airtable, and Slack are trademarks of their respective owners. Save Technologies is an independent software vendor and developer partner.
+              Microsoft, Microsoft Edge, Windows, and the Microsoft logo are registered trademarks of Microsoft Corporation. Google, Chrome, and Android are trademarks of Google LLC. Apple, Safari, and iOS are trademarks of Apple Inc. Notion, Airtable, and Slack are trademarks of their respective owners. Yazem Technologies is an independent software vendor and developer partner.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold font-geist text-zinc-900">5. Limitation of Liability & Warranties</h2>
             <p>
-              The service is provided &quot;as is&quot; without warranties of any kind. Save Technologies Inc. shall not be liable for indirect, incidental, or consequential damages resulting from service downtime, data synchronization delays, or third-party API changes.
+              The service is provided &quot;as is&quot; without warranties of any kind. Yazem Technologies Inc. shall not be liable for indirect, incidental, or consequential damages resulting from service downtime, data synchronization delays, or third-party API changes.
             </p>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold font-geist text-zinc-900">6. Support & Contact Information</h2>
             <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-geist">
-              <p className="font-semibold text-zinc-900">Save Technologies Inc. - Legal & Partner Relations</p>
+              <p className="font-semibold text-zinc-900">Yazem Technologies Inc. - Legal & Partner Relations</p>
               <p className="text-zinc-600">Support Desk: <a href="mailto:support@yazem.tech" className="text-blue-600 hover:underline">support@yazem.tech</a></p>
               <p className="text-zinc-600">Enterprise Inquiries: <a href="mailto:partners@yazem.tech" className="text-blue-600 hover:underline">partners@yazem.tech</a></p>
             </div>

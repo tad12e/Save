@@ -3,11 +3,11 @@ import "./globals.css";
 import SmoothScroll from "@/components/SmoothScroll";
 
 export const metadata: Metadata = {
-  title: "Save — AI Action-Oriented Knowledge Vault",
+  title: "Yazem — AI Action-Oriented Knowledge Vault",
   description:
     "Organize content by WHY you saved it (Action Intent), not just what format it is. Seamless bi-directional sync to Google Sheets, Notion, and Airtable with native clip fidelity.",
   openGraph: {
-    title: "Save — Action-Oriented Knowledge Vault",
+    title: "Yazem — Action-Oriented Knowledge Vault",
     description: "Capture with purpose. Act with precision.",
     type: "website",
   },

@@ -77,7 +77,7 @@ export default function PlatformShowcase() {
                 <div className="flex items-center justify-between pb-2 border-b border-zinc-200">
                   <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-zinc-900 font-geist font-bold">Save Extension</span>
+                    <span className="text-zinc-900 font-geist font-bold">Yazem Extension</span>
                   </div>
                   <kbd className="px-2 py-0.5 rounded bg-white border border-zinc-300 text-[10px] text-zinc-600 shadow-2xs">
                     ⌘ + S

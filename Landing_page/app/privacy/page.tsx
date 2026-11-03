@@ -3,9 +3,9 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
 export const metadata = {
-  title: "Privacy Policy | Save & Clipper - Microsoft Edge Add-ons Compliant",
+  title: "Privacy Policy | Yazem & Clipper - Microsoft Edge Add-ons Compliant",
   description:
-    "Privacy Policy for Save Technologies and Clipper Browser Extension. Fully compliant with Microsoft Edge Add-ons Partner Center, Google Chrome Web Store, and GDPR/CCPA standards.",
+    "Privacy Policy for Yazem Technologies and Clipper Browser Extension. Fully compliant with Microsoft Edge Add-ons Partner Center, Google Chrome Web Store, and GDPR/CCPA standards.",
 };
 
 export default function PrivacyPolicyPage() {
@@ -31,7 +31,7 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-3">
             <h2 className="text-xl font-semibold font-geist text-zinc-900">1. Overview & Commitment</h2>
             <p>
-              Save Technologies Inc. (&quot;Save&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) is committed to protecting your privacy. This Privacy Statement explains how our web vault, mobile applications, and Clipper browser extensions (including our Microsoft Edge Add-on and Chrome Extension) collect, use, and safeguard your information.
+              Yazem Technologies Inc. (&quot;Yazem&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) is committed to protecting your privacy. This Privacy Statement explains how our web vault, mobile applications, and Clipper browser extensions (including our Microsoft Edge Add-on and Chrome Extension) collect, use, and safeguard your information.
             </p>
             <p>
               We do not sell personal data to third parties. We do not use user web browsing history for advertising, profile monetization, or data brokers.
@@ -87,7 +87,7 @@ export default function PrivacyPolicyPage() {
               For privacy inquiries, GDPR/CCPA data requests, or Microsoft Partner Center inquiries, contact our Data Protection Officer at:
             </p>
             <div className="p-4 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-geist">
-              <p className="font-semibold text-zinc-900">Save Technologies Inc. - Privacy & Compliance</p>
+              <p className="font-semibold text-zinc-900">Yazem Technologies Inc. - Privacy & Compliance</p>
               <p className="text-zinc-600">Email: <a href="mailto:privacy@yazem.tech" className="text-blue-600 hover:underline">privacy@yazem.tech</a></p>
               <p className="text-zinc-600">Support: <a href="mailto:support@yazem.tech" className="text-blue-600 hover:underline">support@yazem.tech</a></p>
               <p className="text-zinc-500 text-xs mt-1">Microsoft Edge Add-ons Developer Partner ID: Yazem Technologies</p>
