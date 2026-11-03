@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
@@ -196,6 +195,14 @@ class PolymorphicClipCard extends StatelessWidget {
           return const Color(0xFF0D1117);
         case PlatformSkin.spotify:
           return const Color(0xFF121212);
+        case PlatformSkin.commerce:
+          return const Color(0xFF141716);
+        case PlatformSkin.book:
+          return const Color(0xFF14141E);
+        case PlatformSkin.paper:
+          return const Color(0xFF1A1416);
+        case PlatformSkin.job:
+          return const Color(0xFF121A16);
         case PlatformSkin.generic:
           return const Color(0xFF161B22);
       }
@@ -208,6 +215,10 @@ class PolymorphicClipCard extends StatelessWidget {
         case PlatformSkin.instagram:
         case PlatformSkin.github:
         case PlatformSkin.spotify:
+        case PlatformSkin.commerce:
+        case PlatformSkin.book:
+        case PlatformSkin.paper:
+        case PlatformSkin.job:
           return const Color(0xFFFFFFFF);
         case PlatformSkin.generic:
           return AppTheme.surfaceCard;
@@ -253,6 +264,14 @@ class PolymorphicClipCard extends StatelessWidget {
           return const Color(0xFF30363D);
         case PlatformSkin.spotify:
           return const Color(0xFF282828);
+        case PlatformSkin.commerce:
+          return const Color(0xFF243428);
+        case PlatformSkin.book:
+          return const Color(0xFF24263A);
+        case PlatformSkin.paper:
+          return const Color(0xFF382226);
+        case PlatformSkin.job:
+          return const Color(0xFF203628);
         case PlatformSkin.generic:
           return const Color(0xFF30363D);
       }
@@ -272,6 +291,14 @@ class PolymorphicClipCard extends StatelessWidget {
           return const Color(0xFFD0D7DE);
         case PlatformSkin.spotify:
           return const Color(0xFFE5E5E5);
+        case PlatformSkin.commerce:
+          return const Color(0xFFE2E8F0);
+        case PlatformSkin.book:
+          return const Color(0xFFE0E7FF);
+        case PlatformSkin.paper:
+          return const Color(0xFFFFE4E6);
+        case PlatformSkin.job:
+          return const Color(0xFFD1FAE5);
         case PlatformSkin.generic:
           return AppTheme.borderSubtle;
       }
@@ -610,6 +637,30 @@ class _PlatformBodyDispatcher extends StatelessWidget {
           isSelected: isSelected,
           onToggleSelect: onToggleSelect,
           onToggleFavorite: onToggleFavorite,
+        );
+      case PlatformSkin.commerce:
+        return _CommerceBody(
+          clip: clip,
+          meta: meta as CommerceMeta,
+          isDark: isDark,
+        );
+      case PlatformSkin.book:
+        return _BookBody(
+          clip: clip,
+          meta: meta as BookMeta,
+          isDark: isDark,
+        );
+      case PlatformSkin.paper:
+        return _PaperBody(
+          clip: clip,
+          meta: meta as PaperMeta,
+          isDark: isDark,
+        );
+      case PlatformSkin.job:
+        return _JobBody(
+          clip: clip,
+          meta: meta as JobMeta,
+          isDark: isDark,
         );
       case PlatformSkin.generic:
         return _GenericBody(
@@ -3633,6 +3684,594 @@ class _GenericBody extends StatelessWidget {
               fontSize: 12,
               color: isDark ? const Color(0xFF94A3B8) : AppTheme.textMuted,
               height: 1.45,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _CommerceBody extends StatelessWidget {
+  final ClipModel clip;
+  final CommerceMeta meta;
+  final bool isDark;
+
+  const _CommerceBody({
+    required this.clip,
+    required this.meta,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final brand = meta.brand ?? 'Store';
+    final title = meta.title ?? clip.title;
+    final price = meta.price;
+    final curr = meta.curr ?? 'USD';
+    final rating = meta.rating;
+    final reviews = meta.reviews;
+    final thumb = meta.thumb ?? (clip.extraMetadata['image']?.toString());
+    final availability = meta.availability;
+
+    String priceStr = '';
+    if (price != null) {
+      final sym = curr == 'USD' ? '\$' : curr == 'EUR' ? '€' : curr == 'GBP' ? '£' : '$curr ';
+      priceStr = '$sym${price.toStringAsFixed(2)}';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.shoppingBag, size: 12, color: Color(0xFFD97706)),
+                  const SizedBox(width: 4),
+                  Text(
+                    brand,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (priceStr.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Text(
+                  priceStr,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF10B981),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (thumb != null && thumb.isNotEmpty) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: 140,
+              width: double.infinity,
+              color: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFF8FAFC),
+              child: Image.network(
+                thumb,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        Text(
+          title,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : AppTheme.textPrimary,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (rating != null && rating > 0) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(LucideIcons.star, size: 13, color: Color(0xFFF59E0B)),
+              const SizedBox(width: 4),
+              Text(
+                rating.toStringAsFixed(1),
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white70 : const Color(0xFF334155),
+                ),
+              ),
+              if (reviews != null && reviews > 0) ...[
+                const SizedBox(width: 4),
+                Text(
+                  '(${formatCompactCount(reviews)} reviews)',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+              if (availability != null) ...[
+                const Spacer(),
+                Text(
+                  availability,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF10B981),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+        if (clip.summary.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            clip.summary,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: isDark ? const Color(0xFF94A3B8) : AppTheme.textMuted,
+              height: 1.4,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _BookBody extends StatelessWidget {
+  final ClipModel clip;
+  final BookMeta meta;
+  final bool isDark;
+
+  const _BookBody({
+    required this.clip,
+    required this.meta,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final author = meta.author ?? (clip.sourceAuthor.isNotEmpty ? clip.sourceAuthor : null);
+    final rating = meta.rating;
+    final cover = meta.cover ?? (clip.extraMetadata['image']?.toString());
+    final pages = meta.pages;
+    final title = meta.title ?? clip.title;
+    final price = meta.price;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.bookOpen, size: 12, color: Color(0xFF6366F1)),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Book',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFFA5B4FC) : const Color(0xFF4338CA),
+                    ),
+                  ),
+                  if (pages != null) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      '• $pages p.',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        color: isDark ? Colors.white60 : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (rating != null && rating > 0)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.star, size: 13, color: Color(0xFFF59E0B)),
+                  const SizedBox(width: 3),
+                  Text(
+                    rating.toStringAsFixed(2),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (cover != null && cover.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  width: 55,
+                  height: 80,
+                  color: isDark ? const Color(0xFF1E1E2E) : const Color(0xFFE2E8F0),
+                  child: Image.network(
+                    cover,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            if (cover != null && cover.isNotEmpty) const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : AppTheme.textPrimary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (author != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'by $author',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  if (price != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '\$${price.toStringAsFixed(2)}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF10B981),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (clip.summary.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            clip.summary,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: isDark ? const Color(0xFF94A3B8) : AppTheme.textMuted,
+              height: 1.4,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PaperBody extends StatelessWidget {
+  final ClipModel clip;
+  final PaperMeta meta;
+  final bool isDark;
+
+  const _PaperBody({
+    required this.clip,
+    required this.meta,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final paperId = meta.paperId;
+    final title = meta.title ?? clip.title;
+    final year = meta.publishedYear;
+    final authors = meta.authors;
+    final pdfUrl = meta.pdfUrl;
+    final citations = meta.citations;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF43F5E).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFF43F5E).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.fileText, size: 12, color: Color(0xFFF43F5E)),
+                  const SizedBox(width: 4),
+                  Text(
+                    paperId != null ? 'arXiv:$paperId' : 'Paper',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFFFDA4AF) : const Color(0xFFBE123C),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (citations != null && citations > 0)
+              Text(
+                '${formatCompactCount(citations)} citations',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  color: const Color(0xFFF59E0B),
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else if (year != null)
+              Text(
+                '$year',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  color: isDark ? Colors.white60 : Colors.black54,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          title,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : AppTheme.textPrimary,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (authors.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(LucideIcons.users, size: 12, color: Color(0xFF94A3B8)),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  authors.join(', '),
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (clip.summary.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              clip.summary,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+                color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                height: 1.4,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+        if (pdfUrl != null) ...[
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () async {
+              final uri = Uri.tryParse(pdfUrl);
+              if (uri != null && await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF43F5E),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.download, size: 12, color: Colors.white),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Download PDF',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _JobBody extends StatelessWidget {
+  final ClipModel clip;
+  final JobMeta meta;
+  final bool isDark;
+
+  const _JobBody({
+    required this.clip,
+    required this.meta,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final company = meta.company ?? (clip.sourceAuthor.isNotEmpty ? clip.sourceAuthor : 'Company');
+    final role = meta.role ?? clip.title;
+    final location = meta.location ?? 'Remote';
+    final salary = meta.salary;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.briefcase, size: 12, color: Color(0xFF10B981)),
+                  const SizedBox(width: 4),
+                  Text(
+                    company,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (salary != null)
+              Text(
+                salary,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF10B981),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          role,
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : AppTheme.textPrimary,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            const Icon(LucideIcons.mapPin, size: 12, color: Color(0xFF94A3B8)),
+            const SizedBox(width: 4),
+            Text(
+              location,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+        ),
+        if (clip.summary.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            clip.summary,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: isDark ? const Color(0xFF94A3B8) : AppTheme.textMuted,
+              height: 1.4,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

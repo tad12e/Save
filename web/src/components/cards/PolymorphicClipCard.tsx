@@ -10,6 +10,10 @@ import {
   LinkedInMeta, 
   InstagramMeta, 
   SpotifyMeta, 
+  CommerceMeta,
+  BookMeta,
+  PaperMeta,
+  JobMeta,
   GenericMeta, 
   resolveSkin 
 } from '../../types/clipPlatform';
@@ -21,6 +25,10 @@ import { GitHubCardSkin } from './skins/GitHubCardSkin';
 import { LinkedInCardSkin } from './skins/LinkedInCardSkin';
 import { InstagramCardSkin } from './skins/InstagramCardSkin';
 import { SpotifyCardSkin } from './skins/SpotifyCardSkin';
+import { CommerceCardSkin } from './skins/CommerceCardSkin';
+import { BookCardSkin } from './skins/BookCardSkin';
+import { PaperCardSkin } from './skins/PaperCardSkin';
+import { JobCardSkin } from './skins/JobCardSkin';
 import { GenericCardSkin } from './skins/GenericCardSkin';
 
 export interface PolymorphicClipCardProps {
@@ -207,6 +215,14 @@ const PlatformCardBody: React.FC<PlatformCardBodyProps> = ({ skin, clip, isDark,
       return <InstagramCardSkin clip={clip} meta={meta as InstagramMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
     case 'spotify':
       return <SpotifyCardSkin clip={clip} meta={meta as SpotifyMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
+    case 'commerce':
+      return <CommerceCardSkin clip={clip} meta={meta as CommerceMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
+    case 'book':
+      return <BookCardSkin clip={clip} meta={meta as BookMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
+    case 'paper':
+      return <PaperCardSkin clip={clip} meta={meta as PaperMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
+    case 'job':
+      return <JobCardSkin clip={clip} meta={meta as JobMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;
     case 'generic':
     default:
       return <GenericCardSkin clip={clip} meta={meta as GenericMeta | undefined} isDark={isDark} onOpenDetail={onOpenDetail} />;

@@ -298,6 +298,7 @@ def extract_clip_metadata(clip) -> dict:
             source_platform=platform,
             html_text=raw_html,
             text=page_text or selected_text,
+            content_type=metadata.get('content_type'),
         )
         metadata['platform_meta'] = platform_meta
     except Exception as enrich_exc:

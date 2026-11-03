@@ -33,12 +33,19 @@ linkedin   name, headline, avatar, reactions:int, comments:int
 instagram  handle, name, avatar, media:[url<=4], likes:int, is_reel:bool
 spotify    kind(track|album|playlist|episode|show|artist), artist, album, cover,
            duration:int(seconds)
+commerce   title, price:float, curr, brand, rating:float, reviews:int, thumb:url,
+           availability
+book       title, author, cover:url, rating:float, price:float, curr, pages:int, isbn
+paper      paper_id, title, authors:[str<=4], published_year:int, pdf_url:url,
+           citations:int, doi
+job        company, role, location, salary, deadline:ts, apply_url:url
 generic    site, image, author, read_min:int, published_at:ts
 """
 from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -55,11 +62,17 @@ SKIN_GITHUB = 'github'
 SKIN_LINKEDIN = 'linkedin'
 SKIN_INSTAGRAM = 'instagram'
 SKIN_SPOTIFY = 'spotify'
+SKIN_COMMERCE = 'commerce'
+SKIN_BOOK = 'book'
+SKIN_PAPER = 'paper'
+SKIN_JOB = 'job'
 SKIN_GENERIC = 'generic'
 
 SKINS = (
     SKIN_X, SKIN_YOUTUBE, SKIN_REDDIT, SKIN_GITHUB,
-    SKIN_LINKEDIN, SKIN_INSTAGRAM, SKIN_SPOTIFY, SKIN_GENERIC,
+    SKIN_LINKEDIN, SKIN_INSTAGRAM, SKIN_SPOTIFY,
+    SKIN_COMMERCE, SKIN_BOOK, SKIN_PAPER, SKIN_JOB,
+    SKIN_GENERIC,
 )
 
 SPOTIFY_KINDS = ('track', 'album', 'playlist', 'episode', 'show', 'artist')
@@ -73,6 +86,11 @@ SOURCE_PLATFORM_TO_SKIN: Dict[str, str] = {
     'linkedin': SKIN_LINKEDIN,
     'instagram': SKIN_INSTAGRAM,
     'spotify': SKIN_SPOTIFY,
+    'commerce': SKIN_COMMERCE,
+    'deal': SKIN_COMMERCE,
+    'book': SKIN_BOOK,
+    'paper': SKIN_PAPER,
+    'job': SKIN_JOB,
     # tiktok / web fall through to host sniffing, then generic.
 }
 
@@ -88,14 +106,49 @@ HOST_TO_SKIN: Tuple[Tuple[str, str], ...] = (
     ('linkedin.com', SKIN_LINKEDIN),
     ('instagram.com', SKIN_INSTAGRAM),
     ('spotify.com', SKIN_SPOTIFY),
+    # Commerce
+    ('amazon.com', SKIN_COMMERCE),
+    ('amazon.co.uk', SKIN_COMMERCE),
+    ('amazon.de', SKIN_COMMERCE),
+    ('amazon.fr', SKIN_COMMERCE),
+    ('amazon.ca', SKIN_COMMERCE),
+    ('amazon.co.jp', SKIN_COMMERCE),
+    ('ebay.com', SKIN_COMMERCE),
+    ('etsy.com', SKIN_COMMERCE),
+    ('aliexpress.com', SKIN_COMMERCE),
+    ('shopify.com', SKIN_COMMERCE),
+    ('walmart.com', SKIN_COMMERCE),
+    ('target.com', SKIN_COMMERCE),
+    ('bestbuy.com', SKIN_COMMERCE),
+    # Book
+    ('goodreads.com', SKIN_BOOK),
+    ('openlibrary.org', SKIN_BOOK),
+    ('audible.com', SKIN_BOOK),
+    ('bookshop.org', SKIN_BOOK),
+    ('barnesandnoble.com', SKIN_BOOK),
+    # Paper / Academic
+    ('arxiv.org', SKIN_PAPER),
+    ('biorxiv.org', SKIN_PAPER),
+    ('medrxiv.org', SKIN_PAPER),
+    ('nature.com', SKIN_PAPER),
+    ('sciencedirect.com', SKIN_PAPER),
+    ('semanticscholar.org', SKIN_PAPER),
+    ('paperswithcode.com', SKIN_PAPER),
+    # Job
+    ('greenhouse.io', SKIN_JOB),
+    ('lever.co', SKIN_JOB),
+    ('workday.com', SKIN_JOB),
+    ('ashbyhq.com', SKIN_JOB),
+    ('smartrecruiters.com', SKIN_JOB),
+    ('wellfound.com', SKIN_JOB),
 )
 
 # ---------------------------------------------------------------------------
 # Field specs: (field, type, max_len_or_items)
 # Order inside each list == drop priority REVERSED (last field dropped first).
 # ---------------------------------------------------------------------------
-_STR, _INT, _BOOL, _URL, _TS, _STR_LIST, _URL_LIST = (
-    'str', 'int', 'bool', 'url', 'ts', 'str_list', 'url_list',
+_STR, _INT, _FLOAT, _BOOL, _URL, _TS, _STR_LIST, _URL_LIST = (
+    'str', 'int', 'float', 'bool', 'url', 'ts', 'str_list', 'url_list',
 )
 
 SKIN_FIELDS: Dict[str, List[Tuple[str, str, int]]] = {
@@ -131,6 +184,25 @@ SKIN_FIELDS: Dict[str, List[Tuple[str, str, int]]] = {
         ('kind', _STR, 10), ('artist', _STR, 60), ('cover', _URL, 160),
         ('duration', _INT, 0), ('album', _STR, 60),
     ],
+    SKIN_COMMERCE: [
+        ('title', _STR, 80), ('price', _FLOAT, 0), ('curr', _STR, 3),
+        ('brand', _STR, 40), ('rating', _FLOAT, 0), ('reviews', _INT, 0),
+        ('thumb', _URL, 160), ('availability', _STR, 20),
+    ],
+    SKIN_BOOK: [
+        ('title', _STR, 80), ('author', _STR, 60), ('cover', _URL, 160),
+        ('rating', _FLOAT, 0), ('price', _FLOAT, 0), ('curr', _STR, 3),
+        ('pages', _INT, 0), ('isbn', _STR, 20),
+    ],
+    SKIN_PAPER: [
+        ('paper_id', _STR, 30), ('title', _STR, 100), ('authors', _STR_LIST, 4),
+        ('published_year', _INT, 0), ('pdf_url', _URL, 160), ('citations', _INT, 0),
+        ('doi', _STR, 50),
+    ],
+    SKIN_JOB: [
+        ('company', _STR, 50), ('role', _STR, 60), ('location', _STR, 40),
+        ('salary', _STR, 40), ('deadline', _TS, 25), ('apply_url', _URL, 160),
+    ],
     SKIN_GENERIC: [
         ('site', _STR, 40), ('read_min', _INT, 0), ('image', _URL, 160),
         ('author', _STR, 50), ('published_at', _TS, 25),
@@ -149,16 +221,35 @@ def _host(url: str) -> str:
     return host[4:] if host.startswith('www.') else host
 
 
-def resolve_skin(source_platform: Optional[str], url: Optional[str] = '') -> str:
+def resolve_skin(
+    source_platform: Optional[str],
+    url: Optional[str] = '',
+    content_type: Optional[str] = None,
+) -> str:
     """Return the skin for a clip. Mirrors resolveSkin() in TS and Dart."""
     skin = SOURCE_PLATFORM_TO_SKIN.get((source_platform or '').lower())
     if skin:
         return skin
+
     host = _host(url or '')
     if host:
+        if host == 'amazon' or host.startswith('amazon.') or '.amazon.' in host:
+            return SKIN_COMMERCE
         for suffix, candidate in HOST_TO_SKIN:
             if host == suffix or host.endswith('.' + suffix):
                 return candidate
+
+    if content_type:
+        ct = (content_type or '').lower()
+        if ct in ('commerce', 'deal', 'shopping', 'product'):
+            return SKIN_COMMERCE
+        if ct == 'book':
+            return SKIN_BOOK
+        if ct in ('paper', 'scholarship', 'academic'):
+            return SKIN_PAPER
+        if ct == 'job':
+            return SKIN_JOB
+
     return SKIN_GENERIC
 
 
@@ -193,6 +284,23 @@ def _clean_int(value: Any) -> Optional[int]:
     return number if number >= 0 else None
 
 
+def _clean_float(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        val = float(value)
+        return round(val, 2) if val >= 0 else None
+    text = str(value).strip()
+    match = re.search(r'(\d+(?:\.\d+)?)', text.replace(',', ''))
+    if not match:
+        return None
+    try:
+        val = float(match.group(1))
+        return round(val, 2) if val >= 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _clean_value(kind: str, value: Any, limit: int) -> Any:
     if kind == _STR or kind == _TS:
         return _clean_str(value, limit)
@@ -200,12 +308,14 @@ def _clean_value(kind: str, value: Any, limit: int) -> Any:
         return _clean_url(value, limit)
     if kind == _INT:
         return _clean_int(value)
+    if kind == _FLOAT:
+        return _clean_float(value)
     if kind == _BOOL:
         return True if value is True or str(value).lower() in ('true', '1') else None
     if kind in (_STR_LIST, _URL_LIST):
         if not isinstance(value, (list, tuple)):
             return None
-        cleaner = (lambda v: _clean_url(v, 160)) if kind == _URL_LIST else (lambda v: _clean_str(v, 24))
+        cleaner = (lambda v: _clean_url(v, 160)) if kind == _URL_LIST else (lambda v: _clean_str(v, 40))
         items = [c for c in (cleaner(v) for v in value) if c][:limit]
         return items or None
     return None
@@ -236,8 +346,8 @@ def normalize_platform_meta(skin: str, raw: Optional[Dict[str, Any]]) -> Dict[st
     if _size(payload) <= PLATFORM_META_BYTE_BUDGET:
         return payload
 
-    # 1) shrink media lists to a single item
-    for list_field in ('media', 'topics'):
+    # 1) shrink list fields to a single item
+    for list_field in ('media', 'topics', 'authors'):
         if isinstance(payload.get(list_field), list) and len(payload[list_field]) > 1:
             payload[list_field] = payload[list_field][:1]
             if _size(payload) <= PLATFORM_META_BYTE_BUDGET:
@@ -254,18 +364,28 @@ def normalize_platform_meta(skin: str, raw: Optional[Dict[str, Any]]) -> Dict[st
     return payload
 
 
-def build_platform_meta(source_platform: str, url: str, raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """Convenience: resolve skin + normalize in one call (used by scrapers in Part 2)."""
-    return normalize_platform_meta(resolve_skin(source_platform, url), raw)
+def build_platform_meta(
+    source_platform: str,
+    url: str,
+    raw: Optional[Dict[str, Any]],
+    content_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Convenience: resolve skin + normalize in one call."""
+    return normalize_platform_meta(resolve_skin(source_platform, url, content_type=content_type), raw)
 
 
-def get_platform_meta(extra_metadata: Optional[Dict[str, Any]], source_platform: str, url: str) -> Dict[str, Any]:
+def get_platform_meta(
+    extra_metadata: Optional[Dict[str, Any]],
+    source_platform: str,
+    url: str,
+    content_type: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Read path used by serializers: returns the stored envelope if valid,
     otherwise a minimal envelope with the resolved skin (never raises).
     """
     stored = (extra_metadata or {}).get(PLATFORM_META_KEY)
-    skin = resolve_skin(source_platform, url)
+    skin = resolve_skin(source_platform, url, content_type=content_type)
     if isinstance(stored, dict) and stored.get('skin') in SKINS:
         return stored
     return {'v': PLATFORM_META_VERSION, 'skin': skin}

@@ -6,14 +6,18 @@ and byte-budget compliance (<= 300 bytes per card).
 
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import SimpleTestCase
 
 from apps.clips.platform_meta import (
     PLATFORM_META_BYTE_BUDGET,
+    SKIN_BOOK,
+    SKIN_COMMERCE,
     SKIN_GENERIC,
     SKIN_GITHUB,
     SKIN_INSTAGRAM,
+    SKIN_JOB,
     SKIN_LINKEDIN,
+    SKIN_PAPER,
     SKIN_REDDIT,
     SKIN_SPOTIFY,
     SKIN_X,
@@ -21,11 +25,16 @@ from apps.clips.platform_meta import (
 )
 from apps.clips.services.platform_enrich import (
     enrich_platform_meta,
+    extract_json_ld,
     extract_youtube_video_id,
+    fetch_book_metadata,
+    fetch_commerce_metadata,
     fetch_generic_metadata,
     fetch_github_metadata,
     fetch_instagram_metadata,
+    fetch_job_metadata,
     fetch_linkedin_metadata,
+    fetch_paper_metadata,
     fetch_reddit_metadata,
     fetch_spotify_metadata,
     fetch_x_metadata,
@@ -40,7 +49,7 @@ from apps.clips.services.sanitizer import (
 )
 
 
-class SanitizerGuardTests(TestCase):
+class SanitizerGuardTests(SimpleTestCase):
     """Subagent C: Sanitization Guard tests."""
 
     def test_clean_cookie_banners(self):
@@ -76,7 +85,7 @@ class SanitizerGuardTests(TestCase):
         self.assertEqual(cleaned2, "DeepSeek-V3 Technical Report")
 
 
-class SocialScrapersTests(TestCase):
+class SocialScrapersTests(SimpleTestCase):
     """Subagent A: Social Scrapers (X, Reddit, GitHub)."""
 
     @patch("apps.clips.services.platform_enrich._http_get_json")
@@ -188,7 +197,7 @@ class SocialScrapersTests(TestCase):
         self.assertLessEqual(len(str(res)), PLATFORM_META_BYTE_BUDGET)
 
 
-class MediaScrapersTests(TestCase):
+class MediaScrapersTests(SimpleTestCase):
     """Subagent B: Media & Audio Scrapers (YouTube, Spotify, LinkedIn, Instagram, Generic)."""
 
     def test_youtube_video_id_and_shorts_detection(self):
@@ -269,3 +278,185 @@ class MediaScrapersTests(TestCase):
         self.assertEqual(res["read_min"], 3)
         self.assertEqual(res["image"], "https://techcrunch.com/article.jpg")
         self.assertLessEqual(len(str(res)), PLATFORM_META_BYTE_BUDGET)
+
+
+class ArchetypeScrapersTests(SimpleTestCase):
+    """Universal Archetype Scrapers: Commerce, Book, Academic Paper, Job."""
+
+    def test_extract_json_ld_graph(self):
+        html = """
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@graph": [
+                {"@type": "WebSite", "name": "Store"},
+                {"@type": "Product", "name": "Wireless Headphones", "offers": {"@type": "Offer", "price": "79.99"}}
+            ]
+        }
+        </script>
+        """
+        items = extract_json_ld(html)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[1]["name"], "Wireless Headphones")
+
+    def test_commerce_enrichment_schema_org(self):
+        html = """
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": "Sony WH-1000XM5 Wireless Headphones",
+            "brand": {"@type": "Brand", "name": "Sony"},
+            "image": "https://m.media-amazon.com/images/I/sony.jpg",
+            "offers": {
+                "@type": "Offer",
+                "price": "348.00",
+                "priceCurrency": "USD",
+                "availability": "https://schema.org/InStock"
+            },
+            "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": "4.6",
+                "reviewCount": "8920"
+            }
+        }
+        </script>
+        """
+        res = enrich_platform_meta(
+            url="https://www.amazon.com/dp/B09XS7JWHH",
+            source_platform="web",
+            html_text=html,
+        )
+        self.assertEqual(res["skin"], SKIN_COMMERCE)
+        self.assertEqual(res["brand"], "Sony")
+        self.assertEqual(res["price"], 348.0)
+        self.assertEqual(res["curr"], "USD")
+        self.assertEqual(res["rating"], 4.6)
+        self.assertEqual(res["reviews"], 8920)
+        self.assertEqual(res["availability"], "In Stock")
+        self.assertEqual(res["thumb"], "https://m.media-amazon.com/images/I/sony.jpg")
+        self.assertLessEqual(len(str(res)), PLATFORM_META_BYTE_BUDGET)
+
+    def test_commerce_enrichment_amazon_regex_fallback(self):
+        html = """
+        <html>
+        <head>
+            <meta property="og:title" content="Apple AirPods Pro (2nd Gen) - Amazon">
+            <meta property="og:image" content="https://m.media-amazon.com/images/I/airpods.jpg">
+        </head>
+        <body>
+            <span class="a-offscreen">$199.99</span>
+            <span id="acrCustomerReviewText">42,500 ratings</span>
+            <span>4.8 out of 5 stars</span>
+        </body>
+        </html>
+        """
+        res = enrich_platform_meta(
+            url="https://www.amazon.com/dp/B0D1XD1ZV3",
+            source_platform="web",
+            html_text=html,
+        )
+        self.assertEqual(res["skin"], SKIN_COMMERCE)
+        self.assertEqual(res["brand"], "Amazon")
+        self.assertEqual(res["price"], 199.99)
+        self.assertEqual(res["curr"], "USD")
+        self.assertEqual(res["rating"], 4.8)
+        self.assertEqual(res["reviews"], 42500)
+
+    def test_book_enrichment_schema_org(self):
+        html = """
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "Book",
+            "name": "Clean Code",
+            "author": {"@type": "Person", "name": "Robert C. Martin"},
+            "numberOfPages": 464,
+            "isbn": "978-0132350884",
+            "image": "https://images.gr-assets.com/books/cleancode.jpg",
+            "aggregateRating": {"@type": "AggregateRating", "ratingValue": "4.4"}
+        }
+        </script>
+        """
+        res = enrich_platform_meta(
+            url="https://www.goodreads.com/book/show/3735293-clean-code",
+            source_platform="web",
+            html_text=html,
+        )
+        self.assertEqual(res["skin"], SKIN_BOOK)
+        self.assertEqual(res["title"], "Clean Code")
+        self.assertEqual(res["author"], "Robert C. Martin")
+        self.assertEqual(res["rating"], 4.4)
+        self.assertEqual(res["pages"], 464)
+        self.assertEqual(res["isbn"], "9780132350884")
+        self.assertEqual(res["cover"], "https://images.gr-assets.com/books/cleancode.jpg")
+
+    def test_paper_enrichment_arxiv(self):
+        html = """
+        <html>
+        <head>
+            <meta name="citation_title" content="LoRA: Low-Rank Adaptation of Large Language Models">
+            <meta name="citation_author" content="Edward Hu">
+            <meta name="citation_author" content="Yelong Shen">
+            <meta name="citation_author" content="Phillip Wallis">
+            <meta name="citation_publication_date" content="2021/10/16">
+            <meta name="citation_doi" content="10.48550/arXiv.2106.09685">
+        </head>
+        </html>
+        """
+        res = enrich_platform_meta(
+            url="https://arxiv.org/abs/2106.09685",
+            source_platform="web",
+            html_text=html,
+        )
+        self.assertEqual(res["skin"], SKIN_PAPER)
+        self.assertEqual(res["paper_id"], "2106.09685")
+        self.assertEqual(res["pdf_url"], "https://arxiv.org/pdf/2106.09685.pdf")
+        self.assertEqual(res["published_year"], 2021)
+        self.assertIn("Edward Hu", res["authors"])
+        self.assertIn("Yelong Shen", res["authors"])
+        self.assertEqual(res["doi"], "10.48550/arXiv.2106.09685")
+
+    def test_job_enrichment_greenhouse(self):
+        html = """
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "JobPosting",
+            "title": "Senior Distributed Systems Engineer",
+            "hiringOrganization": {"@type": "Organization", "name": "Vercel"},
+            "jobLocation": {
+                "@type": "Place",
+                "address": {"@type": "PostalAddress", "addressLocality": "San Francisco", "addressRegion": "CA"}
+            },
+            "baseSalary": {
+                "@type": "MonetaryAmount",
+                "currency": "$",
+                "value": {"@type": "QuantitativeValue", "minValue": 190000, "maxValue": 240000}
+            }
+        }
+        </script>
+        """
+        res = enrich_platform_meta(
+            url="https://boards.greenhouse.io/vercel/jobs/54321",
+            source_platform="web",
+            html_text=html,
+        )
+        self.assertEqual(res["skin"], SKIN_JOB)
+        self.assertEqual(res["role"], "Senior Distributed Systems Engineer")
+        self.assertEqual(res["company"], "Vercel")
+        self.assertEqual(res["location"], "San Francisco, CA")
+        self.assertIn("190,000", res["salary"])
+        self.assertIn("240,000", res["salary"])
+
+    def test_content_type_fallback_resolves_archetype(self):
+        # A boutique book site that is not on a known domain
+        res = enrich_platform_meta(
+            url="https://indiebookpress.org/releases/the-great-adventure",
+            source_platform="web",
+            html_text="<meta property='og:title' content='The Great Adventure'><meta name='author' content='Jane Doe'>",
+            content_type="book",
+        )
+        self.assertEqual(res["skin"], SKIN_BOOK)
+        self.assertEqual(res["title"], "The Great Adventure")
+        self.assertEqual(res["author"], "Jane Doe")

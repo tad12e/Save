@@ -18,10 +18,14 @@ from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 from apps.clips.platform_meta import (
+    SKIN_BOOK,
+    SKIN_COMMERCE,
     SKIN_GENERIC,
     SKIN_GITHUB,
     SKIN_INSTAGRAM,
+    SKIN_JOB,
     SKIN_LINKEDIN,
+    SKIN_PAPER,
     SKIN_REDDIT,
     SKIN_SPOTIFY,
     SKIN_X,
@@ -69,6 +73,86 @@ def parse_og_meta(html_text: str) -> Dict[str, str]:
             meta[cleaned_key] = cleaned_val
 
     return meta
+
+
+# ---------------------------------------------------------------------------
+# Schema.org JSON-LD Parser & Helpers
+# ---------------------------------------------------------------------------
+def extract_json_ld(html_text: str) -> List[Dict[str, Any]]:
+    """Extracts all JSON-LD data structures embedded in <script type="application/ld+json">."""
+    if not html_text:
+        return []
+    results: List[Dict[str, Any]] = []
+    pattern = re.compile(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in pattern.findall(html_text):
+        content = match.strip()
+        if not content:
+            continue
+        try:
+            data = json.loads(content)
+        except Exception:
+            try:
+                data = json.loads(html_lib.unescape(content))
+            except Exception:
+                continue
+
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    results.append(item)
+        elif isinstance(data, dict):
+            graph = data.get('@graph')
+            if isinstance(graph, list):
+                for item in graph:
+                    if isinstance(item, dict):
+                        results.append(item)
+            else:
+                results.append(data)
+    return results
+
+
+def find_json_ld_item(items: List[Dict[str, Any]], target_types: Tuple[str, ...]) -> Optional[Dict[str, Any]]:
+    """Finds the first JSON-LD item matching any of the specified target types."""
+    lower_targets = {t.lower() for t in target_types}
+    for item in items:
+        item_type = item.get('@type')
+        if not item_type:
+            continue
+        types = [item_type] if isinstance(item_type, str) else (item_type if isinstance(item_type, list) else [])
+        for t in types:
+            if isinstance(t, str):
+                cleaned_type = t.split('/')[-1].lower()
+                if cleaned_type in lower_targets:
+                    return item
+    return None
+
+
+def extract_meta_authors(html_text: str) -> List[str]:
+    """Extracts all authors from citation_author or author meta tags."""
+    if not html_text:
+        return []
+    pattern = re.compile(
+        r'<meta\s+[^>]*(?:name|property)=["\'](?:citation_author|author)["\'][^>]*content=["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    authors: List[str] = []
+    for match in pattern.findall(html_text):
+        name = ' '.join(html_lib.unescape(match).split()).strip()
+        if name and name not in authors:
+            authors.append(name)
+    if not authors:
+        rev_pattern = re.compile(
+            r'<meta\s+[^>]*content=["\']([^"\']+)["\'][^>]*(?:name|property)=["\'](?:citation_author|author)["\']',
+            re.IGNORECASE,
+        )
+        for match in rev_pattern.findall(html_text):
+            name = ' '.join(html_lib.unescape(match).split()).strip()
+            if name and name not in authors:
+                authors.append(name)
+    return authors
 
 
 def _http_get_json(url: str, headers: Optional[Dict[str, str]] = None, timeout: float = DEFAULT_TIMEOUT) -> Optional[Any]:
@@ -505,6 +589,361 @@ def fetch_generic_metadata(url: str, og: Optional[Dict[str, str]] = None, text: 
 
 
 # ---------------------------------------------------------------------------
+# Archetype Scrapers: Commerce, Book, Paper, Job
+# ---------------------------------------------------------------------------
+
+def fetch_commerce_metadata(url: str, og: Optional[Dict[str, str]] = None, html_text: str = '') -> Dict[str, Any]:
+    """
+    Extracts e-commerce metadata (title, price, curr, brand, rating, reviews, thumb, availability).
+    Supports Schema.org Product, OpenGraph product tags, and Amazon/Shopify fallbacks.
+    """
+    og = og or {}
+    data: Dict[str, Any] = {}
+    json_ld_items = extract_json_ld(html_text)
+    product_ld = find_json_ld_item(json_ld_items, ('Product', 'IndividualProduct', 'ProductModel'))
+
+    # 1. Product title
+    title = ''
+    if product_ld and product_ld.get('name'):
+        title = str(product_ld['name']).strip()
+    if not title:
+        title = og.get('og:title') or og.get('twitter:title') or ''
+    if title:
+        data['title'] = clean_boilerplate(title)[:80]
+
+    # 2. Brand
+    brand = ''
+    if product_ld:
+        brand_val = product_ld.get('brand')
+        if isinstance(brand_val, dict):
+            brand = brand_val.get('name') or ''
+        elif isinstance(brand_val, str):
+            brand = brand_val
+    if not brand:
+        brand = og.get('product:brand') or og.get('og:brand') or og.get('og:site_name') or ''
+    if not brand:
+        host = (urlparse(url).hostname or '').lower()
+        if 'amazon.' in host:
+            brand = 'Amazon'
+        elif 'ebay.' in host:
+            brand = 'eBay'
+        elif 'etsy.' in host:
+            brand = 'Etsy'
+        elif 'walmart.' in host:
+            brand = 'Walmart'
+        elif 'bestbuy.' in host:
+            brand = 'Best Buy'
+        elif 'target.' in host:
+            brand = 'Target'
+        elif host:
+            brand = host.replace('www.', '').split('.')[0].capitalize()
+    if brand:
+        data['brand'] = str(brand).strip()[:40]
+
+    # 3. Offers (Price, Currency, Availability)
+    if product_ld and product_ld.get('offers'):
+        offers = product_ld['offers']
+        offer = offers[0] if isinstance(offers, list) and offers else (offers if isinstance(offers, dict) else {})
+        if offer.get('price'):
+            data['price'] = offer['price']
+        elif offer.get('lowPrice'):
+            data['price'] = offer['lowPrice']
+        if offer.get('priceCurrency'):
+            data['curr'] = str(offer['priceCurrency']).upper()[:3]
+        if offer.get('availability'):
+            avail = str(offer['availability']).split('/')[-1]
+            data['availability'] = 'In Stock' if 'instock' in avail.lower() else ('Out of Stock' if 'outofstock' in avail.lower() else avail[:20])
+
+    # OpenGraph price fallbacks
+    if 'price' not in data:
+        price_val = og.get('product:price:amount') or og.get('og:price:amount') or og.get('twitter:data1')
+        if price_val:
+            data['price'] = price_val
+    if 'curr' not in data:
+        curr_val = og.get('product:price:currency') or og.get('og:price:currency') or og.get('twitter:label1')
+        if curr_val and len(curr_val.strip()) == 3 and curr_val.strip().isalpha():
+            data['curr'] = curr_val.strip().upper()
+    if 'availability' not in data and og.get('product:availability'):
+        data['availability'] = og['product:availability'][:20]
+
+    # Amazon HTML regex fallbacks
+    if 'amazon.' in (urlparse(url).hostname or ''):
+        if 'price' not in data and html_text:
+            m_price = re.search(r'class=["\']a-offscreen["\']>\s*\$?([\d,.]+)', html_text)
+            if m_price:
+                data['price'] = m_price.group(1)
+                data['curr'] = data.get('curr') or 'USD'
+        if 'curr' not in data:
+            data['curr'] = 'USD'
+
+    # 4. Ratings & Reviews
+    if product_ld and product_ld.get('aggregateRating'):
+        agg = product_ld['aggregateRating']
+        if isinstance(agg, dict):
+            if agg.get('ratingValue'):
+                data['rating'] = agg['ratingValue']
+            if agg.get('reviewCount'):
+                data['reviews'] = agg['reviewCount']
+            elif agg.get('ratingCount'):
+                data['reviews'] = agg['ratingCount']
+
+    # Amazon HTML ratings regex fallback
+    if 'rating' not in data and html_text:
+        m_rating = re.search(r'([0-9.]+)\s+out\s+of\s+5\s+stars', html_text, re.IGNORECASE)
+        if m_rating:
+            data['rating'] = m_rating.group(1)
+    if 'reviews' not in data and html_text:
+        m_rev = re.search(r'id=["\']acrCustomerReviewText["\'][^>]*>([0-9,]+)', html_text)
+        if m_rev:
+            data['reviews'] = m_rev.group(1)
+
+    # 5. Thumbnail / Product image
+    thumb = ''
+    if product_ld and product_ld.get('image'):
+        img = product_ld['image']
+        if isinstance(img, str):
+            thumb = img
+        elif isinstance(img, list) and img:
+            thumb = img[0] if isinstance(img[0], str) else (img[0].get('url') if isinstance(img[0], dict) else '')
+        elif isinstance(img, dict):
+            thumb = img.get('url')
+    if not thumb:
+        thumb = og.get('og:image') or og.get('twitter:image')
+    if thumb:
+        data['thumb'] = thumb
+
+    return data
+
+
+def fetch_book_metadata(url: str, og: Optional[Dict[str, str]] = None, html_text: str = '') -> Dict[str, Any]:
+    """
+    Extracts book metadata (title, author, cover, rating, price, curr, pages, isbn).
+    Supports Schema.org Book, Goodreads, OpenLibrary, and OpenGraph fallbacks.
+    """
+    og = og or {}
+    data: Dict[str, Any] = {}
+    json_ld_items = extract_json_ld(html_text)
+    book_ld = find_json_ld_item(json_ld_items, ('Book', 'Audiobook'))
+
+    # 1. Title
+    title = ''
+    if book_ld and book_ld.get('name'):
+        title = str(book_ld['name']).strip()
+    if not title:
+        title = og.get('og:title') or og.get('twitter:title') or ''
+    if title:
+        data['title'] = clean_boilerplate(title)[:80]
+
+    # 2. Author
+    author = ''
+    if book_ld and book_ld.get('author'):
+        auth_val = book_ld['author']
+        if isinstance(auth_val, dict):
+            author = auth_val.get('name') or ''
+        elif isinstance(auth_val, list) and auth_val:
+            names = [a.get('name') if isinstance(a, dict) else str(a) for a in auth_val]
+            author = ', '.join(filter(None, names))
+        elif isinstance(auth_val, str):
+            author = auth_val
+    if not author:
+        author = og.get('book:author') or og.get('author') or og.get('citation_author') or ''
+    if not author and html_text:
+        m_auth = re.search(r'class=["\']ContributorLink__name["\'][^>]*>([^<]+)<', html_text)
+        if m_auth:
+            author = m_auth.group(1).strip()
+    if author:
+        data['author'] = author[:60]
+
+    # 3. Rating
+    if book_ld and book_ld.get('aggregateRating'):
+        agg = book_ld['aggregateRating']
+        if isinstance(agg, dict) and agg.get('ratingValue'):
+            data['rating'] = agg['ratingValue']
+    if 'rating' not in data and html_text:
+        m_rating = re.search(r'([0-9.]+)\s+rating', html_text, re.IGNORECASE)
+        if m_rating:
+            data['rating'] = m_rating.group(1)
+
+    # 4. Pages & ISBN
+    if book_ld:
+        if book_ld.get('numberOfPages'):
+            data['pages'] = book_ld['numberOfPages']
+        if book_ld.get('isbn'):
+            data['isbn'] = str(book_ld['isbn']).replace('-', '').strip()[:20]
+    if 'pages' not in data and html_text:
+        m_pages = re.search(r'([0-9]+)\s+pages', html_text, re.IGNORECASE)
+        if m_pages:
+            data['pages'] = m_pages.group(1)
+    if 'isbn' not in data:
+        isbn = og.get('book:isbn') or og.get('isbn')
+        if isbn:
+            data['isbn'] = str(isbn).replace('-', '').strip()[:20]
+
+    # 5. Price & Currency
+    if book_ld and book_ld.get('offers'):
+        offers = book_ld['offers']
+        offer = offers[0] if isinstance(offers, list) and offers else (offers if isinstance(offers, dict) else {})
+        if offer.get('price'):
+            data['price'] = offer['price']
+        if offer.get('priceCurrency'):
+            data['curr'] = str(offer['priceCurrency']).upper()[:3]
+    if 'price' not in data and og.get('product:price:amount'):
+        data['price'] = og['product:price:amount']
+        if og.get('product:price:currency'):
+            data['curr'] = og['product:price:currency'].upper()[:3]
+
+    # 6. Cover image
+    cover = ''
+    if book_ld and book_ld.get('image'):
+        img = book_ld['image']
+        cover = img if isinstance(img, str) else (img.get('url') if isinstance(img, dict) else '')
+    if not cover:
+        cover = og.get('og:image') or og.get('twitter:image')
+    if cover:
+        data['cover'] = cover
+
+    return data
+
+
+def fetch_paper_metadata(url: str, og: Optional[Dict[str, str]] = None, html_text: str = '') -> Dict[str, Any]:
+    """
+    Extracts academic paper metadata (paper_id, title, authors, published_year, pdf_url, citations, doi).
+    Specialized for ArXiv, bioRxiv, Google Scholar meta tags (citation_*), and Schema.org ScholarlyArticle.
+    """
+    og = og or {}
+    data: Dict[str, Any] = {}
+    json_ld_items = extract_json_ld(html_text)
+    paper_ld = find_json_ld_item(json_ld_items, ('ScholarlyArticle', 'MedicalScholarlyArticle', 'TechArticle', 'Article'))
+
+    # 1. ArXiv paper ID & direct PDF link
+    m_arxiv = re.search(r'arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)', url, re.IGNORECASE)
+    if m_arxiv:
+        arxiv_id = m_arxiv.group(1)
+        data['paper_id'] = arxiv_id
+        data['pdf_url'] = f'https://arxiv.org/pdf/{arxiv_id}.pdf'
+
+    # 2. Title
+    title = og.get('citation_title') or (paper_ld.get('headline') if paper_ld else None) or og.get('og:title') or ''
+    if title:
+        data['title'] = clean_boilerplate(title)[:100]
+
+    # 3. Authors
+    authors = extract_meta_authors(html_text)
+    if not authors and paper_ld and paper_ld.get('author'):
+        auth_val = paper_ld['author']
+        if isinstance(auth_val, list):
+            for a in auth_val:
+                name = a.get('name') if isinstance(a, dict) else str(a)
+                if name:
+                    authors.append(name.strip())
+        elif isinstance(auth_val, dict) and auth_val.get('name'):
+            authors.append(auth_val['name'].strip())
+        elif isinstance(auth_val, str):
+            authors.append(auth_val.strip())
+    if authors:
+        data['authors'] = authors[:4]
+
+    # 4. Publication Year
+    pub_date = og.get('citation_publication_date') or og.get('citation_date') or og.get('citation_year')
+    if not pub_date and paper_ld and paper_ld.get('datePublished'):
+        pub_date = str(paper_ld['datePublished'])
+    if not pub_date:
+        pub_date = og.get('article:published_time')
+    if pub_date:
+        m_year = re.search(r'(\d{4})', pub_date)
+        if m_year:
+            data['published_year'] = int(m_year.group(1))
+
+    # 5. PDF URL (if not already resolved via ArXiv)
+    if 'pdf_url' not in data:
+        pdf = og.get('citation_pdf_url')
+        if pdf:
+            data['pdf_url'] = pdf
+
+    # 6. DOI
+    doi = og.get('citation_doi')
+    if not doi and paper_ld and paper_ld.get('identifier'):
+        ident = paper_ld['identifier']
+        doi = ident.get('value') if isinstance(ident, dict) else str(ident)
+    if doi:
+        data['doi'] = str(doi).strip()[:50]
+
+    return data
+
+
+def fetch_job_metadata(url: str, og: Optional[Dict[str, str]] = None, html_text: str = '') -> Dict[str, Any]:
+    """
+    Extracts job opportunity metadata (company, role, location, salary, deadline, apply_url).
+    Specialized for Schema.org JobPosting, Greenhouse, Lever, Ashby, and Wellfound.
+    """
+    og = og or {}
+    data: Dict[str, Any] = {'apply_url': url}
+    json_ld_items = extract_json_ld(html_text)
+    job_ld = find_json_ld_item(json_ld_items, ('JobPosting',))
+
+    # 1. Role
+    role = ''
+    if job_ld and job_ld.get('title'):
+        role = str(job_ld['title']).strip()
+    if not role:
+        role = og.get('og:title') or ''
+        role = re.sub(r'\s*[-|–]\s*(?:Careers|Jobs|Hiring).*$', '', role, flags=re.IGNORECASE)
+    if role:
+        data['role'] = clean_boilerplate(role)[:60]
+
+    # 2. Company
+    company = ''
+    if job_ld and job_ld.get('hiringOrganization'):
+        org = job_ld['hiringOrganization']
+        company = org.get('name') if isinstance(org, dict) else str(org)
+    if not company:
+        parsed = urlparse(url)
+        host = parsed.hostname or ''
+        if 'greenhouse.io' in host or 'lever.co' in host or 'ashbyhq.com' in host:
+            parts = [p for p in parsed.path.split('/') if p]
+            if parts:
+                company = parts[0].replace('-', ' ').title()
+    if not company:
+        company = og.get('og:site_name') or ''
+    if company:
+        data['company'] = str(company).strip()[:50]
+
+    # 3. Location
+    if job_ld and job_ld.get('jobLocation'):
+        loc = job_ld['jobLocation']
+        if isinstance(loc, dict) and loc.get('address'):
+            addr = loc['address']
+            if isinstance(addr, dict):
+                city = addr.get('addressLocality') or ''
+                region = addr.get('addressRegion') or ''
+                loc_str = f'{city}, {region}'.strip(' ,')
+                if loc_str:
+                    data['location'] = loc_str[:40]
+        if 'location' not in data and job_ld.get('jobLocationType') == 'TELECOMMUTE':
+            data['location'] = 'Remote'
+
+    # 4. Salary
+    if job_ld and job_ld.get('baseSalary'):
+        sal = job_ld['baseSalary']
+        if isinstance(sal, dict) and sal.get('value'):
+            val = sal['value']
+            curr = sal.get('currency', '$')
+            if isinstance(val, dict):
+                min_v = val.get('minValue')
+                max_v = val.get('maxValue')
+                if min_v and max_v:
+                    data['salary'] = f'{curr}{int(min_v):,} - {curr}{int(max_v):,}'[:40]
+                elif val.get('value'):
+                    data['salary'] = f'{curr}{int(val["value"]):,}'[:40]
+
+    # 5. Deadline
+    if job_ld and job_ld.get('validThrough'):
+        data['deadline'] = str(job_ld['validThrough'])[:25]
+
+    return data
+
+
+# ---------------------------------------------------------------------------
 # Master Platform Enricher Dispatcher
 # ---------------------------------------------------------------------------
 def enrich_platform_meta(
@@ -512,12 +951,13 @@ def enrich_platform_meta(
     source_platform: Optional[str] = None,
     html_text: str = '',
     text: str = '',
+    content_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Resolves the skin and extracts enriched platform metadata with full error handling.
     Always returns a valid envelope conforming to the 300-byte budget.
     """
-    skin = resolve_skin(source_platform, url)
+    skin = resolve_skin(source_platform, url, content_type=content_type)
     og = parse_og_meta(html_text)
     raw_data: Dict[str, Any] = {}
 
@@ -536,10 +976,18 @@ def enrich_platform_meta(
             raw_data = fetch_linkedin_metadata(url, og)
         elif skin == SKIN_INSTAGRAM:
             raw_data = fetch_instagram_metadata(url, og)
+        elif skin == SKIN_COMMERCE:
+            raw_data = fetch_commerce_metadata(url, og, html_text)
+        elif skin == SKIN_BOOK:
+            raw_data = fetch_book_metadata(url, og, html_text)
+        elif skin == SKIN_PAPER:
+            raw_data = fetch_paper_metadata(url, og, html_text)
+        elif skin == SKIN_JOB:
+            raw_data = fetch_job_metadata(url, og, html_text)
         else:
             raw_data = fetch_generic_metadata(url, og, text)
     except Exception as exc:
         logger.warning('Enrichment failed for skin=%s url=%s: %s', skin, url, exc)
         raw_data = {}
 
-    return build_platform_meta(source_platform or '', url, raw_data)
+    return build_platform_meta(source_platform or '', url, raw_data, content_type=content_type)

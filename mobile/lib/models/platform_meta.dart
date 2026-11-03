@@ -8,7 +8,20 @@
 /// Every field is nullable; unknown skins fall back to [PlatformSkin.generic].
 library;
 
-enum PlatformSkin { x, youtube, reddit, github, linkedin, instagram, spotify, generic }
+enum PlatformSkin {
+  x,
+  youtube,
+  reddit,
+  github,
+  linkedin,
+  instagram,
+  spotify,
+  commerce,
+  book,
+  paper,
+  job,
+  generic,
+}
 
 extension PlatformSkinX on PlatformSkin {
   String get wire => name; // enum names match wire values exactly
@@ -32,6 +45,11 @@ const Map<String, PlatformSkin> _sourcePlatformToSkin = {
   'linkedin': PlatformSkin.linkedin,
   'instagram': PlatformSkin.instagram,
   'spotify': PlatformSkin.spotify,
+  'commerce': PlatformSkin.commerce,
+  'deal': PlatformSkin.commerce,
+  'book': PlatformSkin.book,
+  'paper': PlatformSkin.paper,
+  'job': PlatformSkin.job,
 };
 
 const List<(String, PlatformSkin)> _hostToSkin = [
@@ -45,10 +63,45 @@ const List<(String, PlatformSkin)> _hostToSkin = [
   ('linkedin.com', PlatformSkin.linkedin),
   ('instagram.com', PlatformSkin.instagram),
   ('spotify.com', PlatformSkin.spotify),
+  // Commerce
+  ('amazon.com', PlatformSkin.commerce),
+  ('amazon.co.uk', PlatformSkin.commerce),
+  ('amazon.de', PlatformSkin.commerce),
+  ('amazon.fr', PlatformSkin.commerce),
+  ('amazon.ca', PlatformSkin.commerce),
+  ('amazon.co.jp', PlatformSkin.commerce),
+  ('ebay.com', PlatformSkin.commerce),
+  ('etsy.com', PlatformSkin.commerce),
+  ('aliexpress.com', PlatformSkin.commerce),
+  ('shopify.com', PlatformSkin.commerce),
+  ('walmart.com', PlatformSkin.commerce),
+  ('target.com', PlatformSkin.commerce),
+  ('bestbuy.com', PlatformSkin.commerce),
+  // Book
+  ('goodreads.com', PlatformSkin.book),
+  ('openlibrary.org', PlatformSkin.book),
+  ('audible.com', PlatformSkin.book),
+  ('bookshop.org', PlatformSkin.book),
+  ('barnesandnoble.com', PlatformSkin.book),
+  // Paper / Academic
+  ('arxiv.org', PlatformSkin.paper),
+  ('biorxiv.org', PlatformSkin.paper),
+  ('medrxiv.org', PlatformSkin.paper),
+  ('nature.com', PlatformSkin.paper),
+  ('sciencedirect.com', PlatformSkin.paper),
+  ('semanticscholar.org', PlatformSkin.paper),
+  ('paperswithcode.com', PlatformSkin.paper),
+  // Job
+  ('greenhouse.io', PlatformSkin.job),
+  ('lever.co', PlatformSkin.job),
+  ('workday.com', PlatformSkin.job),
+  ('ashbyhq.com', PlatformSkin.job),
+  ('smartrecruiters.com', PlatformSkin.job),
+  ('wellfound.com', PlatformSkin.job),
 ];
 
 /// Must stay identical to resolve_skin() (Python) and resolveSkin() (TS).
-PlatformSkin resolveSkin(String? sourcePlatform, String? url) {
+PlatformSkin resolveSkin(String? sourcePlatform, String? url, [String? contentType]) {
   final direct = _sourcePlatformToSkin[(sourcePlatform ?? '').toLowerCase()];
   if (direct != null) return direct;
   var host = '';
@@ -57,9 +110,19 @@ PlatformSkin resolveSkin(String? sourcePlatform, String? url) {
   } catch (_) {}
   if (host.startsWith('www.')) host = host.substring(4);
   if (host.isNotEmpty) {
+    if (host == 'amazon' || host.startsWith('amazon.') || host.contains('.amazon.')) {
+      return PlatformSkin.commerce;
+    }
     for (final (suffix, skin) in _hostToSkin) {
       if (host == suffix || host.endsWith('.$suffix')) return skin;
     }
+  }
+  if (contentType != null && contentType.isNotEmpty) {
+    final ct = contentType.toLowerCase();
+    if (const {'commerce', 'deal', 'shopping', 'product'}.contains(ct)) return PlatformSkin.commerce;
+    if (ct == 'book') return PlatformSkin.book;
+    if (const {'paper', 'scholarship', 'academic'}.contains(ct)) return PlatformSkin.paper;
+    if (ct == 'job') return PlatformSkin.job;
   }
   return PlatformSkin.generic;
 }
@@ -79,6 +142,17 @@ int? _int(Map<String, dynamic> j, String k) {
   if (v is int) return v;
   if (v is num) return v.toInt();
   if (v is String) return int.tryParse(v);
+  return null;
+}
+
+double? _double(Map<String, dynamic> j, String k) {
+  final v = j[k];
+  if (v is double) return v;
+  if (v is num) return v.toDouble();
+  if (v is String) {
+    final clean = v.replaceAll(',', '').replaceAll(RegExp(r'[^0-9.]'), '');
+    return double.tryParse(clean);
+  }
   return null;
 }
 
@@ -120,6 +194,14 @@ sealed class PlatformMeta {
         return InstagramMeta.fromJson(json, fallbackUrl: url);
       case PlatformSkin.spotify:
         return SpotifyMeta.fromJson(json);
+      case PlatformSkin.commerce:
+        return CommerceMeta.fromJson(json);
+      case PlatformSkin.book:
+        return BookMeta.fromJson(json);
+      case PlatformSkin.paper:
+        return PaperMeta.fromJson(json);
+      case PlatformSkin.job:
+        return JobMeta.fromJson(json);
       case PlatformSkin.generic:
         return GenericMeta.fromJson(json);
     }
@@ -360,6 +442,123 @@ class SpotifyMeta extends PlatformMeta {
 
   @override
   PlatformSkin get skin => PlatformSkin.spotify;
+}
+
+class CommerceMeta extends PlatformMeta {
+  final String? brand, title, curr, thumb, availability;
+  final double? price, rating;
+  final int? reviews;
+
+  const CommerceMeta({
+    this.brand,
+    this.title,
+    this.price,
+    this.curr,
+    this.rating,
+    this.reviews,
+    this.thumb,
+    this.availability,
+  });
+
+  factory CommerceMeta.fromJson(Map<String, dynamic> j) => CommerceMeta(
+        brand: _str(j, 'brand'),
+        title: _str(j, 'title'),
+        price: _double(j, 'price'),
+        curr: _str(j, 'curr'),
+        rating: _double(j, 'rating'),
+        reviews: _int(j, 'reviews'),
+        thumb: _str(j, 'thumb'),
+        availability: _str(j, 'availability'),
+      );
+
+  @override
+  PlatformSkin get skin => PlatformSkin.commerce;
+}
+
+class BookMeta extends PlatformMeta {
+  final String? title, author, cover, curr, isbn;
+  final double? rating, price;
+  final int? pages;
+
+  const BookMeta({
+    this.title,
+    this.author,
+    this.cover,
+    this.rating,
+    this.price,
+    this.curr,
+    this.pages,
+    this.isbn,
+  });
+
+  factory BookMeta.fromJson(Map<String, dynamic> j) => BookMeta(
+        title: _str(j, 'title'),
+        author: _str(j, 'author'),
+        cover: _str(j, 'cover'),
+        rating: _double(j, 'rating'),
+        price: _double(j, 'price'),
+        curr: _str(j, 'curr'),
+        pages: _int(j, 'pages'),
+        isbn: _str(j, 'isbn'),
+      );
+
+  @override
+  PlatformSkin get skin => PlatformSkin.book;
+}
+
+class PaperMeta extends PlatformMeta {
+  final String? paperId, title, pdfUrl, doi;
+  final List<String> authors;
+  final int? publishedYear, citations;
+
+  const PaperMeta({
+    this.paperId,
+    this.title,
+    this.authors = const [],
+    this.publishedYear,
+    this.pdfUrl,
+    this.citations,
+    this.doi,
+  });
+
+  factory PaperMeta.fromJson(Map<String, dynamic> j) => PaperMeta(
+        paperId: _str(j, 'paper_id'),
+        title: _str(j, 'title'),
+        authors: _list(j, 'authors'),
+        publishedYear: _int(j, 'published_year'),
+        pdfUrl: _str(j, 'pdf_url'),
+        citations: _int(j, 'citations'),
+        doi: _str(j, 'doi'),
+      );
+
+  @override
+  PlatformSkin get skin => PlatformSkin.paper;
+}
+
+class JobMeta extends PlatformMeta {
+  final String? company, role, location, salary, applyUrl;
+  final DateTime? deadline;
+
+  const JobMeta({
+    this.company,
+    this.role,
+    this.location,
+    this.salary,
+    this.deadline,
+    this.applyUrl,
+  });
+
+  factory JobMeta.fromJson(Map<String, dynamic> j) => JobMeta(
+        company: _str(j, 'company'),
+        role: _str(j, 'role'),
+        location: _str(j, 'location'),
+        salary: _str(j, 'salary'),
+        deadline: _ts(j, 'deadline'),
+        applyUrl: _str(j, 'apply_url'),
+      );
+
+  @override
+  PlatformSkin get skin => PlatformSkin.job;
 }
 
 class GenericMeta extends PlatformMeta {

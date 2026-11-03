@@ -19,10 +19,15 @@ export type PlatformSkin =
   | 'linkedin'
   | 'instagram'
   | 'spotify'
+  | 'commerce'
+  | 'book'
+  | 'paper'
+  | 'job'
   | 'generic';
 
 export const PLATFORM_SKINS: readonly PlatformSkin[] = [
-  'x', 'youtube', 'reddit', 'github', 'linkedin', 'instagram', 'spotify', 'generic',
+  'x', 'youtube', 'reddit', 'github', 'linkedin', 'instagram', 'spotify',
+  'commerce', 'book', 'paper', 'job', 'generic',
 ] as const;
 
 export type SpotifyKind = 'track' | 'album' | 'playlist' | 'episode' | 'show' | 'artist';
@@ -127,6 +132,47 @@ export interface GenericMeta extends PlatformMetaBase<'generic'> {
   published_at?: string;
 }
 
+export interface CommerceMeta extends PlatformMetaBase<'commerce'> {
+  title?: string;
+  price?: number;
+  curr?: string;
+  brand?: string;
+  rating?: number;
+  reviews?: number;
+  thumb?: string;
+  availability?: string;
+}
+
+export interface BookMeta extends PlatformMetaBase<'book'> {
+  title?: string;
+  author?: string;
+  cover?: string;
+  rating?: number;
+  price?: number;
+  curr?: string;
+  pages?: number;
+  isbn?: string;
+}
+
+export interface PaperMeta extends PlatformMetaBase<'paper'> {
+  paper_id?: string;
+  title?: string;
+  authors?: string[];
+  published_year?: number;
+  pdf_url?: string;
+  citations?: number;
+  doi?: string;
+}
+
+export interface JobMeta extends PlatformMetaBase<'job'> {
+  company?: string;
+  role?: string;
+  location?: string;
+  salary?: string;
+  deadline?: string;
+  apply_url?: string;
+}
+
 /** Discriminated union — switch on `meta.skin` for full type narrowing. */
 export type PlatformMeta =
   | XMeta
@@ -136,6 +182,10 @@ export type PlatformMeta =
   | LinkedInMeta
   | InstagramMeta
   | SpotifyMeta
+  | CommerceMeta
+  | BookMeta
+  | PaperMeta
+  | JobMeta
   | GenericMeta;
 
 // ---------------------------------------------------------------------------
@@ -149,6 +199,11 @@ const SOURCE_PLATFORM_TO_SKIN: Record<string, PlatformSkin> = {
   linkedin: 'linkedin',
   instagram: 'instagram',
   spotify: 'spotify',
+  commerce: 'commerce',
+  deal: 'commerce',
+  book: 'book',
+  paper: 'paper',
+  job: 'job',
 };
 
 const HOST_TO_SKIN: ReadonlyArray<[string, PlatformSkin]> = [
@@ -162,6 +217,41 @@ const HOST_TO_SKIN: ReadonlyArray<[string, PlatformSkin]> = [
   ['linkedin.com', 'linkedin'],
   ['instagram.com', 'instagram'],
   ['spotify.com', 'spotify'],
+  // Commerce
+  ['amazon.com', 'commerce'],
+  ['amazon.co.uk', 'commerce'],
+  ['amazon.de', 'commerce'],
+  ['amazon.fr', 'commerce'],
+  ['amazon.ca', 'commerce'],
+  ['amazon.co.jp', 'commerce'],
+  ['ebay.com', 'commerce'],
+  ['etsy.com', 'commerce'],
+  ['aliexpress.com', 'commerce'],
+  ['shopify.com', 'commerce'],
+  ['walmart.com', 'commerce'],
+  ['target.com', 'commerce'],
+  ['bestbuy.com', 'commerce'],
+  // Book
+  ['goodreads.com', 'book'],
+  ['openlibrary.org', 'book'],
+  ['audible.com', 'book'],
+  ['bookshop.org', 'book'],
+  ['barnesandnoble.com', 'book'],
+  // Paper / Academic
+  ['arxiv.org', 'paper'],
+  ['biorxiv.org', 'paper'],
+  ['medrxiv.org', 'paper'],
+  ['nature.com', 'paper'],
+  ['sciencedirect.com', 'paper'],
+  ['semanticscholar.org', 'paper'],
+  ['paperswithcode.com', 'paper'],
+  // Job
+  ['greenhouse.io', 'job'],
+  ['lever.co', 'job'],
+  ['workday.com', 'job'],
+  ['ashbyhq.com', 'job'],
+  ['smartrecruiters.com', 'job'],
+  ['wellfound.com', 'job'],
 ];
 
 function hostOf(url?: string | null): string {
@@ -174,14 +264,28 @@ function hostOf(url?: string | null): string {
   }
 }
 
-export function resolveSkin(sourcePlatform?: string | null, url?: string | null): PlatformSkin {
+export function resolveSkin(
+  sourcePlatform?: string | null,
+  url?: string | null,
+  contentType?: string | null,
+): PlatformSkin {
   const direct = SOURCE_PLATFORM_TO_SKIN[(sourcePlatform || '').toLowerCase()];
   if (direct) return direct;
   const host = hostOf(url);
   if (host) {
+    if (host === 'amazon' || host.startsWith('amazon.') || host.includes('.amazon.')) {
+      return 'commerce';
+    }
     for (const [suffix, skin] of HOST_TO_SKIN) {
       if (host === suffix || host.endsWith(`.${suffix}`)) return skin;
     }
+  }
+  if (contentType) {
+    const ct = contentType.toLowerCase();
+    if (['commerce', 'deal', 'shopping', 'product'].includes(ct)) return 'commerce';
+    if (ct === 'book') return 'book';
+    if (['paper', 'scholarship', 'academic'].includes(ct)) return 'paper';
+    if (ct === 'job') return 'job';
   }
   return 'generic';
 }
@@ -198,11 +302,12 @@ export function parsePlatformMeta(
   raw: unknown,
   sourcePlatform?: string | null,
   url?: string | null,
+  contentType?: string | null,
 ): PlatformMeta {
   if (raw && typeof raw === 'object' && isSkin((raw as { skin?: unknown }).skin)) {
     return { ...(raw as object), v: PLATFORM_META_VERSION } as PlatformMeta;
   }
-  return { v: PLATFORM_META_VERSION, skin: resolveSkin(sourcePlatform, url) } as PlatformMeta;
+  return { v: PLATFORM_META_VERSION, skin: resolveSkin(sourcePlatform, url, contentType) } as PlatformMeta;
 }
 
 // ---------------------------------------------------------------------------
