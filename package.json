@@ -1,0 +1,10 @@
+{
+  "name": "yazem",
+  "private": true,
+  "workspaces": [
+    "Landing_page"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=Landing_page"
+  }
+}
