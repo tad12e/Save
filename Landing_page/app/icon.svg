@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="yazemBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18181b" />
+      <stop offset="100%" stop-color="#09090b" />
+    </linearGradient>
+  </defs>
+  <!-- Squircle Base -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#yazemBg)" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" />
+  <!-- Logo Glyph 'Y.' -->
+  <text x="30" y="43" font-family="-apple-system, BlinkMacSystemFont, 'Geist', 'Inter', 'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="800" fill="#ffffff" letter-spacing="-2" text-anchor="middle">Y<tspan fill="#38bdf8" font-size="28">.</tspan></text>
+</svg>
