@@ -7,7 +7,7 @@ export default function CTASection() {
   return (
     <section
       id="cta"
-      className="py-24 md:py-32 bg-gradient-to-b from-surface via-[#F6FAFE]/70 to-[#EDF3FD] text-center relative overflow-hidden"
+      className="py-24 md:py-32 bg-gradient-to-b from-surface via-[#F5F9FE] to-[#E8F2FD] text-center relative overflow-hidden"
     >
       {/* Soft Ambient Warm Glow */}
       <div className="absolute inset-0 flex items-center justify-center -z-10 pointer-events-none">
