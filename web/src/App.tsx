@@ -116,9 +116,27 @@ export default function App() {
     }
   }, [activeTab]);
   const [theme, setTheme] = useState<'terminal' | 'dark' | 'light'>(() => {
-    const saved = localStorage.getItem('clipper_theme');
+    // Migration: ensure new Yazem default is light mode
+    if (!localStorage.getItem('yazem_theme_migrated')) {
+      localStorage.setItem('yazem_theme_migrated', 'true');
+      localStorage.setItem('clipper_theme', 'light');
+      localStorage.setItem('yazem_theme', 'light');
+      return 'light';
+    }
+    const saved = localStorage.getItem('yazem_theme') || localStorage.getItem('clipper_theme');
     return (saved === 'light' || saved === 'dark' || saved === 'terminal') ? saved : 'light';
   });
+
+  // Keep html class in sync with theme
+  useEffect(() => {
+    if (theme === 'dark' || theme === 'terminal') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('clipper_theme', theme);
+    localStorage.setItem('yazem_theme', theme);
+  }, [theme]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExtensionOpen, setIsExtensionOpen] = useState(true);
