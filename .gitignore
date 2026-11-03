@@ -21,7 +21,6 @@ extension/.output/
 extension/.wxt/
 .next/
 **/.next/
-out/
 .env.local
 **/.env.local
 
