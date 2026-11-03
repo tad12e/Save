@@ -129,3 +129,4 @@ export const BookCardSkin: React.FC<BookCardSkinProps> = ({
     </div>
   );
 };
+

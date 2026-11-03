@@ -93,3 +93,4 @@ export const JobCardSkin: React.FC<JobCardSkinProps> = ({
     </div>
   );
 };
+

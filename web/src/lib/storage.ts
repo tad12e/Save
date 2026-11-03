@@ -104,9 +104,9 @@ export const getStoredClips = (): ClipItem[] => {
     const parsed: ClipItem[] = JSON.parse(item);
     if (parsed.some(c => c.id === 'clip_1' || c.id === 'clip_2' || c.id === 'clip_3')) {
       localStorage.removeItem(CLIPS_KEY);
-      return [];
+      return INITIAL_CLIPS;
     }
-    return parsed;
+    return parsed.length > 0 ? parsed : INITIAL_CLIPS;
   } catch (e) {
     console.error('Error loading stored clips', e);
     return INITIAL_CLIPS;

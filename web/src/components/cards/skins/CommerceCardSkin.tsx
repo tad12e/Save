@@ -133,3 +133,4 @@ export const CommerceCardSkin: React.FC<CommerceCardSkinProps> = ({
     </div>
   );
 };
+

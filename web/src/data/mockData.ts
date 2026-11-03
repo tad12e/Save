@@ -208,7 +208,110 @@ export const INITIAL_DESTINATIONS: DestinationConfig[] = [
   }
 ];
 
-export const INITIAL_CLIPS: ClipItem[] = [];
+export const INITIAL_CLIPS: ClipItem[] = [
+  {
+    id: 'clip_amazon_kindle',
+    url: 'https://www.amazon.com/dp/B08N5WRWNW',
+    title: 'Kindle Paperwhite (16 GB) – 6.8" Glare-Free Display, Warm Light, 10-Week Battery',
+    summary: 'The 6.8-inch display features a glare-free 300 ppi screen that reads like real paper even in bright sunlight. Adjustable warm light shifts screen shade from white to amber.',
+    contentType: 'deal',
+    sourcePlatform: 'commerce',
+    sourceAuthor: 'Amazon',
+    tags: ['kindle', 'reading', 'hardware', 'amazon'],
+    thumbnailUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600&q=80',
+    platformMeta: {
+      v: 1,
+      skin: 'commerce',
+      title: 'Kindle Paperwhite (16 GB) – 6.8" Glare-Free Display',
+      brand: 'Amazon',
+      price: 139.99,
+      curr: 'USD',
+      rating: 4.7,
+      reviews: 18450,
+      availability: 'In Stock',
+      thumb: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600&q=80'
+    },
+    createdAt: '2026-11-03T10:00:00Z',
+    status: 'synced',
+    exportStatus: 'synced',
+    isFavorite: true
+  },
+  {
+    id: 'clip_ddia_book',
+    url: 'https://www.goodreads.com/book/show/23466395-designing-data-intensive-applications',
+    title: 'Designing Data-Intensive Applications: The Big Ideas Behind Reliable Systems',
+    summary: 'Data is at the center of many challenges in system design today. Difficult issues need to be figured out, such as scalability, consistency, reliability, and maintainability.',
+    contentType: 'book',
+    sourcePlatform: 'book',
+    sourceAuthor: 'Martin Kleppmann',
+    tags: ['book', 'systems', 'architecture', 'distributed-systems'],
+    thumbnailUrl: 'https://images.unsplash.com/photo-1532012164546-f432f2e3777f?w=600&q=80',
+    platformMeta: {
+      v: 1,
+      skin: 'book',
+      title: 'Designing Data-Intensive Applications',
+      author: 'Martin Kleppmann',
+      rating: 4.82,
+      pages: 616,
+      isbn: '9781449373320',
+      price: 38.50,
+      curr: 'USD',
+      cover: 'https://images.unsplash.com/photo-1532012164546-f432f2e3777f?w=600&q=80'
+    },
+    createdAt: '2026-11-03T09:30:00Z',
+    status: 'synced',
+    exportStatus: 'synced',
+    isFavorite: true
+  },
+  {
+    id: 'clip_lora_paper',
+    url: 'https://arxiv.org/abs/2106.09685',
+    title: 'LoRA: Low-Rank Adaptation of Large Language Models',
+    summary: 'LoRA freezes the pre-trained model weights and injects trainable rank decomposition matrices into each layer of the Transformer architecture, greatly reducing GPU memory requirement.',
+    contentType: 'paper',
+    sourcePlatform: 'paper',
+    sourceAuthor: 'Edward Hu, Yelong Shen',
+    tags: ['ai', 'machine-learning', 'llm', 'arxiv'],
+    platformMeta: {
+      v: 1,
+      skin: 'paper',
+      paper_id: '2106.09685',
+      title: 'LoRA: Low-Rank Adaptation of Large Language Models',
+      authors: ['Edward Hu', 'Yelong Shen', 'Phillip Wallis', 'Zeyuan Allen-Zhu'],
+      published_year: 2021,
+      citations: 14200,
+      pdf_url: 'https://arxiv.org/pdf/2106.09685.pdf',
+      doi: '10.48550/arXiv.2106.09685'
+    },
+    createdAt: '2026-11-03T09:00:00Z',
+    status: 'synced',
+    exportStatus: 'synced',
+    isFavorite: false
+  },
+  {
+    id: 'clip_stripe_job',
+    url: 'https://boards.greenhouse.io/stripe/jobs/staff-infrastructure',
+    title: 'Staff Software Engineer, Platform Infrastructure',
+    summary: 'Stripe builds economic infrastructure for the internet. You will architect global multi-region distributed compute and storage pipelines processing billions of dollars in daily transaction volume.',
+    contentType: 'job',
+    sourcePlatform: 'job',
+    sourceAuthor: 'Stripe',
+    tags: ['stripe', 'infrastructure', 'distributed-systems', 'remote'],
+    platformMeta: {
+      v: 1,
+      skin: 'job',
+      company: 'Stripe',
+      role: 'Staff Software Engineer, Platform Infrastructure',
+      location: 'Remote, US / Canada',
+      salary: '$240,000 - $310,000',
+      apply_url: 'https://boards.greenhouse.io/stripe/jobs/staff-infrastructure'
+    },
+    createdAt: '2026-11-03T08:30:00Z',
+    status: 'synced',
+    exportStatus: 'synced',
+    isFavorite: false
+  }
+];
 
 export const INITIAL_JOBS: JobCard[] = [];
 
