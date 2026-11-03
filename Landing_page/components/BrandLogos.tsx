@@ -511,3 +511,91 @@ export function AndroidLogo({ className = "", size = 20 }: LogoProps) {
   );
 }
 
+// 23. Microsoft Official 4-Color Tile Logo
+export function MicrosoftLogo({ className = "", size = 20 }: LogoProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <rect x="2" y="2" width="9.5" height="9.5" fill="#F25022" />
+      <rect x="12.5" y="2" width="9.5" height="9.5" fill="#7FBA00" />
+      <rect x="2" y="12.5" width="9.5" height="9.5" fill="#00A4EF" />
+      <rect x="12.5" y="12.5" width="9.5" height="9.5" fill="#FFB900" />
+    </svg>
+  );
+}
+
+// 24. Microsoft Edge Official Swirl Wave Logo
+export function EdgeLogo({ className = "", size = 20 }: LogoProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <defs>
+        <linearGradient id="edge-swirl-1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#0C59A4" />
+          <stop offset="100%" stopColor="#114A8B" />
+        </linearGradient>
+        <linearGradient id="edge-swirl-2" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#0B82BE" />
+          <stop offset="100%" stopColor="#00A4EF" />
+        </linearGradient>
+        <linearGradient id="edge-swirl-3" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#00A88E" />
+          <stop offset="60%" stopColor="#00C49F" />
+          <stop offset="100%" stopColor="#3CD070" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M12 2C6.48 2 2 6.48 2 12c0 4.14 2.52 7.7 6.13 9.22-.09-.59-.13-1.22-.13-1.89 0-4.08 3.23-7.39 7.29-7.39 1.15 0 2.24.27 3.21.75.98-3.9-1.39-8.69-6.5-8.69z"
+        fill="url(#edge-swirl-1)"
+      />
+      <path
+        d="M21.91 10.36C21.4 5.72 17.15 2 12 2v9.94c1.17 0 2.29.28 3.29.78 2.55-1.07 5.17-.98 6.62-2.36z"
+        fill="url(#edge-swirl-2)"
+      />
+      <path
+        d="M22 13.5c0 4.69-3.81 8.5-8.5 8.5-5.18 0-9.28-4.14-9.49-9.27 1.07 4.29 4.97 7.47 9.59 7.47 4.3 0 7.82-2.73 8.4-6.7z"
+        fill="url(#edge-swirl-3)"
+      />
+    </svg>
+  );
+}
+
+// 25. Official US / California / Microsoft "Your Privacy Choices" Opt-out Icon
+export function PrivacyChoicesIcon({ className = "", size = 26 }: LogoProps) {
+  return (
+    <svg
+      width={size}
+      height={Math.round(size * 0.46)}
+      viewBox="0 0 26 12"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <path
+        d="M19.5 0.5C16.5 0.5 14 2.5 13 4.5C12 2.5 9.5 0.5 6.5 0.5C2.9 0.5 0 3.1 0 6.5C0 9.9 2.9 12.5 6.5 12.5C9.5 12.5 12 10.5 13 8.5C14 10.5 16.5 12.5 19.5 12.5C23.1 12.5 26 9.9 26 6.5C26 3.1 23.1 0.5 19.5 0.5Z"
+        fill="#0066CC"
+      />
+      <path
+        d="M6.2 3.5L4 5.7L6.2 7.9L5.3 8.8L3.1 6.6L0.9 8.8L0 7.9L2.2 5.7L0 3.5L0.9 2.6L3.1 4.8L5.3 2.6L6.2 3.5Z"
+        fill="#FFFFFF"
+      />
+      <path
+        d="M17.5 8.8L14.8 6.1L15.7 5.2L17.5 7L21.3 3.2L22.2 4.1L17.5 8.8Z"
+        fill="#FFFFFF"
+      />
+    </svg>
+  );
+}
+
