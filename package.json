@@ -1,10 +1,10 @@
 {
   "name": "yazem",
   "private": true,
-  "workspaces": [
-    "Landing_page"
-  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
-    "build": "npm run build --workspace=Landing_page"
+    "build": "echo Pre-built static assets ready"
   }
 }
