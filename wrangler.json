@@ -1,8 +1,9 @@
 {
   "name": "yazem",
+  "main": "worker.js",
   "compatibility_date": "2024-09-23",
   "assets": {
-    "directory": "./Landing_page/out"
+    "directory": "./Landing_page/out",
+    "binding": "ASSETS"
   }
 }
-
