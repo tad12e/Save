@@ -64,17 +64,37 @@ export default function App() {
     return 'dashboard';
   });
 
-  const [authInitialMode, setAuthInitialMode] = useState<'SIGNIN' | 'SIGNUP'>('SIGNIN');
+  const [authInitialMode, setAuthInitialMode] = useState<'SIGNIN' | 'SIGNUP'>(() => {
+    if (typeof window === 'undefined') return 'SIGNIN';
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    return (path.includes('/signup') || path.includes('/register') || hash.includes('signup') || hash.includes('register') || search.includes('auth=signup') || search.includes('auth=register'))
+      ? 'SIGNUP'
+      : 'SIGNIN';
+  });
 
-  // Handle URL auth triggers (/app/login, /app/signup, #login, #signup, ?auth=login, ?auth=signup)
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    return (
+      path.includes('/login') || path.includes('/signin') || path.includes('/signup') || path.includes('/register') ||
+      hash.includes('login') || hash.includes('signin') || hash.includes('signup') || hash.includes('register') ||
+      search.includes('auth=login') || search.includes('auth=signin') || search.includes('auth=signup') || search.includes('auth=register')
+    );
+  });
+
+  // Handle URL auth triggers on popstate / hashchange
   useEffect(() => {
     const checkAuthInUrl = () => {
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       const search = window.location.search.toLowerCase();
       
-      const isSignup = path.endsWith('/signup') || path.endsWith('/register') || hash.includes('signup') || hash.includes('register') || search.includes('auth=signup') || search.includes('auth=register');
-      const isLogin = path.endsWith('/login') || path.endsWith('/signin') || hash.includes('login') || hash.includes('signin') || search.includes('auth=login') || search.includes('auth=signin');
+      const isSignup = path.includes('/signup') || path.includes('/register') || hash.includes('signup') || hash.includes('register') || search.includes('auth=signup') || search.includes('auth=register');
+      const isLogin = path.includes('/login') || path.includes('/signin') || hash.includes('login') || hash.includes('signin') || search.includes('auth=login') || search.includes('auth=signin');
 
       if (isSignup) {
         setAuthInitialMode('SIGNUP');
@@ -88,9 +108,12 @@ export default function App() {
       }
     };
 
-    checkAuthInUrl();
     window.addEventListener('hashchange', checkAuthInUrl);
-    return () => window.removeEventListener('hashchange', checkAuthInUrl);
+    window.addEventListener('popstate', checkAuthInUrl);
+    return () => {
+      window.removeEventListener('hashchange', checkAuthInUrl);
+      window.removeEventListener('popstate', checkAuthInUrl);
+    };
   }, []);
 
   // Keep window.location.hash in sync with activeTab
@@ -143,7 +166,6 @@ export default function App() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
   const [createPageParent, setCreatePageParent] = useState<CustomPageConfig | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [showMusicRadarModal, setShowMusicRadarModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(() => {
