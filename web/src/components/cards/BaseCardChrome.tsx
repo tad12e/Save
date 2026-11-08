@@ -215,8 +215,9 @@ export const CardFooterChrome: React.FC<CardFooterChromeProps> = ({
   onSync,
   isSynced = false,
 }) => {
-  const isMobileApp = clip.sourceApp.includes('Mobile');
-  const sourceLabel = clip.sourceApp.replace('Chrome Extension', 'Chrome').replace('Mobile Share Sheet', 'Mobile');
+  const sourceApp = clip.sourceApp || 'Web App';
+  const isMobileApp = sourceApp.includes('Mobile');
+  const sourceLabel = sourceApp.replace('Chrome Extension', 'Chrome').replace('Mobile Share Sheet', 'Mobile');
 
   return (
     <div className="pt-3 mt-3 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">

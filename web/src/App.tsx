@@ -147,8 +147,12 @@ export default function App() {
   const [showMusicRadarModal, setShowMusicRadarModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(() => {
-    const storedUser = localStorage.getItem('clipper_user');
-    return storedUser ? JSON.parse(storedUser) : null;
+    try {
+      const storedUser = localStorage.getItem('clipper_user');
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch {
+      return null;
+    }
   });
   const [selectedPageForNewClip, setSelectedPageForNewClip] = useState<string | undefined>(undefined);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -217,7 +221,7 @@ export default function App() {
             );
             if (match && match.is_active) {
               const isThisDefault = defaultBackend ? match.id === defaultBackend.id : match.is_default;
-              const syncedCount = liveClips.filter(c => c.syncedTo?.includes(match.provider)).length;
+              const syncedCount = liveClips.filter(c => Array.isArray(c.syncedTo) && c.syncedTo.includes(match.provider)).length;
               return {
                 ...localDest,
                 id: match.id,
@@ -344,7 +348,7 @@ export default function App() {
                 isDefault: Boolean(isThisDefault),
                 connected: true,
                 status: 'active',
-                itemsSyncedCount: (backendClips || clips).filter(c => c.syncedTo?.includes(match.provider)).length,
+                itemsSyncedCount: (backendClips || clips).filter(c => Array.isArray(c.syncedTo) && c.syncedTo.includes(match.provider)).length,
                 targetResourceName: match.config?.target_resource_name || localDest.targetResourceName
               };
             }

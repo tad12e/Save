@@ -466,7 +466,7 @@ export const WebsiteIcon: React.FC<{
     'wikipedia'
   ];
 
-  const matchedToken = knownTokens.find((t) => d.includes(t) || name.toLowerCase().includes(t));
+  const matchedToken = knownTokens.find((t) => (d || '').includes(t) || (name || '').toLowerCase().includes(t));
   if (matchedToken) {
     return <BrandIcon name={matchedToken} className={className} style={style} />;
   }
