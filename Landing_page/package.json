@@ -14,18 +14,20 @@
     "@react-three/fiber": "^8.17.10",
     "@react-three/postprocessing": "^2.19.1",
     "@shadergradient/react": "^2.4.20",
+    "@swc/helpers": "^0.5.24",
+    "caniuse-lite": "^1.0.30001823",
     "gsap": "^3.12.5",
     "lenis": "^1.1.14",
     "next": "14.2.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-intersection-observer": "^9.10.3",
     "seedrandom": "^3.0.5",
     "simplex-noise": "^4.0.3",
     "three": "^0.169.0"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^26.6.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/seedrandom": "^3.0.8",
@@ -33,5 +35,8 @@
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.3"
+  },
+  "optionalDependencies": {
+    "@next/swc-win32-x64-msvc": "^14.2.5"
   }
 }
